@@ -702,6 +702,8 @@ buildvariants:
     - name: non_sharded_workloads_MMAPv1
     - name: agg_query_comparison_bestbuy_WT
     - name: agg_query_comparison_bestbuy_MMAPv1
+    # TODO: add to other variants
+    - name: linkbench_WT
 
 - name: linux-3-shard
   display_name: Linux 3-Shard Cluster
