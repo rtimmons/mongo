@@ -1,5 +1,5 @@
-/**
- *    Copyright (C) 2015 MongoDB Inc.
+/*
+ *    Copyright (C) 2018 MongoDB Inc.
  *
  *    This program is free software: you can redistribute it and/or  modify
  *    it under the terms of the GNU Affero General Public License, version 3,
@@ -26,36 +26,30 @@
  *    it in the license file.
  */
 
-#include "mongo/platform/basic.h"
+#pragma once
 
-#include "mongo/db/auth/authorization_session.h"
-#include "mongo/db/commands/killcursors_common.h"
-#include "mongo/s/grid.h"
-#include "mongo/s/query/cluster_cursor_manager.h"
+#include <string>
+
+#include "mongo/base/status_with.h"
+#include "mongo/base/string_data.h"
 
 namespace mongo {
-namespace {
 
-class ClusterKillCursorsCmd final : public KillCursorsCmdBase {
-public:
-    ClusterKillCursorsCmd() = default;
+/**
+ * Unicode string prepare options.
+ * By default, unassigned codepoints in the input string will result in an error.
+ * Using the AllowUnassigned option will pass them through without change,
+ * which may not turn out to be appropriate in later Unicode standards.
+ */
+enum UStringPrepOptions {
+    kUStringPrepDefault = 0,
+    kUStringPrepAllowUnassigned = 1,
+};
 
-private:
-    Status _checkAuth(Client* client, const NamespaceString& nss, CursorId cursorId) const final {
-        auto authzSession = AuthorizationSession::get(client);
-        auto authChecker = [&authzSession, &nss](UserNameIterator userNames) -> Status {
-            return authzSession->checkAuthForKillCursors(nss, userNames);
-        };
-        return grid.getCursorManager()->checkAuthForKillCursors(
-            client->getOperationContext(), nss, cursorId, authChecker);
-    }
+/**
+ * Attempt to apply RFC4013 saslPrep to the target string.
+ * Normalizes unicode sequences for SCRAM authentication.
+ */
+StatusWith<std::string> saslPrep(StringData str, UStringPrepOptions = kUStringPrepDefault);
 
-    Status _killCursor(OperationContext* opCtx,
-                       const NamespaceString& nss,
-                       CursorId cursorId) const final {
-        return grid.getCursorManager()->killCursor(nss, cursorId);
-    }
-} clusterKillCursorsCmd;
-
-}  // namespace
 }  // namespace mongo
