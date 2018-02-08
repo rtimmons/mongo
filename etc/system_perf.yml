@@ -71,6 +71,7 @@ functions:
         revisions: # for each module include revision as <module_name> : ${<module_name>_rev}
           dsi: ${dsi_rev}
           workloads: ${workloads_rev}
+          linkbench: ${linkbench_rev}
     - command: shell.exec
       params:
         working_dir: work
@@ -85,6 +86,7 @@ functions:
           mongodb_binary_archive: "https://s3.amazonaws.com/mciuploads/${project}/${version_id}/${revision}/${platform}/mongod-${version_id}.tar.gz"
           workloads_dir: ../src/workloads/workloads
           ycsb_dir: ../src/YCSB/YCSB
+          linkbench_dir: ../src/linkbench/linkbench
           EOF
 
           cat > runtime.yml <<EOF
@@ -644,6 +646,11 @@ modules:
   prefix: workloads
   branch: master
 
+- name: linkbench
+  repo: git@github.com:10gen/linkbench.git
+  prefix: linkbench
+  branch: master
+
 
 #######################################
 #         Linux Buildvariants         #
@@ -656,6 +663,7 @@ buildvariants:
   modules: &modules
     - dsi
     - workloads
+    - linkbench
   expansions:
     setup: single-replica
     cluster: single
