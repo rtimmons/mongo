@@ -83,7 +83,7 @@ functions:
           storageEngine: ${storageEngine}
           test: ${test}
           production: true
-          mongodb_binary_archive: "https://s3.amazonaws.com/mciuploads/${project}/${version_id}/${revision}/${platform}/mongod-${version_id}.tar.gz"
+          mongodb_binary_archive: "https://s3.amazonaws.com/mciuploads/dsi/5a7dee952fbabe26bcb1e741/85b39d411987431a8c37b1de267b167a384ea9b3/linux/mongod-5a7dee952fbabe26bcb1e741.tar.gz"
           workloads_dir: ../src/workloads/workloads
           ycsb_dir: ../src/YCSB/YCSB
           linkbench_dir: ../src/linkbench/linkbench
@@ -311,9 +311,6 @@ tasks:
         display_name: mongodb.tar.gz
 
 - name: linkbench_WT
-  depends_on:
-    - name: compile
-      variant: linux-standalone
   commands:
     - func: "prepare environment"
       vars:
