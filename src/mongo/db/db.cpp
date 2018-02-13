@@ -352,7 +352,7 @@ ExitCode _initAndListen(int listenPort) {
     // Disallow running WiredTiger with --nojournal in a replica set
     if (storageGlobalParams.engine == "wiredTiger" && !storageGlobalParams.dur &&
         replSettings.usingReplSets()) {
-        log() << "Runnning wiredTiger without journaling in a replica set is not "
+        log() << "Running wiredTiger without journaling in a replica set is not "
               << "supported. Make sure you are not using --nojournal and that "
               << "storage.journal.enabled is not set to 'false'.";
         exitCleanly(EXIT_BADOPTIONS);
@@ -917,9 +917,9 @@ void shutdownTask() {
     // of this function to prevent any operations from running that need a lock.
     //
     DefaultLockerImpl* globalLocker = new DefaultLockerImpl();
-    LockResult result = globalLocker->lockGlobalBegin(MODE_X, Milliseconds::max());
+    LockResult result = globalLocker->lockGlobalBegin(MODE_X, Date_t::max());
     if (result == LOCK_WAITING) {
-        result = globalLocker->lockGlobalComplete(Milliseconds::max());
+        result = globalLocker->lockGlobalComplete(Date_t::max());
     }
 
     invariant(LOCK_OK == result);

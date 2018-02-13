@@ -3557,6 +3557,17 @@ tasks:
       run_multiple_jobs: true
 
 - <<: *task_template
+  name: write_concern_majority_passthrough
+  depends_on:
+  - name: jsCore
+  commands:
+  - func: "do setup"
+  - func: "run tests"
+    vars:
+      resmoke_args: --suites=write_concern_majority_passthrough --storageEngine=wiredTiger
+      run_multiple_jobs: true
+
+- <<: *task_template
   name: replica_sets
   commands:
   - func: "do setup"
@@ -4622,6 +4633,7 @@ buildvariants:
   - name: sharding_jscore_passthrough_wire_ops
   - name: sharding_last_stable_mongos_and_mixed_shards
   - name: tool
+  - name: write_concern_majority_passthrough
   - name: push
 
 - name: linux-64-repeated-execution
@@ -4738,6 +4750,7 @@ buildvariants:
   - name: sharding_jscore_passthrough_wire_ops
   - name: slow1
   - name: tool
+  - name: write_concern_majority_passthrough
 
 - <<: *linux-64-debug-template
   name: linux-64-debug-wtdevelop
@@ -4746,7 +4759,7 @@ buildvariants:
   modules:
   - wtdevelop
   expansions:
-    use_wt_develop: true 
+    use_wt_develop: true
     num_jobs_available: $(($(grep -c ^processor /proc/cpuinfo) / 2)) # Avoid starting too many mongod's
     compile_flags: --dbg=on --opt=on -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_gcc.vars
     use_scons_cache: true
@@ -5150,6 +5163,7 @@ buildvariants:
     push_arch: arm64-enterprise-ubuntu1604
     compile_flags: --ssl MONGO_DISTMOD=ubuntu1604 -j$(grep -c ^processor /proc/cpuinfo) CCFLAGS="-march=armv8-a+crc -mtune=generic" --release --variables-files=etc/scons/mongodbtoolchain_gcc.vars
     num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
+    max_jobs: 8 # Avoid starting too many mongod's on ARM test servers
     test_flags: --excludeWithAnyTags=requires_mmapv1
     has_packages: true
     packager_script: packager-enterprise.py
@@ -5240,6 +5254,7 @@ buildvariants:
     push_arch: arm64-ubuntu1604
     compile_flags: --ssl MONGO_DISTMOD=ubuntu1604 -j$(grep -c ^processor /proc/cpuinfo) --release CCFLAGS="-march=armv8-a+crc -mtune=generic" --variables-files=etc/scons/mongodbtoolchain_gcc.vars
     num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
+    max_jobs: 8 # Avoid starting too many mongod's on ARM test servers
     test_flags: --excludeWithAnyTags=requires_mmapv1
     has_packages: true
     packager_script: packager.py
@@ -5443,6 +5458,7 @@ buildvariants:
   - name: ssl
   - name: sslSpecial
   - name: tool
+  - name: write_concern_majority_passthrough
   - name: push
     distros:
     - ubuntu1604-test
@@ -5734,6 +5750,9 @@ buildvariants:
     distros:
     - windows-64-vs2015-large
   - name: tool
+  - name: write_concern_majority_passthrough
+    distros:
+    - windows-64-vs2015-large
 
 - &enterprise-windows-64-2k8-template
   name: enterprise-windows-64-2k8
@@ -5863,6 +5882,8 @@ buildvariants:
     distros:
     - windows-64-vs2015-large
   - name: jsCore
+  - name: replica_sets
+  - name: sharding
 
 - name: enterprise-windows-64-2k8-inmem
   display_name: Enterprise Windows 2008R2 (inMemory)
@@ -6011,17 +6032,9 @@ buildvariants:
   - name: parallel
   - name: parallel_compatibility
   - name: powercycle
-    distros:
-    - windows-64-vs2015-large
   - name: powercycle_fcv3.4
-    distros:
-    - windows-64-vs2015-large
   - name: powercycle_replication
-    distros:
-    - windows-64-vs2015-large
   - name: powercycle_syncdelay
-    distros:
-    - windows-64-vs2015-large
   - name: read_concern_linearizable_passthrough
   - name: read_concern_majority_passthrough
   - name: replica_sets
@@ -6045,6 +6058,7 @@ buildvariants:
   - name: tool
   - name: update_fuzzer
   - name: update_fuzzer_replication
+  - name: write_concern_majority_passthrough
   - name: push
     distros:
     - rhel70-small
@@ -6094,7 +6108,7 @@ buildvariants:
     push_bucket: downloads.mongodb.org
     push_name: osx-ssl
     push_arch: x86_64
-    tooltags: "-tags ssl"
+    tooltags: "-tags 'ssl openssl_pre_1.0'"
     gorootvars: CGO_CPPFLAGS=-I/opt/mongodbtoolchain/v2/include CGO_CFLAGS=-mmacosx-version-min=10.10 CGO_LDFLAGS=-mmacosx-version-min=10.10
     compile_env: DEVELOPER_DIR=/Applications/Xcode8.3.app
     compile_flags: --ssl -j$(sysctl -n hw.logicalcpu) --release --libc++ CCFLAGS="-mmacosx-version-min=10.10" LINKFLAGS="-mmacosx-version-min=10.10" CPPPATH=/opt/mongodbtoolchain/v2/include
@@ -6175,6 +6189,7 @@ buildvariants:
   - name: tool
   - name: update_fuzzer
   - name: update_fuzzer_replication
+  - name: write_concern_majority_passthrough
   - name: push
     distros:
     - rhel70-small
@@ -6221,7 +6236,7 @@ buildvariants:
     push_bucket: downloads.10gen.com
     push_name: osx
     push_arch: x86_64-enterprise
-    tooltags: "-tags 'ssl sasl'"
+    tooltags: "-tags 'ssl sasl openssl_pre_1.0'"
     gorootvars: CGO_CPPFLAGS=-I/opt/mongodbtoolchain/v2/include CGO_CFLAGS=-mmacosx-version-min=10.10 CGO_LDFLAGS=-mmacosx-version-min=10.10
     compile_env: DEVELOPER_DIR=/Applications/Xcode8.3.app
     compile_flags: --ssl -j$(sysctl -n hw.logicalcpu) --release --libc++ CCFLAGS="-mmacosx-version-min=10.10" LINKFLAGS="-mmacosx-version-min=10.10" CPPPATH=/opt/mongodbtoolchain/v2/include
@@ -6500,6 +6515,9 @@ buildvariants:
   - name: tool
   - name: update_fuzzer
   - name: update_fuzzer_replication
+  - name: write_concern_majority_passthrough
+    distros:
+    - rhel62-large
   - name: package
     distros:
     - ubuntu1604-packer
@@ -6622,6 +6640,7 @@ buildvariants:
   - name: sslSpecial
   - name: update_fuzzer
   - name: update_fuzzer_replication
+  - name: write_concern_majority_passthrough
 
 - name: enterprise-rhel-70-64-bit
   display_name: "* Enterprise RHEL 7.0"
@@ -6981,6 +7000,7 @@ buildvariants:
   - name: ssl
   - name: sslSpecial
   - name: tool
+  - name: write_concern_majority_passthrough
   - name: push
     distros:
     - rhel70-small
@@ -7087,6 +7107,7 @@ buildvariants:
   - name: ssl
   - name: sslSpecial
   - name: tool
+  - name: write_concern_majority_passthrough
   - name: push
     distros:
     - rhel70-small
@@ -7187,6 +7208,7 @@ buildvariants:
   - name: ssl
   - name: sslSpecial
   - name: tool
+  - name: write_concern_majority_passthrough
   - name: push
     distros:
     - rhel70
@@ -7564,6 +7586,7 @@ buildvariants:
   - name: ssl
   - name: sslSpecial
   - name: tool
+  - name: write_concern_majority_passthrough
   - name: push
     distros:
     - suse12-test
@@ -7651,243 +7674,6 @@ buildvariants:
     distros:
     - ubuntu1604-packer
   - name: push
-
-
-- name: enterprise-suse11-64
-  display_name: Enterprise SLES 11
-  modules:
-  - enterprise
-  run_on:
-  - suse11-test
-  batchtime: 1440 # 1 day
-  expansions:
-    gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
-    tooltags: "-tags 'ssl sasl'"
-    push_path: linux
-    push_bucket: downloads.10gen.com
-    push_name: linux
-    push_arch: x86_64-enterprise-suse11
-    compile_flags: --ssl MONGO_DISTMOD=suse11 --release -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_gcc.vars
-    num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
-    has_packages: true
-    packager_script: packager-enterprise.py
-    packager_arch: x86_64
-    packager_distro: suse11
-    repo_edition: enterprise
-    use_scons_cache: true
-  tasks:
-  - name: compile
-    distros:
-    - suse11-build
-  - name: compile_all
-    distros:
-    - suse11-build
-  - name: audit
-  - name: dbtest
-  - name: ese
-  - name: jsCore
-  - name: jsCore_auth
-  - name: aggregation_fuzzer
-  - name: jstestfuzz
-  - name: jstestfuzz_concurrent
-  - name: jstestfuzz_concurrent_replication
-  - name: jstestfuzz_concurrent_sharded
-  - name: jstestfuzz_replication
-  - name: jstestfuzz_sharded
-  - name: replica_sets_auth
-  - name: sasl
-  - name: sharding_auth
-  - name: snmp
-  - name: ssl
-  - name: sslSpecial
-  - name: package
-    distros:
-    - ubuntu1604-packer
-  - name: push
-
-- name: enterprise-suse11-s390x
-  display_name: Enterprise SLES 11 s390x
-  modules:
-  - enterprise
-  run_on:
-  - suse11-zseries-build
-  batchtime: 1440 # 1 day
-  stepback: false
-  expansions:
-    gorootvars: PATH=/opt/mongodbtoolchain/v2/bin:$PATH
-    tooltags: -gccgoflags "$(pkg-config --libs --cflags libssl libsasl2)" -tags 'sasl ssl'
-    push_path: linux
-    push_bucket: downloads.10gen.com
-    push_name: linux
-    push_arch: s390x-enterprise-suse11
-    compile_flags: --ssl MONGO_DISTMOD=suse11 --release -j$(grep -c ^processor /proc/cpuinfo) CCFLAGS="-march=z9-109 -mtune=z10" --variables-files=etc/scons/mongodbtoolchain_gcc.vars --use-s390x-crc32=off
-    num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
-    test_flags: --excludeWithAnyTags=requires_mmapv1
-    has_packages: true
-    packager_script: packager-enterprise.py
-    packager_arch: s390x
-    packager_distro: suse11
-    repo_edition: enterprise
-  tasks:
-  - name: compile
-  - name: compile_all
-  - name: aggregation
-  - name: aggregation_ese
-  - name: aggregation_auth
-  - name: aggregation_read_concern_majority_passthrough
-  - name: aggregation_sharded_collections_passthrough
-  - name: audit
-  - name: auth
-  - name: auth_audit
-  - name: bulk_gle_passthrough
-  - name: concurrency
-  - name: concurrency_replication
-  - name: concurrency_sharded
-  - name: concurrency_simultaneous
-  - name: dbtest
-  - name: ese
-  - name: failpoints
-  - name: failpoints_auth
-  - name: gle_auth
-  - name: gle_auth_basics_passthrough
-  - name: gle_auth_basics_passthrough_write_cmd
-  - name: gle_auth_write_cmd
-  - name: integration_tests_replset
-  - name: integration_tests_sharded
-  - name: integration_tests_standalone
-  - name: jsCore
-  - name: jsCore_ese
-  - name: jsCore_compatibility
-  - name: jsCore_decimal
-  - name: jsCore_op_query
-  - name: aggregation_fuzzer
-  - name: jstestfuzz
-  - name: jstestfuzz_concurrent
-  - name: jstestfuzz_concurrent_replication
-  - name: jstestfuzz_concurrent_sharded
-  - name: jstestfuzz_replication
-  - name: jstestfuzz_sharded
-  - name: mongosTest
-  - name: noPassthroughWithMongod
-  - name: noPassthrough
-  - name: parallel
-  - name: parallel_compatibility
-  - name: read_concern_linearizable_passthrough
-  - name: read_concern_majority_passthrough
-  - name: replica_sets
-  - name: replica_sets_ese
-  - name: replica_sets_auth
-  - name: replica_sets_pv0
-  - name: replica_sets_jscore_passthrough
-  - name: master_slave
-  - name: master_slave_auth
-  - name: master_slave_jscore_passthrough
-  - name: sasl
-  - name: sharded_collections_jscore_passthrough
-  - name: sharding
-  - name: sharding_ese
-  - name: sharding_auth
-  - name: sharding_auth_audit
-  - name: sharding_csrs_continuous_config_stepdown
-  - name: sharding_gle_auth_basics_passthrough
-  - name: sharding_gle_auth_basics_passthrough_write_cmd
-  - name: sharding_jscore_passthrough
-  - name: sharding_jscore_op_query_passthrough
-  - name: sharding_jscore_passthrough_wire_ops
-  - name: sharding_op_query
-  - name: slow1
-  - name: serial_run
-  - name: snmp
-  - name: ssl
-  - name: sslSpecial
-  - name: tool
-  - name: push
-    distros:
-    - suse11-test
-
-- name: suse11
-  display_name: SSL SUSE 11
-  run_on:
-  - suse11-test
-  batchtime: 1440 # 1 day
-  expansions:
-    gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
-    tooltags: "-tags ssl"
-    push_path: linux
-    push_bucket: downloads.mongodb.org
-    push_name: linux
-    push_arch: x86_64-suse11
-    compile_flags: --ssl MONGO_DISTMOD=suse11 -j$(grep -c ^processor /proc/cpuinfo) --release --variables-files=etc/scons/mongodbtoolchain_gcc.vars
-    multiversion_platform_arch: "suse11"
-    multiversion_edition: "targeted"
-    num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
-    has_packages: true
-    packager_script: packager.py
-    packager_arch: x86_64
-    packager_distro: suse11
-    repo_edition: org
-    use_scons_cache: true
-  tasks:
-  - name: compile
-    distros:
-    - suse11-build
-  - name: compile_all
-    distros:
-    - suse11-build
-  - name: aggregation
-  - name: aggregation_auth
-  - name: auth
-  - name: dbtest
-  - name: disk_wiredtiger
-  - name: failpoints
-  - name: failpoints_auth
-  - name: gle_auth
-  - name: gle_auth_write_cmd
-  - name: gle_auth_basics_passthrough
-  - name: gle_auth_basics_passthrough_write_cmd
-  - name: sharding_gle_auth_basics_passthrough
-  - name: sharding_gle_auth_basics_passthrough_write_cmd
-  - name: jsCore
-  - name: jsCore_auth
-  - name: jsCore_compatibility
-  - name: aggregation_fuzzer
-  - name: jstestfuzz
-  - name: jstestfuzz_concurrent
-  - name: jstestfuzz_concurrent_replication
-  - name: jstestfuzz_concurrent_sharded
-  - name: jstestfuzz_replication
-  - name: jstestfuzz_sharded
-  - name: mongosTest
-  - name: multiversion
-  - name: noPassthrough
-  - name: noPassthroughWithMongod
-  - name: bulk_gle_passthrough
-  - name: parallel
-  - name: parallel_compatibility
-  - name: concurrency
-  - name: concurrency_replication
-  - name: concurrency_sharded
-  - name: concurrency_simultaneous
-  - name: replica_sets
-  - name: replica_sets_auth
-  - name: replica_sets_jscore_passthrough
-  - name: master_slave
-  - name: master_slave_auth
-  - name: master_slave_jscore_passthrough
-  - name: sharding
-  - name: sharding_auth
-  - name: sharding_last_stable_mongos_and_mixed_shards
-  - name: slow1
-  - name: serial_run
-  - name: sharding_jscore_passthrough
-  - name: ssl
-  - name: sslSpecial
-  - name: tool
-  - name: package
-    distros:
-    - ubuntu1604-packer
-  - name: push
-
 
 ###########################################
 #          Debian buildvariants           #
@@ -8176,6 +7962,145 @@ buildvariants:
     - ubuntu1604-packer
   - name: push
 
+- name: enterprise-debian92-64
+  display_name: Enterprise Debian 9.2
+  modules:
+  - enterprise
+  run_on:
+  - debian92-test
+  batchtime: 1440 # 1 day
+  expansions:
+    gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
+    tooltags: "-tags 'ssl sasl'"
+    push_path: linux
+    push_bucket: downloads.10gen.com
+    push_name: linux
+    push_arch: x86_64-enterprise-debian92
+    compile_flags: --ssl MONGO_DISTMOD=debian92 --release -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_gcc.vars
+    num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
+    has_packages: true
+    packager_script: packager-enterprise.py
+    packager_arch: x86_64
+    packager_distro: debian92
+    repo_edition: enterprise
+    use_scons_cache: true
+    build_mongoreplay: true
+  tasks:
+  - name: compile
+    distros:
+    - debian92-build
+  - name: compile_all
+    distros:
+    - debian92-build
+  - name: audit
+  - name: dbtest
+  - name: ese
+  - name: jsCore
+  - name: jsCore_auth
+  - name: aggregation_fuzzer
+  - name: jstestfuzz
+  - name: jstestfuzz_concurrent
+  - name: jstestfuzz_concurrent_replication
+  - name: jstestfuzz_concurrent_sharded
+  - name: jstestfuzz_replication
+  - name: jstestfuzz_sharded
+  - name: replica_sets_auth
+  - name: sasl
+  - name: sharding_auth
+  - name: snmp
+  - name: ssl
+  - name: sslSpecial
+  - name: package
+    distros:
+    - ubuntu1604-packer
+  - name: push
+
+- name: debian92
+  display_name: SSL Debian 9.2
+  run_on:
+  - debian92-test
+  batchtime: 1440 # 1 day
+  expansions:
+    gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
+    tooltags: "-tags ssl"
+    push_path: linux
+    push_bucket: downloads.mongodb.org
+    push_name: linux
+    push_arch: x86_64-debian92
+    compile_flags: --ssl MONGO_DISTMOD=debian92 -j$(grep -c ^processor /proc/cpuinfo) --release --variables-files=etc/scons/mongodbtoolchain_gcc.vars
+    multiversion_platform_arch: "debian92"
+    multiversion_edition: "targeted"
+    num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
+    has_packages: true
+    packager_script: packager.py
+    packager_arch: x86_64
+    packager_distro: debian92
+    repo_edition: org
+    use_scons_cache: true
+    build_mongoreplay: true
+  tasks:
+  - name: compile
+    distros:
+    - debian92-build
+  - name: compile_all
+    distros:
+    - debian92-build
+  - name: aggregation
+  - name: aggregation_auth
+  - name: auth
+  - name: dbtest
+  - name: disk_wiredtiger
+  - name: failpoints
+  - name: failpoints_auth
+  - name: gle_auth
+  - name: gle_auth_write_cmd
+  - name: gle_auth_basics_passthrough
+  - name: gle_auth_basics_passthrough_write_cmd
+  - name: sharding_gle_auth_basics_passthrough
+  - name: sharding_gle_auth_basics_passthrough_write_cmd
+  - name: jsCore
+  - name: jsCore_auth
+  - name: jsCore_compatibility
+  - name: aggregation_fuzzer
+  - name: jstestfuzz
+  - name: jstestfuzz_concurrent
+  - name: jstestfuzz_concurrent_replication
+  - name: jstestfuzz_concurrent_sharded
+  - name: jstestfuzz_replication
+  - name: jstestfuzz_sharded
+  - name: mongosTest
+  - name: multiversion
+  - name: noPassthrough
+  - name: noPassthroughWithMongod
+  - name: bulk_gle_passthrough
+  - name: parallel
+  - name: parallel_compatibility
+  - name: concurrency
+  - name: concurrency_replication
+  - name: concurrency_sharded
+  - name: concurrency_simultaneous
+  - name: replica_sets
+  - name: replica_sets_auth
+  - name: replica_sets_jscore_passthrough
+  - name: master_slave
+  - name: master_slave_auth
+  - name: master_slave_jscore_passthrough
+  - name: sharding
+  - name: sharding_auth
+  - name: sharding_last_stable_mongos_and_mixed_shards
+  - name: slow1
+  - name: serial_run
+  - name: sharded_collections_jscore_passthrough
+  - name: sharding_jscore_passthrough
+  - name: sharding_jscore_op_query_passthrough
+  - name: sharding_jscore_passthrough_wire_ops
+  - name: ssl
+  - name: sslSpecial
+  - name: tool
+  - name: package
+    distros:
+    - ubuntu1604-packer
+  - name: push
 
 ################################
 # storage engine buildvariants #
@@ -8299,6 +8224,7 @@ buildvariants:
   - name: tool
   - name: update_fuzzer
   - name: update_fuzzer_replication
+  - name: write_concern_majority_passthrough
 
 - name: enterprise-rhel-62-64-bit-mobile
   display_name: Enterprise RHEL 6.2 (mobile)
@@ -8570,6 +8496,7 @@ buildvariants:
   - name: ssl
   - name: sslSpecial
   - name: tool
+  - name: write_concern_majority_passthrough
 
 - name: enterprise-rhel-72-s390x-inmem
   display_name: Enterprise RHEL 7.2 s390x (inMemory) DEBUG
@@ -8659,6 +8586,7 @@ buildvariants:
   - name: ssl
   - name: sslSpecial
   - name: tool
+  - name: write_concern_majority_passthrough
 
 - name: ubuntu1404-rocksdb
   display_name: Ubuntu 14.04 (RocksDB)
@@ -8804,6 +8732,7 @@ buildvariants:
   - name: tool
   - name: update_fuzzer
   - name: update_fuzzer_replication
+  - name: write_concern_majority_passthrough
 
 - name: ubuntu1604-asan
   display_name: ~ ASAN SSL Ubuntu 16.04
@@ -8959,6 +8888,7 @@ buildvariants:
   - name: tool
   - name: update_fuzzer
   - name: update_fuzzer_replication
+  - name: write_concern_majority_passthrough
 
 - name: ubuntu1604-debug-aubsan-lite
   display_name: "! {A,UB}SAN Enterprise SSL Ubuntu 16.04 DEBUG"
@@ -9085,6 +9015,7 @@ buildvariants:
   - name: ssl
   - name: sslSpecial
   - name: tool
+  - name: write_concern_majority_passthrough
 
 - name: enterprise-ubuntu-dynamic-1604-64-bit
   display_name: "* Shared Library Enterprise Ubuntu 16.04"
@@ -9367,7 +9298,7 @@ buildvariants:
   batchtime: 1440 # 1 day
   expansions:
     test_flags: --storageEngine=mmapv1 --excludeWithAnyTags=requires_wiredtiger
-    tooltags: -tags 'ssl sasl'
+    tooltags: "-tags 'ssl sasl openssl_pre_1.0'"
     gorootvars: >-
       CGO_CPPFLAGS=-I/opt/mongodbtoolchain/v2/include CGO_CFLAGS=-mmacosx-version-min=10.10
       CGO_LDFLAGS=-mmacosx-version-min=10.10

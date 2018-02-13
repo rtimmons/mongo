@@ -135,6 +135,19 @@ env.Library(
 )
 
 env.CppUnitTest(
+    target='catalog_raii_test',
+    source=[
+        'catalog_raii_test.cpp',
+    ],
+    LIBDEPS=[
+        'database_holder_mock',
+        '$BUILD_DIR/mongo/db/catalog/catalog_raii',
+        '$BUILD_DIR/mongo/db/service_context_noop_init',
+        '$BUILD_DIR/mongo/db/auth/authorization_manager_mock_init',
+    ],
+)
+
+env.CppUnitTest(
     target='database_test',
     source=[
         'database_test.cpp',
@@ -220,6 +233,17 @@ env.CppUnitTest(
 )
 
 env.Library(
+    target='database_holder_mock',
+    source=[
+        'database_holder_mock.cpp',
+    ],
+    LIBDEPS=[
+	'database_holder',
+        '$BUILD_DIR/mongo/base',
+    ],
+)
+
+env.Library(
     target='catalog_impl',
     source=[
         "catalog_control.cpp",
@@ -263,6 +287,9 @@ env.Library(
         '$BUILD_DIR/mongo/db/system_index',
         '$BUILD_DIR/mongo/db/ttl_collection_cache',
         '$BUILD_DIR/mongo/db/views/views_mongod',
+    ],
+    LIBDEPS_PRIVATE=[
+        '$BUILD_DIR/mongo/db/logical_clock',
     ],
 )
 
