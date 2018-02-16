@@ -3179,8 +3179,7 @@ Status ReplicationCoordinatorImpl::processReplSetRequestVotes(
     return Status::OK();
 }
 
-void ReplicationCoordinatorImpl::prepareReplMetadata(OperationContext* opCtx,
-                                                     const BSONObj& metadataRequestObj,
+void ReplicationCoordinatorImpl::prepareReplMetadata(const BSONObj& metadataRequestObj,
                                                      const OpTime& lastOpTimeFromClient,
                                                      BSONObjBuilder* builder) const {
 
@@ -3194,7 +3193,7 @@ void ReplicationCoordinatorImpl::prepareReplMetadata(OperationContext* opCtx,
     // Avoid retrieving Rollback ID if we do not need it for _prepareOplogQueryMetadata_inlock().
     int rbid = -1;
     if (hasOplogQueryMetadata) {
-        rbid = fassertStatusOK(40427, _replicationProcess->getRollbackID(opCtx));
+        rbid = _replicationProcess->getRollbackID();
         invariant(-1 != rbid);
     }
 

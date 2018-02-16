@@ -24,10 +24,11 @@ env.SConscript(
 env.Library(
     target='sharding_api',
     source=[
-
+        'write_ops/cluster_write.cpp',
     ],
     LIBDEPS=[
-        'sharding_routing_table',
+        'query/cluster_query',
+        'write_ops/cluster_write_op',
     ],
 )
 
@@ -45,7 +46,7 @@ env.Library(
         '$BUILD_DIR/mongo/db/lasterror',
         'cluster_last_error_info',
         'grid',
-        'sharding_api',
+        'sharding_routing_table',
     ],
 )
 

@@ -5286,957 +5286,1261 @@ TEST(GetComputedPathsTest, ExpressionMapNotConsideredRenameWithDottedInputPath) 
 
 }  // namespace GetComputedPathsTest
 
-namespace ExpressionDateFromPartsTest {
+namespace ExpressionConvertTest {
 
 // This provides access to an ExpressionContext that has a valid ServiceContext with a
 // TimeZoneDatabase via getExpCtx(), but we'll use a different name for this test suite.
-using ExpressionDateFromPartsTest = AggregationContextFixture;
+using ExpressionConvertTest = AggregationContextFixture;
 
-TEST_F(ExpressionDateFromPartsTest, SerializesToObjectSyntax) {
+TEST_F(ExpressionConvertTest, ParseAndSerializeWithoutOptionalArguments) {
     auto expCtx = getExpCtx();
 
-    // Test that it serializes to the full format if given an object specification.
-    BSONObj spec =
-        BSON("$dateFromParts" << BSON(
-                 "year" << 2017 << "month" << 6 << "day" << 27 << "hour" << 14 << "minute" << 37
-                        << "second"
-                        << 15
-                        << "millisecond"
-                        << 414
-                        << "timezone"
-                        << "America/Los_Angeles"));
-    auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    auto expectedSerialization =
-        Value(Document{{"$dateFromParts",
-                        Document{{"year", Document{{"$const", 2017}}},
-                                 {"month", Document{{"$const", 6}}},
-                                 {"day", Document{{"$const", 27}}},
-                                 {"hour", Document{{"$const", 14}}},
-                                 {"minute", Document{{"$const", 37}}},
-                                 {"second", Document{{"$const", 15}}},
-                                 {"millisecond", Document{{"$const", 414}}},
-                                 {"timezone", Document{{"$const", "America/Los_Angeles"_sd}}}}}});
-    ASSERT_VALUE_EQ(dateExp->serialize(true), expectedSerialization);
-    ASSERT_VALUE_EQ(dateExp->serialize(false), expectedSerialization);
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "int"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    ASSERT_VALUE_EQ(Value(fromjson("{$convert: {input: '$path1', to: {$const: 'int'}}}")),
+                    convertExp->serialize(false));
 }
 
-TEST_F(ExpressionDateFromPartsTest, OptimizesToConstantIfAllInputsAreConstant) {
-    auto expCtx = getExpCtx();
-    auto spec = BSON("$dateFromParts" << BSON("year" << 2017));
-    auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    // Test that it becomes a constant if both year, month and day are provided, and are both
-    // constants.
-    spec = BSON("$dateFromParts" << BSON("year" << 2017 << "month" << 6 << "day" << 27));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    // Test that it becomes a constant if both year, hour and minute are provided, and are both
-    // expressions which evaluate to constants.
-    spec = BSON("$dateFromParts" << BSON("year" << BSON("$add" << BSON_ARRAY(1900 << 107)) << "hour"
-                                                << BSON("$add" << BSON_ARRAY(13 << 1))
-                                                << "minute"
-                                                << BSON("$add" << BSON_ARRAY(40 << 3))));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    // Test that it becomes a constant if both year and milliseconds are provided, and year is an
-    // expressions which evaluate to a constant, with milliseconds a constant
-    spec = BSON("$dateFromParts" << BSON(
-                    "year" << BSON("$add" << BSON_ARRAY(1900 << 107)) << "millisecond" << 514));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    // Test that it becomes a constant if both isoWeekYear, and isoWeek are provided, and are both
-    // constants.
-    spec = BSON("$dateFromParts" << BSON("isoWeekYear" << 2017 << "isoWeek" << 26));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    // Test that it becomes a constant if both isoWeekYear, isoWeek and isoDayOfWeek are provided,
-    // and are both expressions which evaluate to constants.
-    spec = BSON("$dateFromParts" << BSON("isoWeekYear" << BSON("$add" << BSON_ARRAY(1017 << 1000))
-                                                       << "isoWeek"
-                                                       << BSON("$add" << BSON_ARRAY(20 << 6))
-                                                       << "isoDayOfWeek"
-                                                       << BSON("$add" << BSON_ARRAY(3 << 2))));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    // Test that it does *not* become a constant if both year and month are provided, but
-    // year is not a constant.
-    spec = BSON("$dateFromParts" << BSON("year"
-                                         << "$year"
-                                         << "month"
-                                         << 6));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_FALSE(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    // Test that it does *not* become a constant if both year and day are provided, but
-    // day is not a constant.
-    spec = BSON("$dateFromParts" << BSON("year" << 2017 << "day"
-                                                << "$day"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_FALSE(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    // Test that it does *not* become a constant if both isoWeekYear and isoDayOfWeek are provided,
-    // but isoDayOfWeek is not a constant.
-    spec = BSON("$dateFromParts" << BSON("isoWeekYear" << 2017 << "isoDayOfWeek"
-                                                       << "$isoDayOfWeekday"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_FALSE(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-}
-
-TEST_F(ExpressionDateFromPartsTest, TestThatOutOfRangeValuesRollOver) {
+TEST_F(ExpressionConvertTest, ParseAndSerializeWithOnError) {
     auto expCtx = getExpCtx();
 
-    auto spec = BSON("$dateFromParts" << BSON("year" << 2017 << "month" << -1));
-    auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    auto dateVal = Date_t::fromMillisSinceEpoch(1477958400000);  // 11/1/2016 in ms.
-    ASSERT_VALUE_EQ(Value(dateVal), dateExp->evaluate(Document{}));
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "int"
+                                        << "onError"
+                                        << 0));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
 
-    spec = BSON("$dateFromParts" << BSON("year" << 2017 << "day" << -1));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    dateVal = Date_t::fromMillisSinceEpoch(1483056000000);  // 12/30/2016
-    ASSERT_VALUE_EQ(Value(dateVal), dateExp->evaluate(Document{}));
-
-    spec = BSON("$dateFromParts" << BSON("year" << 2017 << "hour" << 25));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    dateVal = Date_t::fromMillisSinceEpoch(1483318800000);  // 1/2/2017 01:00:00
-    ASSERT_VALUE_EQ(Value(dateVal), dateExp->evaluate(Document{}));
-
-    spec = BSON("$dateFromParts" << BSON("year" << 2017 << "minute" << 61));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    dateVal = Date_t::fromMillisSinceEpoch(1483232460000);  // 1/1/2017 01:01:00
-    ASSERT_VALUE_EQ(Value(dateVal), dateExp->evaluate(Document{}));
-
-    spec = BSON("$dateFromParts" << BSON("year" << 2017 << "second" << 61));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    dateVal = Date_t::fromMillisSinceEpoch(1483228861000);  // 1/1/2017 00:01:01
-    ASSERT_VALUE_EQ(Value(dateVal), dateExp->evaluate(Document{}));
+    ASSERT_VALUE_EQ(
+        Value(fromjson("{$convert: {input: '$path1', to: {$const: 'int'}, onError: {$const: 0}}}")),
+        convertExp->serialize(false));
 }
 
-}  // namespace ExpressionDateFromPartsTest
-
-namespace ExpressionDateToPartsTest {
-
-// This provides access to an ExpressionContext that has a valid ServiceContext with a
-// TimeZoneDatabase via getExpCtx(), but we'll use a different name for this test suite.
-using ExpressionDateToPartsTest = AggregationContextFixture;
-
-TEST_F(ExpressionDateToPartsTest, SerializesToObjectSyntax) {
+TEST_F(ExpressionConvertTest, ParseAndSerializeWithOnNull) {
     auto expCtx = getExpCtx();
 
-    // Test that it serializes to the full format if given an object specification.
-    BSONObj spec = BSON("$dateToParts" << BSON("date" << Date_t{} << "timezone"
-                                                      << "Europe/London"
-                                                      << "iso8601"
-                                                      << false));
-    auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    auto expectedSerialization =
-        Value(Document{{"$dateToParts",
-                        Document{{"date", Document{{"$const", Date_t{}}}},
-                                 {"timezone", Document{{"$const", "Europe/London"_sd}}},
-                                 {"iso8601", Document{{"$const", false}}}}}});
-    ASSERT_VALUE_EQ(dateExp->serialize(true), expectedSerialization);
-    ASSERT_VALUE_EQ(dateExp->serialize(false), expectedSerialization);
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "int"
+                                        << "onNull"
+                                        << 0));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    ASSERT_VALUE_EQ(
+        Value(fromjson("{$convert: {input: '$path1', to: {$const: 'int'}, onNull: {$const: 0}}}")),
+        convertExp->serialize(false));
 }
 
-TEST_F(ExpressionDateToPartsTest, OptimizesToConstantIfAllInputsAreConstant) {
-    auto expCtx = getExpCtx();
-    auto spec = BSON("$dateToParts" << BSON("date" << Date_t{}));
-    auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    // Test that it becomes a constant if both date and timezone are provided, and are both
-    // constants.
-    spec = BSON("$dateToParts" << BSON("date" << Date_t{} << "timezone"
-                                              << "UTC"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    // Test that it becomes a constant if both date and timezone are provided, and are both
-    // expressions which evaluate to constants.
-    spec = BSON("$dateToParts" << BSON("date" << BSON("$add" << BSON_ARRAY(Date_t{} << 1000))
-                                              << "timezone"
-                                              << BSON("$concat" << BSON_ARRAY("Europe"
-                                                                              << "/"
-                                                                              << "London"))));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    // Test that it becomes a constant if both date and iso8601 are provided, and are both
-    // constants.
-    spec = BSON("$dateToParts" << BSON("date" << Date_t{} << "iso8601" << true));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    // Test that it becomes a constant if both date and iso8601 are provided, and are both
-    // expressions which evaluate to constants.
-    spec = BSON("$dateToParts" << BSON("date" << BSON("$add" << BSON_ARRAY(Date_t{} << 1000))
-                                              << "iso8601"
-                                              << BSON("$not" << false)));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    // Test that it does *not* become a constant if both date and timezone are provided, but
-    // date is not a constant.
-    spec = BSON("$dateToParts" << BSON("date"
-                                       << "$date"
-                                       << "timezone"
-                                       << "Europe/London"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_FALSE(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    // Test that it does *not* become a constant if both date and timezone are provided, but
-    // timezone is not a constant.
-    spec = BSON("$dateToParts" << BSON("date" << Date_t{} << "timezone"
-                                              << "$tz"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_FALSE(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    // Test that it does *not* become a constant if both date and iso8601 are provided, but
-    // iso8601 is not a constant.
-    spec = BSON("$dateToParts" << BSON("date" << Date_t{} << "iso8601"
-                                              << "$iso8601"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_FALSE(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-}
-
-}  // namespace ExpressionDateToPartsTest
-
-namespace DateExpressionsTest {
-
-std::vector<StringData> dateExpressions = {"$year"_sd,
-                                           "$isoWeekYear"_sd,
-                                           "$month"_sd,
-                                           "$dayOfMonth"_sd,
-                                           "$hour"_sd,
-                                           "$minute"_sd,
-                                           "$second"_sd,
-                                           "$millisecond"_sd,
-                                           "$week"_sd,
-                                           "$isoWeek"_sd,
-                                           "$dayOfYear"_sd};
-
-// This provides access to an ExpressionContext that has a valid ServiceContext with a
-// TimeZoneDatabase via getExpCtx(), but we'll use a different name for this test suite.
-using DateExpressionTest = AggregationContextFixture;
-
-TEST_F(DateExpressionTest, ParsingAcceptsAllFormats) {
-    auto expCtx = getExpCtx();
-    for (auto&& expName : dateExpressions) {
-        auto possibleSyntaxes = {
-            // Single argument.
-            BSON(expName << Date_t{}),
-            BSON(expName << "$date"),
-            BSON(expName << BSON("$add" << BSON_ARRAY(Date_t{} << 1000))),
-            // Single argument wrapped in an array.
-            BSON(expName << BSON_ARRAY("$date")),
-            BSON(expName << BSON_ARRAY(Date_t{})),
-            BSON(expName << BSON_ARRAY(BSON("$add" << BSON_ARRAY(Date_t{} << 1000)))),
-            // Object literal syntax.
-            BSON(expName << BSON("date" << Date_t{})),
-            BSON(expName << BSON("date"
-                                 << "$date")),
-            BSON(expName << BSON("date" << BSON("$add" << BSON_ARRAY("$date" << 1000)))),
-            BSON(expName << BSON("date" << Date_t{} << "timezone"
-                                        << "Europe/London")),
-            BSON(expName << BSON("date" << Date_t{} << "timezone"
-                                        << "$tz"))};
-        for (auto&& syntax : possibleSyntaxes) {
-            Expression::parseExpression(expCtx, syntax, expCtx->variablesParseState);
-        }
-    }
-}
-
-TEST_F(DateExpressionTest, ParsingRejectsUnrecognizedFieldsInObjectSpecification) {
-    auto expCtx = getExpCtx();
-    for (auto&& expName : dateExpressions) {
-        BSONObj spec = BSON(expName << BSON("date" << Date_t{} << "timezone"
-                                                   << "Europe/London"
-                                                   << "extra"
-                                                   << 4));
-        ASSERT_THROWS_CODE(Expression::parseExpression(expCtx, spec, expCtx->variablesParseState),
-                           AssertionException,
-                           40535);
-    }
-}
-
-TEST_F(DateExpressionTest, ParsingRejectsEmptyObjectSpecification) {
-    auto expCtx = getExpCtx();
-    for (auto&& expName : dateExpressions) {
-        BSONObj spec = BSON(expName << BSONObj());
-        ASSERT_THROWS_CODE(Expression::parseExpression(expCtx, spec, expCtx->variablesParseState),
-                           AssertionException,
-                           40539);
-    }
-}
-
-TEST_F(DateExpressionTest, RejectsEmptyArray) {
-    auto expCtx = getExpCtx();
-    for (auto&& expName : dateExpressions) {
-        BSONObj spec = BSON(expName << BSONArray());
-        // It will parse as an ExpressionArray, and fail at runtime.
-        ASSERT_THROWS_CODE(Expression::parseExpression(expCtx, spec, expCtx->variablesParseState),
-                           AssertionException,
-                           40536);
-    }
-}
-
-TEST_F(DateExpressionTest, RejectsArraysWithMoreThanOneElement) {
-    auto expCtx = getExpCtx();
-    for (auto&& expName : dateExpressions) {
-        BSONObj spec = BSON(expName << BSON_ARRAY("$date"
-                                                  << "$tz"));
-        // It will parse as an ExpressionArray, and fail at runtime.
-        ASSERT_THROWS_CODE(Expression::parseExpression(expCtx, spec, expCtx->variablesParseState),
-                           AssertionException,
-                           40536);
-    }
-}
-
-TEST_F(DateExpressionTest, RejectsArraysWithinObjectSpecification) {
-    auto expCtx = getExpCtx();
-    for (auto&& expName : dateExpressions) {
-        BSONObj spec = BSON(expName << BSON("date" << BSON_ARRAY(Date_t{}) << "timezone"
-                                                   << "Europe/London"));
-        // It will parse as an ExpressionArray, and fail at runtime.
-        auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        auto contextDoc = Document{{"_id", 0}};
-        ASSERT_THROWS_CODE(dateExp->evaluate(contextDoc), AssertionException, 16006);
-
-        // Test that it rejects an array for the timezone option.
-        spec =
-            BSON(expName << BSON("date" << Date_t{} << "timezone" << BSON_ARRAY("Europe/London")));
-        dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        contextDoc = Document{{"_id", 0}};
-        ASSERT_THROWS_CODE(dateExp->evaluate(contextDoc), AssertionException, 40533);
-    }
-}
-
-TEST_F(DateExpressionTest, RejectsTypesThatCannotCoerceToDate) {
-    auto expCtx = getExpCtx();
-    for (auto&& expName : dateExpressions) {
-        BSONObj spec = BSON(expName << "$stringField");
-        auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        auto contextDoc = Document{{"stringField", "string"_sd}};
-        ASSERT_THROWS_CODE(dateExp->evaluate(contextDoc), AssertionException, 16006);
-    }
-}
-
-TEST_F(DateExpressionTest, AcceptsObjectIds) {
-    auto expCtx = getExpCtx();
-    for (auto&& expName : dateExpressions) {
-        BSONObj spec = BSON(expName << "$oid");
-        auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        auto contextDoc = Document{{"oid", OID::gen()}};
-        dateExp->evaluate(contextDoc);  // Should not throw.
-    }
-}
-
-TEST_F(DateExpressionTest, AcceptsTimestamps) {
-    auto expCtx = getExpCtx();
-    for (auto&& expName : dateExpressions) {
-        BSONObj spec = BSON(expName << "$ts");
-        auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        auto contextDoc = Document{{"ts", Timestamp{Date_t{}}}};
-        dateExp->evaluate(contextDoc);  // Should not throw.
-    }
-}
-
-TEST_F(DateExpressionTest, RejectsNonStringTimezone) {
-    auto expCtx = getExpCtx();
-    for (auto&& expName : dateExpressions) {
-        BSONObj spec = BSON(expName << BSON("date" << Date_t{} << "timezone"
-                                                   << "$intField"));
-        auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        auto contextDoc = Document{{"intField", 4}};
-        ASSERT_THROWS_CODE(dateExp->evaluate(contextDoc), AssertionException, 40533);
-    }
-}
-
-TEST_F(DateExpressionTest, RejectsUnrecognizedTimeZoneSpecification) {
-    auto expCtx = getExpCtx();
-    for (auto&& expName : dateExpressions) {
-        BSONObj spec = BSON(expName << BSON("date" << Date_t{} << "timezone"
-                                                   << "UNRECOGNIZED!"));
-        auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        auto contextDoc = Document{{"_id", 0}};
-        ASSERT_THROWS_CODE(dateExp->evaluate(contextDoc), AssertionException, 40485);
-    }
-}
-
-TEST_F(DateExpressionTest, SerializesToObjectSyntax) {
-    auto expCtx = getExpCtx();
-    for (auto&& expName : dateExpressions) {
-        // Test that it serializes to the full format if given an object specification.
-        BSONObj spec = BSON(expName << BSON("date" << Date_t{} << "timezone"
-                                                   << "Europe/London"));
-        auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        auto expectedSerialization =
-            Value(Document{{expName,
-                            Document{{"date", Document{{"$const", Date_t{}}}},
-                                     {"timezone", Document{{"$const", "Europe/London"_sd}}}}}});
-        ASSERT_VALUE_EQ(dateExp->serialize(true), expectedSerialization);
-        ASSERT_VALUE_EQ(dateExp->serialize(false), expectedSerialization);
-
-        // Test that it serializes to the full format if given a date.
-        spec = BSON(expName << Date_t{});
-        expectedSerialization =
-            Value(Document{{expName, Document{{"date", Document{{"$const", Date_t{}}}}}}});
-        dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        ASSERT_VALUE_EQ(dateExp->serialize(true), expectedSerialization);
-        ASSERT_VALUE_EQ(dateExp->serialize(false), expectedSerialization);
-
-        // Test that it serializes to the full format if given a date within an array.
-        spec = BSON(expName << BSON_ARRAY(Date_t{}));
-        dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        ASSERT_VALUE_EQ(dateExp->serialize(true), expectedSerialization);
-        ASSERT_VALUE_EQ(dateExp->serialize(false), expectedSerialization);
-    }
-}
-
-TEST_F(DateExpressionTest, OptimizesToConstantIfAllInputsAreConstant) {
-    auto expCtx = getExpCtx();
-    for (auto&& expName : dateExpressions) {
-        // Test that it becomes a constant if only date is provided, and it is constant.
-        auto spec = BSON(expName << BSON("date" << Date_t{}));
-        auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        ASSERT(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-        // Test that it becomes a constant if both date and timezone are provided, and are both
-        // constants.
-        spec = BSON(expName << BSON("date" << Date_t{} << "timezone"
-                                           << "Europe/London"));
-        dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        ASSERT(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-        // Test that it becomes a constant if both date and timezone are provided, and are both
-        // expressions which evaluate to constants.
-        spec = BSON(expName << BSON("date" << BSON("$add" << BSON_ARRAY(Date_t{} << 1000))
-                                           << "timezone"
-                                           << BSON("$concat" << BSON_ARRAY("Europe"
-                                                                           << "/"
-                                                                           << "London"))));
-        dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        ASSERT(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-        // Test that it does *not* become a constant if both date and timezone are provided, but
-        // date is not a constant.
-        spec = BSON(expName << BSON("date"
-                                    << "$date"
-                                    << "timezone"
-                                    << "Europe/London"));
-        dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        ASSERT_FALSE(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-        // Test that it does *not* become a constant if both date and timezone are provided, but
-        // timezone is not a constant.
-        spec = BSON(expName << BSON("date" << Date_t{} << "timezone"
-                                           << "$tz"));
-        dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        ASSERT_FALSE(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-    }
-}
-
-TEST_F(DateExpressionTest, DoesRespectTimeZone) {
-    // Make sure they each successfully evaluate with a different TimeZone.
-    auto expCtx = getExpCtx();
-    for (auto&& expName : dateExpressions) {
-        auto spec = BSON(expName << BSON("date" << Date_t{} << "timezone"
-                                                << "America/New_York"));
-        auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        auto contextDoc = Document{{"_id", 0}};
-        dateExp->evaluate(contextDoc);  // Should not throw.
-    }
-
-    // Make sure the time zone is used during evaluation.
-    auto date = Date_t::fromMillisSinceEpoch(1496777923000LL);  // 2017-06-06T19:38:43:234Z.
-    auto specWithoutTimezone = BSON("$hour" << BSON("date" << date));
-    auto hourWithoutTimezone =
-        Expression::parseExpression(expCtx, specWithoutTimezone, expCtx->variablesParseState)
-            ->evaluate({});
-    ASSERT_VALUE_EQ(hourWithoutTimezone, Value(19));
-
-    auto specWithTimezone = BSON("$hour" << BSON("date" << date << "timezone"
-                                                        << "America/New_York"));
-    auto hourWithTimezone =
-        Expression::parseExpression(expCtx, specWithTimezone, expCtx->variablesParseState)
-            ->evaluate({});
-    ASSERT_VALUE_EQ(hourWithTimezone, Value(15));
-}
-
-TEST_F(DateExpressionTest, DoesResultInNullIfGivenNullishInput) {
-    // Make sure they each successfully evaluate with a different TimeZone.
-    auto expCtx = getExpCtx();
-    for (auto&& expName : dateExpressions) {
-        auto contextDoc = Document{{"_id", 0}};
-
-        // Test that the expression results in null if the date is nullish and the timezone is not
-        // specified.
-        auto spec = BSON(expName << BSON("date"
-                                         << "$missing"));
-        auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        ASSERT_VALUE_EQ(Value(BSONNULL), dateExp->evaluate(contextDoc));
-
-        spec = BSON(expName << BSON("date" << BSONNULL));
-        dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        ASSERT_VALUE_EQ(Value(BSONNULL), dateExp->evaluate(contextDoc));
-
-        spec = BSON(expName << BSON("date" << BSONUndefined));
-        dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        ASSERT_VALUE_EQ(Value(BSONNULL), dateExp->evaluate(contextDoc));
-
-        // Test that the expression results in null if the date is present but the timezone is
-        // nullish.
-        spec = BSON(expName << BSON("date" << Date_t{} << "timezone"
-                                           << "$missing"));
-        dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        ASSERT_VALUE_EQ(Value(BSONNULL), dateExp->evaluate(contextDoc));
-
-        spec = BSON(expName << BSON("date" << Date_t{} << "timezone" << BSONNULL));
-        dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        ASSERT_VALUE_EQ(Value(BSONNULL), dateExp->evaluate(contextDoc));
-
-        spec = BSON(expName << BSON("date" << Date_t{} << "timezone" << BSONUndefined));
-        dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        ASSERT_VALUE_EQ(Value(BSONNULL), dateExp->evaluate(contextDoc));
-
-        // Test that the expression results in null if the date and timezone both nullish.
-        spec = BSON(expName << BSON("date"
-                                    << "$missing"
-                                    << "timezone"
-                                    << BSONUndefined));
-        dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        ASSERT_VALUE_EQ(Value(BSONNULL), dateExp->evaluate(contextDoc));
-
-        // Test that the expression results in null if the date is nullish and timezone is present.
-        spec = BSON(expName << BSON("date"
-                                    << "$missing"
-                                    << "timezone"
-                                    << "Europe/London"));
-        dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-        ASSERT_VALUE_EQ(Value(BSONNULL), dateExp->evaluate(contextDoc));
-    }
-}
-
-}  // namespace DateExpressionsTest
-
-namespace ExpressionDateToStringTest {
-
-// This provides access to an ExpressionContext that has a valid ServiceContext with a
-// TimeZoneDatabase via getExpCtx(), but we'll use a different name for this test suite.
-using ExpressionDateToStringTest = AggregationContextFixture;
-
-TEST_F(ExpressionDateToStringTest, SerializesToObjectSyntax) {
+TEST_F(ExpressionConvertTest, ConvertWithoutInputFailsToParse) {
     auto expCtx = getExpCtx();
 
-    // Test that it serializes to the full format if given an object specification.
-    BSONObj spec = BSON("$dateToString" << BSON("date" << Date_t{} << "timezone"
-                                                       << "Europe/London"
-                                                       << "format"
-                                                       << "%Y-%m-%d"));
-    auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    auto expectedSerialization =
-        Value(Document{{"$dateToString",
-                        Document{{"format", "%Y-%m-%d"_sd},
-                                 {"date", Document{{"$const", Date_t{}}}},
-                                 {"timezone", Document{{"$const", "Europe/London"_sd}}}}}});
-
-    ASSERT_VALUE_EQ(dateExp->serialize(true), expectedSerialization);
-    ASSERT_VALUE_EQ(dateExp->serialize(false), expectedSerialization);
+    auto spec = BSON("$convert" << BSON("to"
+                                        << "int"
+                                        << "onError"
+                                        << 0));
+    ASSERT_THROWS_WITH_CHECK(Expression::parseExpression(expCtx, spec, expCtx->variablesParseState),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::FailedToParse);
+                                 ASSERT_STRING_CONTAINS(exception.reason(),
+                                                        "Missing 'input' parameter to $convert");
+                             });
 }
 
-TEST_F(ExpressionDateToStringTest, OptimizesToConstantIfAllInputsAreConstant) {
+TEST_F(ExpressionConvertTest, ConvertWithoutToFailsToParse) {
     auto expCtx = getExpCtx();
 
-    // Test that it becomes a constant if both format and date are constant, and timezone is
-    // missing.
-    auto spec = BSON("$dateToString" << BSON("format"
-                                             << "%Y-%m-%d"
-                                             << "date"
-                                             << Date_t{}));
-    auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    // Test that it becomes a constant if both format, date and timezone are provided, and are both
-    // constants.
-    spec = BSON("$dateToString" << BSON("format"
-                                        << "%Y-%m-%d"
-                                        << "date"
-                                        << Date_t{}
-                                        << "timezone"
-                                        << "Europe/Amsterdam"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    // Test that it becomes a constant if both format, date and timezone are provided, and are both
-    // expressions which evaluate to constants.
-    spec = BSON("$dateToString" << BSON("format"
-                                        << "%Y-%m%d"
-                                        << "date"
-                                        << BSON("$add" << BSON_ARRAY(Date_t{} << 1000))
-                                        << "timezone"
-                                        << BSON("$concat" << BSON_ARRAY("Europe"
-                                                                        << "/"
-                                                                        << "London"))));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    // Test that it does *not* become a constant if both format, date and timezone are provided, but
-    // date is not a constant.
-    spec = BSON("$dateToString" << BSON("format"
-                                        << "%Y-%m-%d"
-                                        << "date"
-                                        << "$date"
-                                        << "timezone"
-                                        << "Europe/London"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_FALSE(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    // Test that it does *not* become a constant if both format, date and timezone are provided, but
-    // timezone is not a constant.
-    spec = BSON("$dateToString" << BSON("format"
-                                        << "%Y-%m-%d"
-                                        << "date"
-                                        << Date_t{}
-                                        << "timezone"
-                                        << "$tz"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_FALSE(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "onError"
+                                        << 0));
+    ASSERT_THROWS_WITH_CHECK(Expression::parseExpression(expCtx, spec, expCtx->variablesParseState),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::FailedToParse);
+                                 ASSERT_STRING_CONTAINS(exception.reason(),
+                                                        "Missing 'to' parameter to $convert");
+                             });
 }
-}  // namespace ExpressionDateToStringTest
 
-namespace ExpressionDateFromStringTest {
-
-// This provides access to an ExpressionContext that has a valid ServiceContext with a
-// TimeZoneDatabase via getExpCtx(), but we'll use a different name for this test suite.
-using ExpressionDateFromStringTest = AggregationContextFixture;
-
-TEST_F(ExpressionDateFromStringTest, SerializesToObjectSyntax) {
+TEST_F(ExpressionConvertTest, InvalidTypeNameFails) {
     auto expCtx = getExpCtx();
 
-    // Test that it serializes to the full format if given an object specification.
-    BSONObj spec = BSON("$dateFromString" << BSON("dateString"
-                                                  << "2017-07-04T13:06:44Z"));
-    auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    auto expectedSerialization = Value(
-        Document{{"$dateFromString",
-                  Document{{"dateString", Document{{"$const", "2017-07-04T13:06:44Z"_sd}}}}}});
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "dinosaur"
+                                        << "onError"
+                                        << 0));
 
-    ASSERT_VALUE_EQ(dateExp->serialize(true), expectedSerialization);
-    ASSERT_VALUE_EQ(dateExp->serialize(false), expectedSerialization);
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
 
-    // Test that it serializes to the full format if given an object specification.
-    spec = BSON("$dateFromString" << BSON("dateString"
-                                          << "2017-07-04T13:06:44Z"
-                                          << "timezone"
-                                          << "Europe/London"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    expectedSerialization =
-        Value(Document{{"$dateFromString",
-                        Document{{"dateString", Document{{"$const", "2017-07-04T13:06:44Z"_sd}}},
-                                 {"timezone", Document{{"$const", "Europe/London"_sd}}}}}});
+    ASSERT_THROWS_WITH_CHECK(
+        convertExp->optimize(), AssertionException, [](const AssertionException& exception) {
+            ASSERT_EQ(exception.code(), ErrorCodes::BadValue);
+            ASSERT_STRING_CONTAINS(exception.reason(), "Unknown type name");
+        });
 
-    ASSERT_VALUE_EQ(dateExp->serialize(true), expectedSerialization);
-    ASSERT_VALUE_EQ(dateExp->serialize(false), expectedSerialization);
-
-    spec = BSON("$dateFromString" << BSON("dateString"
-                                          << "2017-07-04T13:06:44Z"
-                                          << "timezone"
-                                          << "Europe/London"
-                                          << "format"
-                                          << "%Y-%d-%mT%H:%M:%S"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    expectedSerialization =
-        Value(Document{{"$dateFromString",
-                        Document{{"dateString", Document{{"$const", "2017-07-04T13:06:44Z"_sd}}},
-                                 {"timezone", Document{{"$const", "Europe/London"_sd}}},
-                                 {"format", Document{{"$const", "%Y-%d-%mT%H:%M:%S"_sd}}}}}});
-
-    ASSERT_VALUE_EQ(dateExp->serialize(true), expectedSerialization);
-    ASSERT_VALUE_EQ(dateExp->serialize(false), expectedSerialization);
+    ASSERT_THROWS_WITH_CHECK(convertExp->evaluate(Document()),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::BadValue);
+                                 ASSERT_STRING_CONTAINS(exception.reason(), "Unknown type name");
+                             });
 }
 
-TEST_F(ExpressionDateFromStringTest, OptimizesToConstantIfAllInputsAreConstant) {
-    auto expCtx = getExpCtx();
-    // Test that it becomes a constant with just the dateString.
-    auto spec = BSON("$dateFromString" << BSON("dateString"
-                                               << "2017-07-04T13:09:57Z"));
-    auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    Date_t dateVal = Date_t::fromMillisSinceEpoch(1499173797000);
-    ASSERT_VALUE_EQ(Value(dateVal), dateExp->evaluate(Document{}));
-
-    // Test that it becomes a constant with the dateString and timezone being a constant.
-    spec = BSON("$dateFromString" << BSON("dateString"
-                                          << "2017-07-04T13:09:57"
-                                          << "timezone"
-                                          << "Europe/London"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    // Test that it becomes a constant with the dateString, timezone, and format being a constant.
-    spec = BSON("$dateFromString" << BSON("dateString"
-                                          << "2017-07-04T13:09:57"
-                                          << "timezone"
-                                          << "Europe/London"
-                                          << "format"
-                                          << "%Y-%m-%dT%H:%M:%S"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    dateVal = Date_t::fromMillisSinceEpoch(1499170197000);
-    ASSERT_VALUE_EQ(Value(dateVal), dateExp->evaluate(Document{}));
-
-    // Test that it does *not* become a constant if dateString is not a constant.
-    spec = BSON("$dateFromString" << BSON("dateString"
-                                          << "$date"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_FALSE(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    // Test that it does *not* become a constant if timezone is not a constant.
-    spec = BSON("$dateFromString" << BSON("dateString"
-                                          << "2017-07-04T13:09:57Z"
-                                          << "timezone"
-                                          << "$tz"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_FALSE(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-
-    // Test that it does *not* become a constant if format is not a constant.
-    spec = BSON("$dateFromString" << BSON("dateString"
-                                          << "2017-07-04T13:09:57Z"
-                                          << "timezone"
-                                          << "Europe/London"
-                                          << "format"
-                                          << "$format"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_FALSE(dynamic_cast<ExpressionConstant*>(dateExp->optimize().get()));
-}
-
-TEST_F(ExpressionDateFromStringTest, RejectsUnparsableString) {
+TEST_F(ExpressionConvertTest, NonIntegralTypeFails) {
     auto expCtx = getExpCtx();
 
-    auto spec = BSON("$dateFromString" << BSON("dateString"
-                                               << "60.Monday1770/06:59"));
-    auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_THROWS_CODE(dateExp->evaluate({}), AssertionException, 40553);
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << 3.6
+                                        << "onError"
+                                        << 0));
+
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+
+    ASSERT_THROWS_WITH_CHECK(
+        convertExp->optimize(), AssertionException, [](const AssertionException& exception) {
+            ASSERT_EQ(exception.code(), ErrorCodes::FailedToParse);
+            ASSERT_STRING_CONTAINS(exception.reason(),
+                                   "In $convert, numeric 'to' argument is not an integer");
+        });
+
+    ASSERT_THROWS_WITH_CHECK(convertExp->evaluate(Document()),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::FailedToParse);
+                                 ASSERT_STRING_CONTAINS(
+                                     exception.reason(),
+                                     "In $convert, numeric 'to' argument is not an integer");
+                             });
 }
 
-TEST_F(ExpressionDateFromStringTest, RejectsTimeZoneInString) {
+TEST_F(ExpressionConvertTest, NonStringNonNumericalTypeFails) {
     auto expCtx = getExpCtx();
 
-    auto spec = BSON("$dateFromString" << BSON("dateString"
-                                               << "2017-07-13T10:02:57 Europe/London"));
-    auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_THROWS_CODE(dateExp->evaluate({}), AssertionException, 40553);
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << BSON("dinosaur"
+                                                << "Tyrannosaurus rex")
+                                        << "onError"
+                                        << 0));
 
-    spec = BSON("$dateFromString" << BSON("dateString"
-                                          << "July 4, 2017 Europe/London"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_THROWS_CODE(dateExp->evaluate({}), AssertionException, 40553);
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    ASSERT_THROWS_WITH_CHECK(convertExp->evaluate(Document()),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::FailedToParse);
+                                 ASSERT_STRING_CONTAINS(
+                                     exception.reason(),
+                                     "$convert's 'to' argument must be a string or number");
+                             });
 }
 
-TEST_F(ExpressionDateFromStringTest, RejectsTimeZoneInStringAndArgument) {
+TEST_F(ExpressionConvertTest, IllegalTargetTypeFails) {
     auto expCtx = getExpCtx();
 
-    // Test with "Z" and timezone
-    auto spec = BSON("$dateFromString" << BSON("dateString"
-                                               << "2017-07-14T15:24:38Z"
-                                               << "timezone"
-                                               << "Europe/London"));
-    auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_THROWS_CODE(dateExp->evaluate({}), AssertionException, 40551);
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "minKey"
+                                        << "onError"
+                                        << 0));
 
-    // Test with timezone abbreviation and timezone
-    spec = BSON("$dateFromString" << BSON("dateString"
-                                          << "2017-07-14T15:24:38 PDT"
-                                          << "timezone"
-                                          << "Europe/London"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_THROWS_CODE(dateExp->evaluate({}), AssertionException, 40551);
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
 
-    // Test with GMT offset and timezone
-    spec = BSON("$dateFromString" << BSON("dateString"
-                                          << "2017-07-14T15:24:38+02:00"
-                                          << "timezone"
-                                          << "Europe/London"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_THROWS_CODE(dateExp->evaluate({}), AssertionException, 40554);
+    ASSERT_THROWS_WITH_CHECK(
+        convertExp->optimize(), AssertionException, [](const AssertionException& exception) {
+            ASSERT_EQ(exception.code(), ErrorCodes::FailedToParse);
+            ASSERT_STRING_CONTAINS(exception.reason(), "$convert with unsupported 'to' type");
+        });
 
-    // Test with GMT offset and GMT timezone
-    spec = BSON("$dateFromString" << BSON("dateString"
-                                          << "2017-07-14 -0400"
-                                          << "timezone"
-                                          << "GMT"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_THROWS_CODE(dateExp->evaluate({}), AssertionException, 40554);
+    ASSERT_THROWS_WITH_CHECK(convertExp->evaluate(Document()),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::FailedToParse);
+                                 ASSERT_STRING_CONTAINS(exception.reason(),
+                                                        "$convert with unsupported 'to' type");
+                             });
 }
 
-TEST_F(ExpressionDateFromStringTest, RejectsNonStringFormat) {
+TEST_F(ExpressionConvertTest, InvalidNumericTargetTypeFails) {
     auto expCtx = getExpCtx();
 
-    auto spec = BSON("$dateFromString" << BSON("dateString"
-                                               << "2017-07-13T10:02:57"
-                                               << "format"
-                                               << 2));
-    auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_THROWS_CODE(dateExp->evaluate({}), AssertionException, 40684);
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << 100
+                                        << "onError"
+                                        << 0));
 
-    spec = BSON("$dateFromString" << BSON("dateString"
-                                          << "July 4, 2017"
-                                          << "format"
-                                          << true));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_THROWS_CODE(dateExp->evaluate({}), AssertionException, 40684);
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+
+    ASSERT_THROWS_WITH_CHECK(
+        convertExp->optimize(), AssertionException, [](const AssertionException& exception) {
+            ASSERT_EQ(exception.code(), ErrorCodes::FailedToParse);
+            ASSERT_STRING_CONTAINS(
+                exception.reason(),
+                "In $convert, numeric value for 'to' does not correspond to a BSON type");
+        });
+
+    ASSERT_THROWS_WITH_CHECK(
+        convertExp->evaluate(Document()),
+        AssertionException,
+        [](const AssertionException& exception) {
+            ASSERT_EQ(exception.code(), ErrorCodes::FailedToParse);
+            ASSERT_STRING_CONTAINS(
+                exception.reason(),
+                "In $convert, numeric value for 'to' does not correspond to a BSON type");
+        });
 }
 
-TEST_F(ExpressionDateFromStringTest, RejectsStringsThatDoNotMatchFormat) {
+TEST_F(ExpressionConvertTest, UnsupportedConversionFails) {
     auto expCtx = getExpCtx();
 
-    auto spec = BSON("$dateFromString" << BSON("dateString"
-                                               << "2017-07"
-                                               << "format"
-                                               << "%Y-%m-%d"));
-    auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_THROWS_CODE(dateExp->evaluate({}), AssertionException, 40553);
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "date"));
 
-    spec = BSON("$dateFromString" << BSON("dateString"
-                                          << "2017-07"
-                                          << "format"
-                                          << "%m-%Y"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_THROWS_CODE(dateExp->evaluate({}), AssertionException, 40553);
+    Document intInput{{"path1", Value(int{1})}};
+
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    ASSERT_THROWS_WITH_CHECK(convertExp->evaluate(intInput),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+                                 ASSERT_STRING_CONTAINS(exception.reason(),
+                                                        "Unsupported conversion");
+                             });
 }
 
-TEST_F(ExpressionDateFromStringTest, EscapeCharacterAllowsPrefixUsage) {
+TEST_F(ExpressionConvertTest, ConvertNullishInput) {
     auto expCtx = getExpCtx();
 
-    auto spec = BSON("$dateFromString" << BSON("dateString"
-                                               << "2017 % 01 % 01"
-                                               << "format"
-                                               << "%Y %% %m %% %d"));
-    auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_EQ("2017-01-01T00:00:00.000Z", dateExp->evaluate(Document{}).toString());
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "int"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    Document nullInput{{"path1", Value(BSONNULL)}};
+    Document undefinedInput{{"path1", Value(BSONUndefined)}};
+    Document missingInput{{"path1", Value()}};
+
+    ASSERT_VALUE_EQ(convertExp->evaluate(nullInput), Value(BSONNULL));
+    ASSERT_VALUE_EQ(convertExp->evaluate(undefinedInput), Value(BSONNULL));
+    ASSERT_VALUE_EQ(convertExp->evaluate(missingInput), Value(BSONNULL));
 }
 
-
-TEST_F(ExpressionDateFromStringTest, EvaluatesToNullIfFormatIsNullish) {
+TEST_F(ExpressionConvertTest, ConvertNullishInputWithOnNull) {
     auto expCtx = getExpCtx();
 
-    auto spec = BSON("$dateFromString" << BSON("dateString"
-                                               << "1/1/2017"
-                                               << "format"
-                                               << BSONNULL));
-    auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_VALUE_EQ(Value(BSONNULL), dateExp->evaluate(Document{}));
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "int"
+                                        << "onNull"
+                                        << "B)"
+                                        << "onError"
+                                        << "Should not be used here"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
 
-    spec = BSON("$dateFromString" << BSON("dateString"
-                                          << "1/1/2017"
-                                          << "format"
-                                          << "$missing"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_VALUE_EQ(Value(BSONNULL), dateExp->evaluate(Document{}));
+    Document nullInput{{"path1", Value(BSONNULL)}};
+    Document undefinedInput{{"path1", Value(BSONUndefined)}};
+    Document missingInput{{"path1", Value()}};
 
-    spec = BSON("$dateFromString" << BSON("dateString"
-                                          << "1/1/2017"
-                                          << "format"
-                                          << BSONUndefined));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_VALUE_EQ(Value(BSONNULL), dateExp->evaluate(Document{}));
+    ASSERT_VALUE_EQ(convertExp->evaluate(nullInput), Value("B)"_sd));
+    ASSERT_VALUE_EQ(convertExp->evaluate(undefinedInput), Value("B)"_sd));
+    ASSERT_VALUE_EQ(convertExp->evaluate(missingInput), Value("B)"_sd));
 }
 
-TEST_F(ExpressionDateFromStringTest, ReadWithUTCOffset) {
+TEST_F(ExpressionConvertTest, NullishToReturnsNull) {
     auto expCtx = getExpCtx();
 
-    auto spec = BSON("$dateFromString" << BSON("dateString"
-                                               << "2017-07-28T10:47:52.912"
-                                               << "timezone"
-                                               << "-01:00"));
-    auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_EQ("2017-07-28T11:47:52.912Z", dateExp->evaluate(Document{}).toString());
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "inputString"
+                                        << "to"
+                                        << "$path1"
+                                        << "onNull"
+                                        << "Should not be used here"
+                                        << "onError"
+                                        << "Also should not be used"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
 
-    spec = BSON("$dateFromString" << BSON("dateString"
-                                          << "2017-07-28T10:47:52.912"
-                                          << "timezone"
-                                          << "+01:00"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_EQ("2017-07-28T09:47:52.912Z", dateExp->evaluate(Document{}).toString());
+    Document nullInput{{"path1", Value(BSONNULL)}};
+    Document undefinedInput{{"path1", Value(BSONUndefined)}};
+    Document missingInput{{"path1", Value()}};
 
-    spec = BSON("$dateFromString" << BSON("dateString"
-                                          << "2017-07-28T10:47:52.912"
-                                          << "timezone"
-                                          << "+0445"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_EQ("2017-07-28T06:02:52.912Z", dateExp->evaluate(Document{}).toString());
-
-    spec = BSON("$dateFromString" << BSON("dateString"
-                                          << "2017-07-28T10:47:52.912"
-                                          << "timezone"
-                                          << "+10:45"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_EQ("2017-07-28T00:02:52.912Z", dateExp->evaluate(Document{}).toString());
-
-    spec = BSON("$dateFromString" << BSON("dateString"
-                                          << "1945-07-28T10:47:52.912"
-                                          << "timezone"
-                                          << "-08:00"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_EQ("1945-07-28T18:47:52.912Z", dateExp->evaluate(Document{}).toString());
+    ASSERT_VALUE_EQ(convertExp->evaluate(nullInput), Value(BSONNULL));
+    ASSERT_VALUE_EQ(convertExp->evaluate(undefinedInput), Value(BSONNULL));
+    ASSERT_VALUE_EQ(convertExp->evaluate(missingInput), Value(BSONNULL));
 }
 
-TEST_F(ExpressionDateFromStringTest, ConvertStringWithUTCOffsetAndFormat) {
+#define ASSERT_VALUE_CONTENTS_AND_TYPE(v, contents, type)  \
+    do {                                                   \
+        Value evaluatedResult = v;                         \
+        ASSERT_VALUE_EQ(evaluatedResult, Value(contents)); \
+        ASSERT_EQ(evaluatedResult.getType(), type);        \
+    } while (false);
+
+TEST_F(ExpressionConvertTest, NullInputOverridesNullTo) {
     auto expCtx = getExpCtx();
 
-    auto spec = BSON("$dateFromString" << BSON("dateString"
-                                               << "10:47:52.912 on 7/28/2017"
-                                               << "timezone"
-                                               << "-01:00"
-                                               << "format"
-                                               << "%H:%M:%S.%L on %m/%d/%Y"));
-    auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_EQ("2017-07-28T11:47:52.912Z", dateExp->evaluate(Document{}).toString());
+    auto spec =
+        BSON("$convert" << BSON("input" << Value(BSONNULL) << "to" << Value(BSONNULL) << "onNull"
+                                        << ":x"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
 
-    spec = BSON("$dateFromString" << BSON("dateString"
-                                          << "10:47:52.912 on 7/28/2017"
-                                          << "timezone"
-                                          << "+01:00"
-                                          << "format"
-                                          << "%H:%M:%S.%L on %m/%d/%Y"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_EQ("2017-07-28T09:47:52.912Z", dateExp->evaluate(Document{}).toString());
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(Document{}), ":x"_sd, BSONType::String);
 }
 
-TEST_F(ExpressionDateFromStringTest, ConvertStringWithISODateFormat) {
+TEST_F(ExpressionConvertTest, FoldableConversion) {
     auto expCtx = getExpCtx();
 
-    auto spec = BSON("$dateFromString" << BSON("dateString"
-                                               << "Day 7 Week 53 Year 2017"
-                                               << "format"
-                                               << "Day %u Week %V Year %G"));
-    auto dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_EQ("2018-01-07T00:00:00.000Z", dateExp->evaluate(Document{}).toString());
+    auto spec = BSON("$convert" << BSON("input" << 0 << "to"
+                                                << "double"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
 
-    // Week and day of week default to '1' if not specified.
-    spec = BSON("$dateFromString" << BSON("dateString"
-                                          << "Week 53 Year 2017"
-                                          << "format"
-                                          << "Week %V Year %G"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_EQ("2018-01-01T00:00:00.000Z", dateExp->evaluate(Document{}).toString());
-
-    spec = BSON("$dateFromString" << BSON("dateString"
-                                          << "Day 7 Year 2017"
-                                          << "format"
-                                          << "Day %u Year %G"));
-    dateExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
-    ASSERT_EQ("2017-01-08T00:00:00.000Z", dateExp->evaluate(Document{}).toString());
+    auto constResult = dynamic_cast<ExpressionConstant*>(convertExp.get());
+    ASSERT(constResult);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(constResult->getValue(), 0.0, BSONType::NumberDouble);
 }
 
-}  // namespace ExpressionDateFromStringTest
+TEST_F(ExpressionConvertTest, FoldableConversionWithOnError) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input" << 0 << "to"
+                                                << "date"
+                                                << "onError"
+                                                << ":]"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    auto constResult = dynamic_cast<ExpressionConstant*>(convertExp.get());
+    ASSERT(constResult);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(constResult->getValue(), ":]"_sd, BSONType::String);
+}
+
+TEST_F(ExpressionConvertTest, ConvertNumericToBool) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "bool"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    Document trueIntInput{{"path1", Value(int{1})}};
+    Document trueLongInput{{"path1", Value(-1ll)}};
+    Document trueDoubleInput{{"path1", Value(2.4)}};
+    Document trueDecimalInput{{"path1", Value(Decimal128(5))}};
+
+    Document falseIntInput{{"path1", Value(int{0})}};
+    Document falseLongInput{{"path1", Value(0ll)}};
+    Document falseDoubleInput{{"path1", Value(-0.0)}};
+    Document falseDecimalInput{{"path1", Value(Decimal128(0))}};
+
+    Document doubleNaN{{"path1", std::numeric_limits<double>::quiet_NaN()}};
+    Document doubleInfinity{{"path1", std::numeric_limits<double>::infinity()}};
+    Document doubleNegativeInfinity{{"path1", -std::numeric_limits<double>::infinity()}};
+
+    Document decimalNaN{{"path1", Decimal128::kPositiveNaN}};
+    Document decimalNegativeNaN{{"path1", Decimal128::kNegativeNaN}};
+    Document decimalInfinity{{"path1", Decimal128::kPositiveInfinity}};
+    Document decimalNegativeInfinity{{"path1", Decimal128::kNegativeInfinity}};
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(trueIntInput), true, BSONType::Bool);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(trueLongInput), true, BSONType::Bool);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(trueDoubleInput), true, BSONType::Bool);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(trueDecimalInput), true, BSONType::Bool);
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(falseIntInput), false, BSONType::Bool);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(falseLongInput), false, BSONType::Bool);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(falseDoubleInput), false, BSONType::Bool);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(falseDecimalInput), false, BSONType::Bool);
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(doubleNaN), true, BSONType::Bool);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(doubleInfinity), true, BSONType::Bool);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(doubleNegativeInfinity), true, BSONType::Bool);
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(decimalNaN), true, BSONType::Bool);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(decimalNegativeNaN), true, BSONType::Bool);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(decimalInfinity), true, BSONType::Bool);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(decimalNegativeInfinity), true, BSONType::Bool);
+}
+
+TEST_F(ExpressionConvertTest, ConvertNumericToDouble) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "double"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    Document intInput{{"path1", Value(int{1})}};
+    Document longInput{{"path1", Value(0xf00000000ll)}};
+    Document decimalInput{{"path1", Value(Decimal128("5.5"))}};
+
+    Document boolFalse{{"path1", Value(false)}};
+    Document boolTrue{{"path1", Value(true)}};
+
+    Document decimalNaN{{"path1", Decimal128::kPositiveNaN}};
+    Document decimalNegativeNaN{{"path1", Decimal128::kNegativeNaN}};
+    Document decimalInfinity{{"path1", Decimal128::kPositiveInfinity}};
+    Document decimalNegativeInfinity{{"path1", Decimal128::kNegativeInfinity}};
+
+    Document largeLongInput{{"path1", Value(0xf0000000000000fll)}};
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(intInput), 1.0, BSONType::NumberDouble);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(longInput), 64424509440.0, BSONType::NumberDouble);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(decimalInput), 5.5, BSONType::NumberDouble);
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(boolFalse), 0.0, BSONType::NumberDouble);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(boolTrue), 1.0, BSONType::NumberDouble);
+
+    Value result;
+    result = convertExp->evaluate(decimalNaN);
+    ASSERT_EQ(result.getType(), BSONType::NumberDouble);
+    ASSERT(std::isnan(result.getDouble()));
+
+    result = convertExp->evaluate(decimalNegativeNaN);
+    ASSERT_EQ(result.getType(), BSONType::NumberDouble);
+    ASSERT(std::isnan(result.getDouble()));
+
+    result = convertExp->evaluate(decimalInfinity);
+    ASSERT_EQ(result.getType(), BSONType::NumberDouble);
+    ASSERT_GT(result.getDouble(), 0.0);
+    ASSERT(std::isinf(result.getDouble()));
+
+    result = convertExp->evaluate(decimalNegativeInfinity);
+    ASSERT_EQ(result.getType(), BSONType::NumberDouble);
+    ASSERT_LT(result.getDouble(), 0.0);
+    ASSERT(std::isinf(result.getDouble()));
+
+    // Note that the least significant bits get lost, because the significand of a double is not
+    // wide enough for the original long long value in its entirety.
+    result = convertExp->evaluate(largeLongInput);
+    ASSERT_EQ(static_cast<long long>(result.getDouble()), 0xf00000000000000ll);
+}
+
+TEST_F(ExpressionConvertTest, ConvertOutOfBoundsDecimalToDouble) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "double"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    Document overflowInput{{"path1", Decimal128("1e309")}};
+    Document negativeOverflowInput{{"path1", Decimal128("-1e309")}};
+
+    ASSERT_THROWS_WITH_CHECK(convertExp->evaluate(overflowInput),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+                                 ASSERT_STRING_CONTAINS(exception.reason(),
+                                                        "Conversion would overflow target type");
+                             });
+
+    ASSERT_THROWS_WITH_CHECK(convertExp->evaluate(negativeOverflowInput),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+                                 ASSERT_STRING_CONTAINS(exception.reason(),
+                                                        "Conversion would overflow target type");
+                             });
+}
+
+TEST_F(ExpressionConvertTest, ConvertOutOfBoundsDecimalToDoubleWithOnError) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "double"
+                                        << "onError"
+                                        << ":/"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    Document overflowInput{{"path1", Decimal128("1e309")}};
+    Document negativeOverflowInput{{"path1", Decimal128("-1e309")}};
+
+    std::string contents = ":/";
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(overflowInput), contents, BSONType::String);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(negativeOverflowInput), contents, BSONType::String);
+}
+
+TEST_F(ExpressionConvertTest, ConvertNumericToDecimal) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "decimal"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    Document intInput{{"path1", Value(int{1})}};
+    Document longInput{{"path1", Value(0xf00000000ll)}};
+    Document doubleInput{{"path1", Value(Decimal128("0.1"))}};
+
+    Document boolFalse{{"path1", Value(false)}};
+    Document boolTrue{{"path1", Value(true)}};
+
+    Document doubleNaN{{"path1", std::numeric_limits<double>::quiet_NaN()}};
+    Document doubleInfinity{{"path1", std::numeric_limits<double>::infinity()}};
+    Document doubleNegativeInfinity{{"path1", -std::numeric_limits<double>::infinity()}};
+
+    Document largeLongInput{{"path1", Value(0xf0000000000000fll)}};
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(intInput), Decimal128(1), BSONType::NumberDecimal);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(longInput),
+                                   Decimal128(int64_t{0xf00000000LL}),
+                                   BSONType::NumberDecimal);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(doubleInput), Decimal128("0.1"), BSONType::NumberDecimal);
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(boolFalse), Decimal128(0), BSONType::NumberDecimal);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(boolTrue), Decimal128(1), BSONType::NumberDecimal);
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(doubleNaN), Decimal128::kPositiveNaN, BSONType::NumberDecimal);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(doubleInfinity),
+                                   Decimal128::kPositiveInfinity,
+                                   BSONType::NumberDecimal);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(doubleNegativeInfinity),
+                                   Decimal128::kNegativeInfinity,
+                                   BSONType::NumberDecimal);
+
+    // Unlike the similar conversion in ConvertNumericToDouble, there is more than enough precision
+    // to store the exact orignal value in a Decimal128.
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(largeLongInput), Value(0xf0000000000000fll), BSONType::NumberDecimal);
+}
+
+TEST_F(ExpressionConvertTest, ConvertDoubleToInt) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "int"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    Document simpleInput{{"path1", Value(1.0)}};
+
+    // Conversions to int should always truncate the fraction (i.e., round towards 0).
+    Document nonIntegerInput1{{"path1", Value(2.1)}};
+    Document nonIntegerInput2{{"path1", Value(2.9)}};
+    Document nonIntegerInput3{{"path1", Value(-2.1)}};
+    Document nonIntegerInput4{{"path1", Value(-2.9)}};
+
+    int maxInt = std::numeric_limits<int>::max();
+    int minInt = std::numeric_limits<int>::lowest();
+    Document maxInput{{"path1", Value(static_cast<double>(maxInt))}};
+    Document minInput{{"path1", Value(static_cast<double>(minInt))}};
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(simpleInput), 1, BSONType::NumberInt);
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(nonIntegerInput1), 2, BSONType::NumberInt);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(nonIntegerInput2), 2, BSONType::NumberInt);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(nonIntegerInput3), -2, BSONType::NumberInt);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(nonIntegerInput4), -2, BSONType::NumberInt);
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(maxInput), maxInt, BSONType::NumberInt);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(minInput), minInt, BSONType::NumberInt);
+}
+
+TEST_F(ExpressionConvertTest, ConvertOutOfBoundsDoubleToInt) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "int"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    int maxInt = std::numeric_limits<int>::max();
+    int minInt = std::numeric_limits<int>::lowest();
+    double overflowInt =
+        std::nextafter(static_cast<double>(maxInt), std::numeric_limits<double>::max());
+    double negativeOverflowInt =
+        std::nextafter(static_cast<double>(minInt), std::numeric_limits<double>::lowest());
+    Document overflowInput{{"path1", Value(overflowInt)}};
+    Document negativeOverflowInput{{"path1", Value(negativeOverflowInt)}};
+
+    Document nanInput{{"path1", Value(std::numeric_limits<double>::quiet_NaN())}};
+    Document doubleInfinity{{"path1", std::numeric_limits<double>::infinity()}};
+    Document doubleNegativeInfinity{{"path1", -std::numeric_limits<double>::infinity()}};
+
+    ASSERT_THROWS_WITH_CHECK(convertExp->evaluate(overflowInput),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+                                 ASSERT_STRING_CONTAINS(exception.reason(),
+                                                        "Conversion would overflow target type");
+                             });
+
+    ASSERT_THROWS_WITH_CHECK(convertExp->evaluate(negativeOverflowInput),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+                                 ASSERT_STRING_CONTAINS(exception.reason(),
+                                                        "Conversion would overflow target type");
+                             });
+
+    ASSERT_THROWS_WITH_CHECK(convertExp->evaluate(nanInput),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+                                 ASSERT_STRING_CONTAINS(exception.reason(),
+                                                        "Attempt to cast NaN value to integer");
+                             });
+
+    ASSERT_THROWS_WITH_CHECK(
+        convertExp->evaluate(doubleInfinity),
+        AssertionException,
+        [](const AssertionException& exception) {
+            ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+            ASSERT_STRING_CONTAINS(exception.reason(), "Attempt to cast infinity value to integer");
+        });
+
+    ASSERT_THROWS_WITH_CHECK(
+        convertExp->evaluate(doubleNegativeInfinity),
+        AssertionException,
+        [](const AssertionException& exception) {
+            ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+            ASSERT_STRING_CONTAINS(exception.reason(), "Attempt to cast infinity value to integer");
+        });
+}
+
+TEST_F(ExpressionConvertTest, ConvertOutOfBoundsDoubleToIntWithOnError) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "int"
+                                        << "onError"
+                                        << ":)"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    int maxInt = std::numeric_limits<int>::max();
+    int minInt = std::numeric_limits<int>::lowest();
+    double overflowInt =
+        std::nextafter(static_cast<double>(maxInt), std::numeric_limits<double>::max());
+    double negativeOverflowInt =
+        std::nextafter(static_cast<double>(minInt), std::numeric_limits<double>::lowest());
+    Document overflowInput{{"path1", Value(overflowInt)}};
+    Document negativeOverflowInput{{"path1", Value(negativeOverflowInt)}};
+
+    Document nanInput{{"path1", Value(std::numeric_limits<double>::quiet_NaN())}};
+    Document doubleInfinity{{"path1", std::numeric_limits<double>::infinity()}};
+    Document doubleNegativeInfinity{{"path1", -std::numeric_limits<double>::infinity()}};
+
+    std::string contents = ":)";
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(overflowInput), contents, BSONType::String);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(negativeOverflowInput), contents, BSONType::String);
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(nanInput), contents, BSONType::String);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(doubleInfinity), contents, BSONType::String);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(doubleNegativeInfinity), contents, BSONType::String);
+}
+
+TEST_F(ExpressionConvertTest, ConvertDoubleToLong) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "long"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    Document simpleInput{{"path1", Value(1.0)}};
+
+    // Conversions to int should always truncate the fraction (i.e., round towards 0).
+    Document nonIntegerInput1{{"path1", Value(2.1)}};
+    Document nonIntegerInput2{{"path1", Value(2.9)}};
+    Document nonIntegerInput3{{"path1", Value(-2.1)}};
+    Document nonIntegerInput4{{"path1", Value(-2.9)}};
+
+    // maxVal is the highest double value that will not overflow long long, and minVal is the lowest
+    // double value that will not overflow long long.
+    double maxVal = std::nextafter(ExpressionConvert::kLongLongMaxPlusOneAsDouble, 0.0);
+    double minVal = static_cast<double>(std::numeric_limits<long long>::lowest());
+    Document maxInput{{"path1", Value(maxVal)}};
+    Document minInput{{"path1", Value(minVal)}};
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(simpleInput), 1, BSONType::NumberLong);
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(nonIntegerInput1), 2, BSONType::NumberLong);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(nonIntegerInput2), 2, BSONType::NumberLong);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(nonIntegerInput3), -2, BSONType::NumberLong);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(nonIntegerInput4), -2, BSONType::NumberLong);
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(maxInput), static_cast<long long>(maxVal), BSONType::NumberLong);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(minInput), static_cast<long long>(minVal), BSONType::NumberLong);
+}
+
+TEST_F(ExpressionConvertTest, ConvertOutOfBoundsDoubleToLong) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "long"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    double minLong = static_cast<double>(std::numeric_limits<long long>::lowest());
+    double overflowLong = ExpressionConvert::kLongLongMaxPlusOneAsDouble;
+    double negativeOverflowLong =
+        std::nextafter(static_cast<double>(minLong), std::numeric_limits<double>::lowest());
+    Document overflowInput{{"path1", Value(overflowLong)}};
+    Document negativeOverflowInput{{"path1", Value(negativeOverflowLong)}};
+
+    Document nanInput{{"path1", Value(std::numeric_limits<double>::quiet_NaN())}};
+    Document doubleInfinity{{"path1", std::numeric_limits<double>::infinity()}};
+    Document doubleNegativeInfinity{{"path1", -std::numeric_limits<double>::infinity()}};
+
+    ASSERT_THROWS_WITH_CHECK(convertExp->evaluate(overflowInput),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+                                 ASSERT_STRING_CONTAINS(exception.reason(),
+                                                        "Conversion would overflow target type");
+                             });
+
+    ASSERT_THROWS_WITH_CHECK(convertExp->evaluate(negativeOverflowInput),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+                                 ASSERT_STRING_CONTAINS(exception.reason(),
+                                                        "Conversion would overflow target type");
+                             });
+
+    ASSERT_THROWS_WITH_CHECK(convertExp->evaluate(nanInput),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+                                 ASSERT_STRING_CONTAINS(exception.reason(),
+                                                        "Attempt to cast NaN value to integer");
+                             });
+
+    ASSERT_THROWS_WITH_CHECK(
+        convertExp->evaluate(doubleInfinity),
+        AssertionException,
+        [](const AssertionException& exception) {
+            ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+            ASSERT_STRING_CONTAINS(exception.reason(), "Attempt to cast infinity value to integer");
+        });
+
+    ASSERT_THROWS_WITH_CHECK(
+        convertExp->evaluate(doubleNegativeInfinity),
+        AssertionException,
+        [](const AssertionException& exception) {
+            ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+            ASSERT_STRING_CONTAINS(exception.reason(), "Attempt to cast infinity value to integer");
+        });
+}
+
+TEST_F(ExpressionConvertTest, ConvertOutOfBoundsDoubleToLongWithOnError) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "long"
+                                        << "onError"
+                                        << ":D"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    double minLong = static_cast<double>(std::numeric_limits<long long>::lowest());
+    double overflowLong = ExpressionConvert::kLongLongMaxPlusOneAsDouble;
+    double negativeOverflowLong =
+        std::nextafter(static_cast<double>(minLong), std::numeric_limits<double>::lowest());
+    Document overflowInput{{"path1", Value(overflowLong)}};
+    Document negativeOverflowInput{{"path1", Value(negativeOverflowLong)}};
+
+    Document nanInput{{"path1", Value(std::numeric_limits<double>::quiet_NaN())}};
+    Document doubleInfinity{{"path1", std::numeric_limits<double>::infinity()}};
+    Document doubleNegativeInfinity{{"path1", -std::numeric_limits<double>::infinity()}};
+
+    std::string contents = ":D";
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(overflowInput), contents, BSONType::String);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(negativeOverflowInput), contents, BSONType::String);
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(nanInput), contents, BSONType::String);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(doubleInfinity), contents, BSONType::String);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(doubleNegativeInfinity), contents, BSONType::String);
+}
+
+TEST_F(ExpressionConvertTest, ConvertDecimalToInt) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "int"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    Document simpleInput{{"path1", Value(Decimal128("1.0"))}};
+
+    // Conversions to int should always truncate the fraction (i.e., round towards 0).
+    Document nonIntegerInput1{{"path1", Value(Decimal128("2.1"))}};
+    Document nonIntegerInput2{{"path1", Value(Decimal128("2.9"))}};
+    Document nonIntegerInput3{{"path1", Value(Decimal128("-2.1"))}};
+    Document nonIntegerInput4{{"path1", Value(Decimal128("-2.9"))}};
+
+    int maxInt = std::numeric_limits<int>::max();
+    int minInt = std::numeric_limits<int>::min();
+    Document maxInput{{"path1", Value(Decimal128(maxInt))}};
+    Document minInput{{"path1", Value(Decimal128(minInt))}};
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(simpleInput), 1, BSONType::NumberInt);
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(nonIntegerInput1), 2, BSONType::NumberInt);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(nonIntegerInput2), 2, BSONType::NumberInt);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(nonIntegerInput3), -2, BSONType::NumberInt);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(nonIntegerInput4), -2, BSONType::NumberInt);
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(maxInput), maxInt, BSONType::NumberInt);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(minInput), minInt, BSONType::NumberInt);
+}
+
+TEST_F(ExpressionConvertTest, ConvertOutOfBoundsDecimalToInt) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "int"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    int maxInt = std::numeric_limits<int>::max();
+    int minInt = std::numeric_limits<int>::lowest();
+    Document overflowInput{{"path1", Decimal128(maxInt).add(Decimal128(1))}};
+    Document negativeOverflowInput{{"path1", Decimal128(minInt).subtract(Decimal128(1))}};
+
+    Document nanInput{{"path1", Decimal128::kPositiveNaN}};
+    Document negativeNaNInput{{"path1", Decimal128::kNegativeNaN}};
+    Document decimalInfinity{{"path1", Decimal128::kPositiveInfinity}};
+    Document decimalNegativeInfinity{{"path1", Decimal128::kNegativeInfinity}};
+
+    ASSERT_THROWS_WITH_CHECK(convertExp->evaluate(overflowInput),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+                                 ASSERT_STRING_CONTAINS(exception.reason(),
+                                                        "Conversion would overflow target type");
+                             });
+
+    ASSERT_THROWS_WITH_CHECK(convertExp->evaluate(negativeOverflowInput),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+                                 ASSERT_STRING_CONTAINS(exception.reason(),
+                                                        "Conversion would overflow target type");
+                             });
+
+    ASSERT_THROWS_WITH_CHECK(convertExp->evaluate(nanInput),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+                                 ASSERT_STRING_CONTAINS(exception.reason(),
+                                                        "Attempt to cast NaN value to integer");
+                             });
+
+    ASSERT_THROWS_WITH_CHECK(convertExp->evaluate(negativeNaNInput),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+                                 ASSERT_STRING_CONTAINS(exception.reason(),
+                                                        "Attempt to cast NaN value to integer");
+                             });
+
+    ASSERT_THROWS_WITH_CHECK(
+        convertExp->evaluate(decimalInfinity),
+        AssertionException,
+        [](const AssertionException& exception) {
+            ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+            ASSERT_STRING_CONTAINS(exception.reason(), "Attempt to cast infinity value to integer");
+        });
+
+    ASSERT_THROWS_WITH_CHECK(
+        convertExp->evaluate(decimalNegativeInfinity),
+        AssertionException,
+        [](const AssertionException& exception) {
+            ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+            ASSERT_STRING_CONTAINS(exception.reason(), "Attempt to cast infinity value to integer");
+        });
+}
+
+TEST_F(ExpressionConvertTest, ConvertOutOfBoundsDecimalToIntWithOnError) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "int"
+                                        << "onError"
+                                        << ":o"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    int maxInt = std::numeric_limits<int>::max();
+    int minInt = std::numeric_limits<int>::lowest();
+    Document overflowInput{{"path1", Decimal128(maxInt).add(Decimal128(1))}};
+    Document negativeOverflowInput{{"path1", Decimal128(minInt).subtract(Decimal128(1))}};
+
+    Document nanInput{{"path1", Decimal128::kPositiveNaN}};
+    Document negativeNaNInput{{"path1", Decimal128::kNegativeNaN}};
+    Document decimalInfinity{{"path1", Decimal128::kPositiveInfinity}};
+    Document decimalNegativeInfinity{{"path1", Decimal128::kNegativeInfinity}};
+
+    std::string contents = ":o";
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(overflowInput), contents, BSONType::String);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(negativeOverflowInput), contents, BSONType::String);
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(nanInput), contents, BSONType::String);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(negativeNaNInput), contents, BSONType::String);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(decimalInfinity), contents, BSONType::String);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(decimalNegativeInfinity), contents, BSONType::String);
+}
+
+TEST_F(ExpressionConvertTest, ConvertDecimalToLong) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "long"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    Document simpleInput{{"path1", Value(Decimal128("1.0"))}};
+
+    // Conversions to long should always truncate the fraction (i.e., round towards 0).
+    Document nonIntegerInput1{{"path1", Value(Decimal128("2.1"))}};
+    Document nonIntegerInput2{{"path1", Value(Decimal128("2.9"))}};
+    Document nonIntegerInput3{{"path1", Value(Decimal128("-2.1"))}};
+    Document nonIntegerInput4{{"path1", Value(Decimal128("-2.9"))}};
+
+    long long maxVal = std::numeric_limits<long long>::max();
+    long long minVal = std::numeric_limits<long long>::min();
+    Document maxInput{{"path1", Value(Decimal128(std::int64_t{maxVal}))}};
+    Document minInput{{"path1", Value(Decimal128(std::int64_t{minVal}))}};
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(simpleInput), 1, BSONType::NumberLong);
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(nonIntegerInput1), 2, BSONType::NumberLong);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(nonIntegerInput2), 2, BSONType::NumberLong);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(nonIntegerInput3), -2, BSONType::NumberLong);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(nonIntegerInput4), -2, BSONType::NumberLong);
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(maxInput), maxVal, BSONType::NumberLong);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(minInput), minVal, BSONType::NumberLong);
+}
+
+TEST_F(ExpressionConvertTest, ConvertOutOfBoundsDecimalToLong) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "long"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    long long maxVal = std::numeric_limits<long long>::max();
+    long long minVal = std::numeric_limits<long long>::lowest();
+    Document overflowInput{{"path1", Decimal128(std::int64_t{maxVal}).add(Decimal128(1))}};
+    Document negativeOverflowInput{
+        {"path1", Decimal128(std::int64_t{minVal}).subtract(Decimal128(1))}};
+
+    Document nanInput{{"path1", Decimal128::kPositiveNaN}};
+    Document negativeNaNInput{{"path1", Decimal128::kNegativeNaN}};
+    Document decimalInfinity{{"path1", Decimal128::kPositiveInfinity}};
+    Document decimalNegativeInfinity{{"path1", Decimal128::kNegativeInfinity}};
+
+    ASSERT_THROWS_WITH_CHECK(convertExp->evaluate(overflowInput),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+                                 ASSERT_STRING_CONTAINS(exception.reason(),
+                                                        "Conversion would overflow target type");
+                             });
+
+    ASSERT_THROWS_WITH_CHECK(convertExp->evaluate(negativeOverflowInput),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+                                 ASSERT_STRING_CONTAINS(exception.reason(),
+                                                        "Conversion would overflow target type");
+                             });
+
+    ASSERT_THROWS_WITH_CHECK(convertExp->evaluate(nanInput),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+                                 ASSERT_STRING_CONTAINS(exception.reason(),
+                                                        "Attempt to cast NaN value to integer");
+                             });
+
+    ASSERT_THROWS_WITH_CHECK(convertExp->evaluate(negativeNaNInput),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+                                 ASSERT_STRING_CONTAINS(exception.reason(),
+                                                        "Attempt to cast NaN value to integer");
+                             });
+
+    ASSERT_THROWS_WITH_CHECK(
+        convertExp->evaluate(decimalInfinity),
+        AssertionException,
+        [](const AssertionException& exception) {
+            ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+            ASSERT_STRING_CONTAINS(exception.reason(), "Attempt to cast infinity value to integer");
+        });
+
+    ASSERT_THROWS_WITH_CHECK(
+        convertExp->evaluate(decimalNegativeInfinity),
+        AssertionException,
+        [](const AssertionException& exception) {
+            ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+            ASSERT_STRING_CONTAINS(exception.reason(), "Attempt to cast infinity value to integer");
+        });
+}
+
+TEST_F(ExpressionConvertTest, ConvertOutOfBoundsDecimalToLongWithOnError) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "long"
+                                        << "onError"
+                                        << ":p"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    long long maxVal = std::numeric_limits<long long>::max();
+    long long minVal = std::numeric_limits<long long>::lowest();
+    Document overflowInput{{"path1", Decimal128(std::int64_t{maxVal}).add(Decimal128(1))}};
+    Document negativeOverflowInput{
+        {"path1", Decimal128(std::int64_t{minVal}).subtract(Decimal128(1))}};
+
+    Document nanInput{{"path1", Decimal128::kPositiveNaN}};
+    Document negativeNaNInput{{"path1", Decimal128::kNegativeNaN}};
+    Document decimalInfinity{{"path1", Decimal128::kPositiveInfinity}};
+    Document decimalNegativeInfinity{{"path1", Decimal128::kNegativeInfinity}};
+
+    std::string contents = ":p";
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(overflowInput), contents, BSONType::String);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(negativeOverflowInput), contents, BSONType::String);
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(nanInput), contents, BSONType::String);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(negativeNaNInput), contents, BSONType::String);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(decimalInfinity), contents, BSONType::String);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(decimalNegativeInfinity), contents, BSONType::String);
+}
+
+TEST_F(ExpressionConvertTest, ConvertIntToLong) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "long"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    Document simpleInput{{"path1", Value(1)}};
+
+    int maxInt = std::numeric_limits<int>::max();
+    int minInt = std::numeric_limits<int>::min();
+    Document maxInput{{"path1", Value(maxInt)}};
+    Document minInput{{"path1", Value(minInt)}};
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(simpleInput), 1ll, BSONType::NumberLong);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(maxInput), maxInt, BSONType::NumberLong);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(minInput), minInt, BSONType::NumberLong);
+}
+
+TEST_F(ExpressionConvertTest, ConvertLongToInt) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "int"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    Document simpleInput{{"path1", Value(1)}};
+
+    long long maxInt = std::numeric_limits<int>::max();
+    long long minInt = std::numeric_limits<int>::min();
+    Document maxInput{{"path1", Value(maxInt)}};
+    Document minInput{{"path1", Value(minInt)}};
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(simpleInput), 1, BSONType::NumberInt);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(maxInput), maxInt, BSONType::NumberInt);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(minInput), minInt, BSONType::NumberInt);
+}
+
+TEST_F(ExpressionConvertTest, ConvertOutOfBoundsLongToInt) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "int"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    long long maxInt = std::numeric_limits<int>::max();
+    long long minInt = std::numeric_limits<int>::min();
+    Document overflowInput{{"path1", Value(maxInt + 1)}};
+    Document negativeOverflowInput{{"path1", Value(minInt - 1)}};
+
+    ASSERT_THROWS_WITH_CHECK(convertExp->evaluate(overflowInput),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+                                 ASSERT_STRING_CONTAINS(exception.reason(),
+                                                        "Conversion would overflow target type");
+                             });
+
+    ASSERT_THROWS_WITH_CHECK(convertExp->evaluate(negativeOverflowInput),
+                             AssertionException,
+                             [](const AssertionException& exception) {
+                                 ASSERT_EQ(exception.code(), ErrorCodes::ConversionFailure);
+                                 ASSERT_STRING_CONTAINS(exception.reason(),
+                                                        "Conversion would overflow target type");
+                             });
+}
+
+TEST_F(ExpressionConvertTest, ConvertOutOfBoundsLongToIntWithOnError) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "int"
+                                        << "onError"
+                                        << ":|"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    long long maxInt = std::numeric_limits<int>::max();
+    long long minInt = std::numeric_limits<int>::min();
+    Document overflowInput{{"path1", Value(maxInt + 1)}};
+    Document negativeOverflowInput{{"path1", Value(minInt - 1)}};
+
+    std::string contents = ":|";
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(overflowInput), contents, BSONType::String);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(
+        convertExp->evaluate(negativeOverflowInput), contents, BSONType::String);
+}
+
+TEST_F(ExpressionConvertTest, ConvertBoolToInt) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "int"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    Document boolFalse{{"path1", Value(false)}};
+    Document boolTrue{{"path1", Value(true)}};
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(boolFalse), 0, BSONType::NumberInt);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(boolTrue), 1, BSONType::NumberInt);
+}
+
+TEST_F(ExpressionConvertTest, ConvertBoolToLong) {
+    auto expCtx = getExpCtx();
+
+    auto spec = BSON("$convert" << BSON("input"
+                                        << "$path1"
+                                        << "to"
+                                        << "long"));
+    auto convertExp = Expression::parseExpression(expCtx, spec, expCtx->variablesParseState);
+    convertExp = convertExp->optimize();
+
+    Document boolFalse{{"path1", Value(false)}};
+    Document boolTrue{{"path1", Value(true)}};
+
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(boolFalse), 0ll, BSONType::NumberLong);
+    ASSERT_VALUE_CONTENTS_AND_TYPE(convertExp->evaluate(boolTrue), 1ll, BSONType::NumberLong);
+}
+
+}  // namespace ExpressionConvertTest
 
 class All : public Suite {
 public:

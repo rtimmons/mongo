@@ -2759,7 +2759,7 @@ TEST_F(ReplCoordTest, IsMaster) {
     ASSERT_EQUALS(1U, arbiters.size());
     ASSERT_EQUALS(h3, arbiters[0]);
 
-    unordered_map<std::string, std::string> tags = response.getTags();
+    stdx::unordered_map<std::string, std::string> tags = response.getTags();
     ASSERT_EQUALS(2U, tags.size());
     ASSERT_EQUALS("value1", tags["key1"]);
     ASSERT_EQUALS("value2", tags["key2"]);
@@ -4356,7 +4356,6 @@ TEST_F(ReplCoordTest, PrepareOplogQueryMetadata) {
 
     BSONObjBuilder metadataBob;
     getReplCoord()->prepareReplMetadata(
-        opCtx.get(),
         BSON(rpc::kOplogQueryMetadataFieldName << 1 << rpc::kReplSetMetadataFieldName << 1),
         OpTime(),
         &metadataBob);

@@ -172,9 +172,9 @@ public:
         BSONObjBuilder result;
         appendReplicationInfo(opCtx, result, level);
 
-        auto rbid = ReplicationProcess::get(opCtx)->getRollbackID(opCtx);
-        if (rbid.isOK()) {
-            result.append("rbid", rbid.getValue());
+        auto rbid = ReplicationProcess::get(opCtx)->getRollbackID();
+        if (ReplicationProcess::kUninitializedRollbackId != rbid) {
+            result.append("rbid", rbid);
         }
 
         return result.obj();
@@ -217,7 +217,7 @@ public:
     bool requiresAuth() const override {
         return false;
     }
-    AllowedOnSecondary secondaryAllowed() const override {
+    AllowedOnSecondary secondaryAllowed(ServiceContext*) const override {
         return AllowedOnSecondary::kAlways;
     }
     std::string help() const override {

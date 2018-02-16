@@ -69,7 +69,7 @@ public:
     SetFeatureCompatibilityVersionCommand()
         : BasicCommand(FeatureCompatibilityVersion::kCommandName) {}
 
-    AllowedOnSecondary secondaryAllowed() const override {
+    AllowedOnSecondary secondaryAllowed(ServiceContext*) const override {
         return AllowedOnSecondary::kNever;
     }
 
@@ -129,6 +129,7 @@ public:
         });
 
         // Only allow one instance of setFeatureCompatibilityVersion to run at a time.
+        invariant(!opCtx->lockState()->isLocked());
         Lock::ExclusiveLock lk(opCtx->lockState(), FeatureCompatibilityVersion::fcvLock);
 
         const auto requestedVersion = uassertStatusOK(
