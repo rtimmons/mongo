@@ -392,6 +392,9 @@ tasks:
 
 - name: short_workloads_WT
   priority: 5
+  depends_on:
+    - name: compile
+      variant: linux-standalone
   commands:
     - func: "prepare environment"
       vars:
