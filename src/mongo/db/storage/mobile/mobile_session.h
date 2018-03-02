@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2014 MongoDB Inc.
+ *    Copyright (C) 2017 MongoDB Inc.
  *
  *    This program is free software: you can redistribute it and/or  modify
  *    it under the terms of the GNU Affero General Public License, version 3,
@@ -28,13 +28,33 @@
 
 #pragma once
 
-#include "mongo/db/repl/replication_coordinator.h"
+#include <sqlite3.h>
+#include <string>
+
+#include "mongo/base/disallow_copying.h"
+#include "mongo/db/storage/mobile/mobile_session_pool.h"
 
 namespace mongo {
-namespace repl {
+class MobileSessionPool;
 
-ReplicationCoordinator* getGlobalReplicationCoordinator();
-void setGlobalReplicationCoordinator(ReplicationCoordinator* coordinator);
+/**
+ * This class manages a SQLite database connection object.
+ */
+class MobileSession final {
+    MONGO_DISALLOW_COPYING(MobileSession);
 
-}  // namespace repl
+public:
+    MobileSession(sqlite3* session, MobileSessionPool* sessionPool);
+
+    ~MobileSession();
+
+    /**
+     * Returns a pointer to the underlying SQLite connection object.
+     */
+    sqlite3* getSession() const;
+
+private:
+    sqlite3* _session;
+    MobileSessionPool* _sessionPool;
+};
 }  // namespace mongo

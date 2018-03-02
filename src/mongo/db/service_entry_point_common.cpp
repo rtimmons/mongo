@@ -60,7 +60,7 @@
 #include "mongo/db/repl/optime.h"
 #include "mongo/db/repl/read_concern_args.h"
 #include "mongo/db/repl/repl_client_info.h"
-#include "mongo/db/repl/replication_coordinator_global.h"
+#include "mongo/db/repl/replication_coordinator.h"
 #include "mongo/db/s/operation_sharding_state.h"
 #include "mongo/db/s/shard_filtering_metadata_refresh.h"
 #include "mongo/db/s/sharded_connection_info.h"
@@ -101,15 +101,20 @@ using logger::LogComponent;
 // session for commands that can take a lock and then run another whitelisted command in
 // DBDirectClient. Otherwise, the nested command would try to check out a session under a lock,
 // which is not allowed.
-const StringMap<int> sessionCheckoutWhitelist = {{"applyOps", 1},
+const StringMap<int> sessionCheckoutWhitelist = {{"aggregate", 1},
+                                                 {"applyOps", 1},
                                                  {"count", 1},
                                                  {"delete", 1},
+                                                 {"distinct", 1},
+                                                 {"doTxn", 1},
                                                  {"eval", 1},
                                                  {"$eval", 1},
                                                  {"explain", 1},
+                                                 {"filemd5", 1},
                                                  {"find", 1},
                                                  {"findandmodify", 1},
                                                  {"findAndModify", 1},
+                                                 {"geoNear", 1},
                                                  {"geoSearch", 1},
                                                  {"getMore", 1},
                                                  {"group", 1},
@@ -496,6 +501,11 @@ void execCommandDatabase(OperationContext* opCtx,
         boost::optional<bool> autocommitVal = boost::none;
         if (sessionOptions && sessionOptions->getAutocommit()) {
             autocommitVal = *sessionOptions->getAutocommit();
+        } else if (sessionOptions && command->getName() == "doTxn") {
+            // Autocommit is overridden specifically for doTxn to get the oplog entry generation
+            // behavior used for multi-document transactions.
+            // The doTxn command still logically behaves as a commit.
+            autocommitVal = false;
         }
 
         OperationContextSession sessionTxnState(opCtx, shouldCheckoutSession, autocommitVal);

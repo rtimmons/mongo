@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2014 MongoDB Inc.
+ *    Copyright (C) 2017 MongoDB Inc.
  *
  *    This program is free software: you can redistribute it and/or  modify
  *    it under the terms of the GNU Affero General Public License, version 3,
@@ -28,21 +28,52 @@
 
 #include "mongo/platform/basic.h"
 
-#include "mongo/db/repl/replication_coordinator_global.h"
+#include <sqlite3.h>
+
+#include "mongo/base/init.h"
 #include "mongo/db/service_context.h"
+#include "mongo/db/storage/kv/kv_storage_engine.h"
+#include "mongo/db/storage/mobile/mobile_kv_engine.h"
+#include "mongo/db/storage/storage_options.h"
 
 namespace mongo {
-namespace repl {
 
-ReplicationCoordinator* getGlobalReplicationCoordinator() {
-    ReplicationCoordinator* globalReplCoordinator =
-        ReplicationCoordinator::get(getGlobalServiceContext());
-    return globalReplCoordinator;
+namespace {
+class MobileFactory : public StorageEngine::Factory {
+public:
+    StorageEngine* create(const StorageGlobalParams& params,
+                          const StorageEngineLockFile* lockFile) const override {
+        uassert(ErrorCodes::InvalidOptions,
+                "mobile does not support --groupCollections",
+                !params.groupCollections);
+
+        KVStorageEngineOptions options;
+        options.directoryPerDB = params.directoryperdb;
+        options.forRepair = params.repair;
+
+        MobileKVEngine* kvEngine = new MobileKVEngine(params.dbpath);
+        return new KVStorageEngine(kvEngine, options);
+    }
+
+    StringData getCanonicalName() const override {
+        return "mobile";
+    }
+
+    Status validateMetadata(const StorageEngineMetadata& metadata,
+                            const StorageGlobalParams& params) const override {
+        return Status::OK();
+    }
+
+    BSONObj createMetadataOptions(const StorageGlobalParams& params) const override {
+        return BSONObj();
+    }
+};
+}  // namespace
+
+MONGO_INITIALIZER_WITH_PREREQUISITES(MobileKVEngineInit, ("SetGlobalEnvironment"))
+(InitializerContext* context) {
+    getGlobalServiceContext()->registerStorageEngine("mobile", new MobileFactory());
+    return Status::OK();
 }
 
-void setGlobalReplicationCoordinator(ReplicationCoordinator* coord) {
-    repl::ReplicationCoordinator::set(getGlobalServiceContext(),
-                                      std::unique_ptr<ReplicationCoordinator>(coord));
-}
-}  // namespace repl
 }  // namespace mongo

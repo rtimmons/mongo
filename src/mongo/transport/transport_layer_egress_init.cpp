@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2016 MongoDB Inc.
+ *    Copyright 2018 MongoDB Inc.
  *
  *    This program is free software: you can redistribute it and/or  modify
  *    it under the terms of the GNU Affero General Public License, version 3,
@@ -30,33 +30,29 @@
 
 #include "mongo/platform/basic.h"
 
-#include "mongo/util/net/thread_idle_callback.h"
-
-#include "mongo/util/assert_util.h"
-#include "mongo/util/log.h"
+#include "mongo/base/init.h"
+#include "mongo/db/service_context.h"
+#include "mongo/transport/transport_layer_asio.h"
 
 namespace mongo {
 namespace {
+// Linking with this file will configure an egress-only TransportLayer on a ServiceContextNoop.
+// Use this for unit/integration tests that require only egress networking.
+MONGO_INITIALIZER_WITH_PREREQUISITES(ConfigureEgressTransportLayer, ("SetGlobalEnvironment"))
+(InitializerContext* context) {
+    auto sc = getGlobalServiceContext();
+    invariant(!sc->getTransportLayer());
 
-ThreadIdleCallback threadIdleCallback;
+    transport::TransportLayerASIO::Options opts;
+    opts.mode = transport::TransportLayerASIO::Options::kEgress;
+    sc->setTransportLayer(std::make_unique<transport::TransportLayerASIO>(opts, nullptr));
+    auto status = sc->getTransportLayer()->setup();
+    if (!status.isOK()) {
+        return status;
+    }
+
+    return sc->getTransportLayer()->start();
+}
 
 }  // namespace
-
-void registerThreadIdleCallback(ThreadIdleCallback callback) {
-    invariant(!threadIdleCallback);
-    threadIdleCallback = callback;
-}
-
-void markThreadIdle() {
-    if (!threadIdleCallback) {
-        return;
-    }
-    try {
-        threadIdleCallback();
-    } catch (...) {
-        severe() << "Exception escaped from threadIdleCallback";
-        fassertFailedNoTrace(28603);
-    }
-}
-
-}  // namespace mongo
+}  // namespace
