@@ -390,7 +390,7 @@ tasks:
     - func: "run test"
     - func: "analyze"
 
-- name: short_workloads_WT
+- name: short_workloads
   priority: 5
   depends_on:
     - name: compile
@@ -702,7 +702,7 @@ buildvariants:
   tasks:
     - name: industry_benchmarks_WT
     - name: core_workloads_WT
-    - name: short_workloads_WT
+    - name: short_workloads
     - name: retryable_writes_workloads_WT
     - name: industry_benchmarks_MMAPv1
     - name: core_workloads_MMAPv1
@@ -734,7 +734,7 @@ buildvariants:
       - rhel70
     - name: industry_benchmarks_WT
     - name: core_workloads_WT
-    - name: short_workloads_WT
+    - name: short_workloads
     - name: industry_benchmarks_MMAPv1
     - name: core_workloads_MMAPv1
     - name: non_sharded_workloads_WT
@@ -756,7 +756,7 @@ buildvariants:
   tasks:
     - name: industry_benchmarks_WT
     - name: core_workloads_WT
-    - name: short_workloads_WT
+    - name: short_workloads
     - name: retryable_writes_workloads_WT
     - name: industry_benchmarks_MMAPv1
     - name: industry_benchmarks_wmajority_WT
@@ -785,7 +785,7 @@ buildvariants:
   tasks:
     - name: industry_benchmarks_WT
     - name: core_workloads_WT
-    - name: short_workloads_WT
+    - name: short_workloads
     - name: retryable_writes_workloads_WT
     - name: industry_benchmarks_MMAPv1
     - name: industry_benchmarks_wmajority_WT
