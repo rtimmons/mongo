@@ -85,7 +85,7 @@ functions:
           storageEngine: ${storageEngine}
           test_control: ${test}
           production: true
-          mongodb_binary_archive: "https://s3.amazonaws.com/mciuploads/dsi/5a7dee952fbabe26bcb1e741/85b39d411987431a8c37b1de267b167a384ea9b3/linux/mongod-5a7dee952fbabe26bcb1e741.tar.gz"
+          mongodb_binary_archive: "https://s3.amazonaws.com/mciuploads/${project}/${version_id}/${revision}/${platform}/mongod-${version_id}.tar.gz"
           workloads_dir: ../src/workloads/workloads
           ycsb_dir: ../src/YCSB/YCSB
           linkbench_dir: ../src/linkbench/linkbench
@@ -312,7 +312,10 @@ tasks:
         content_type: ${content_type|application/x-gzip}
         display_name: mongodb.tar.gz
 
-- name: linkbench_WT
+- name: linkbench
+  depends_on:
+    - name: compile
+      variant: linux-standalone
   commands:
     - func: "prepare environment"
       vars:
@@ -746,8 +749,7 @@ buildvariants:
     - name: non_sharded_workloads_MMAPv1
     - name: agg_query_comparison_bestbuy_WT
     - name: agg_query_comparison_bestbuy_MMAPv1
-    # TODO: add to other variants
-    - name: linkbench_WT
+    - name: linkbench
 
 - name: linux-3-shard
   display_name: Linux 3-Shard Cluster
@@ -776,6 +778,7 @@ buildvariants:
     - name: agg_query_comparison_bestbuy_MMAPv1
     - name: change_streams
     - name: change_streams_multi_mongos
+    - name: linkbench
 
 - name: linux-3-node-replSet
   display_name: Linux 3-Node ReplSet
@@ -804,6 +807,7 @@ buildvariants:
     - name: agg_query_comparison_bestbuy_MMAPv1
     - name: change_streams
     - name: snapshot_reads_WT
+    - name: linkbench
 
 - name: linux-3-node-replSet-initialsync
   display_name: Linux 3-Node ReplSet Initial Sync
