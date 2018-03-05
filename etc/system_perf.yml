@@ -79,11 +79,11 @@ functions:
         working_dir: work
         script: |
           cat > bootstrap.yml <<EOF
-          cluster_type: ${cluster}
+          infrastructure_provisioning: ${cluster}
           platform: ${platform}
-          setup: ${setup}
+          mongodb_setup: ${setup}
           storageEngine: ${storageEngine}
-          test: ${test}
+          test_control: ${test}
           production: true
           mongodb_binary_archive: "https://s3.amazonaws.com/mciuploads/dsi/5a7dee952fbabe26bcb1e741/85b39d411987431a8c37b1de267b167a384ea9b3/linux/mongod-5a7dee952fbabe26bcb1e741.tar.gz"
           workloads_dir: ../src/workloads/workloads
@@ -434,6 +434,20 @@ tasks:
     - func: "run test"
     - func: "analyze"
 
+- name: snapshot_reads_WT
+  priority: 5
+  depends_on:
+    - name: compile
+      variant: linux-standalone
+  commands:
+    - func: "prepare environment"
+      vars:
+        storageEngine: "wiredTiger"
+        test: "snapshot_reads"
+    - func: "deploy cluster"
+    - func: "run test"
+    - func: "analyze"
+
 - name: agg_query_comparison_bestbuy_WT
   priority: 5
   depends_on:
@@ -703,6 +717,7 @@ buildvariants:
     - name: agg_query_comparison_bestbuy_WT
     - name: agg_query_comparison_bestbuy_MMAPv1
     - name: change_streams
+    - name: snapshot_reads_WT
 
 - name: linux-standalone
   display_name: Linux Standalone
@@ -788,6 +803,7 @@ buildvariants:
     - name: agg_query_comparison_bestbuy_WT
     - name: agg_query_comparison_bestbuy_MMAPv1
     - name: change_streams
+    - name: snapshot_reads_WT
 
 - name: linux-3-node-replSet-initialsync
   display_name: Linux 3-Node ReplSet Initial Sync

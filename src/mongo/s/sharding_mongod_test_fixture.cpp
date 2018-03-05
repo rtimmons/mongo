@@ -36,11 +36,12 @@
 #include "mongo/base/status_with.h"
 #include "mongo/client/remote_command_targeter_factory_mock.h"
 #include "mongo/client/remote_command_targeter_mock.h"
-#include "mongo/db/catalog/catalog_raii.h"
+#include "mongo/db/catalog_raii.h"
 #include "mongo/db/client.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/namespace_string.h"
 #include "mongo/db/op_observer_impl.h"
+#include "mongo/db/op_observer_registry.h"
 #include "mongo/db/query/cursor_response.h"
 #include "mongo/db/query/query_request.h"
 #include "mongo/db/repl/drop_pending_collection_reaper.h"
@@ -142,7 +143,13 @@ void ShardingMongodTestFixture::setUp() {
 
     repl::StorageInterface::set(service, std::move(storagePtr));
 
-    service->setOpObserver(stdx::make_unique<OpObserverImpl>());
+    auto makeOpObserver = [&] {
+        auto opObserver = stdx::make_unique<OpObserverRegistry>();
+        opObserver->addObserver(stdx::make_unique<OpObserverImpl>());
+        return opObserver;
+    };
+    service->setOpObserver(makeOpObserver());
+
     repl::setOplogCollectionName(service);
     repl::createOplog(_opCtx.get());
 

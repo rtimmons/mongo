@@ -42,6 +42,7 @@
 #include "mongo/client/fetcher.h"
 #include "mongo/client/remote_command_retry_scheduler.h"
 #include "mongo/db/commands/feature_compatibility_version.h"
+#include "mongo/db/commands/feature_compatibility_version_parser.h"
 #include "mongo/db/commands/server_status_metric.h"
 #include "mongo/db/concurrency/d_concurrency.h"
 #include "mongo/db/jsobj.h"
@@ -612,7 +613,7 @@ void InitialSyncer::_lastOplogEntryFetcherCallbackForBeginTimestamp(
     BSONObjBuilder queryBob;
     queryBob.append("find", nsToCollectionSubstring(FeatureCompatibilityVersion::kCollection));
     auto filterBob = BSONObjBuilder(queryBob.subobjStart("filter"));
-    filterBob.append("_id", FeatureCompatibilityVersion::kParameterName);
+    filterBob.append("_id", FeatureCompatibilityVersionParser::kParameterName);
     filterBob.done();
 
     _fCVFetcher = stdx::make_unique<Fetcher>(
@@ -673,7 +674,7 @@ void InitialSyncer::_fcvFetcherCallback(const StatusWith<Fetcher::QueryResponse>
         return;
     }
 
-    auto fCVParseSW = FeatureCompatibilityVersion::parse(docs.front());
+    auto fCVParseSW = FeatureCompatibilityVersionParser::parse(docs.front());
     if (!fCVParseSW.isOK()) {
         onCompletionGuard->setResultAndCancelRemainingWork_inlock(lock, fCVParseSW.getStatus());
         return;
@@ -688,7 +689,7 @@ void InitialSyncer::_fcvFetcherCallback(const StatusWith<Fetcher::QueryResponse>
             lock,
             Status(ErrorCodes::IncompatibleServerVersion,
                    str::stream() << "Sync source had unsafe feature compatibility version: "
-                                 << FeatureCompatibilityVersion::toString(version)));
+                                 << FeatureCompatibilityVersionParser::toString(version)));
         return;
     }
 
@@ -1085,26 +1086,6 @@ void InitialSyncer::_rollbackCheckerCheckForRollbackCallback(
                    str::stream() << "Rollback occurred on our sync source " << _syncSource
                                  << " during initial sync"));
         return;
-    }
-
-    // Set UUIDs for all non-replicated collections on secondaries. See comment in
-    // ReplicationCoordinatorExternalStateImpl::initializeReplSetStorage() for the explanation of
-    // why we do this.
-    const NamespaceString nss("admin", "system.version");
-    auto opCtx = makeOpCtx();
-    auto statusWithUUID = _storage->getCollectionUUID(opCtx.get(), nss);
-    if (!statusWithUUID.isOK()) {
-        // If the admin database does not exist, we intentionally fail initial sync. As part of
-        // SERVER-29448, we disallow dropping the admin database, so failing here is fine.
-        onCompletionGuard->setResultAndCancelRemainingWork_inlock(lock, statusWithUUID.getStatus());
-        return;
-    }
-    if (statusWithUUID.getValue()) {
-        auto schemaStatus = _storage->upgradeUUIDSchemaVersionNonReplicated(opCtx.get());
-        if (!schemaStatus.isOK()) {
-            onCompletionGuard->setResultAndCancelRemainingWork_inlock(lock, schemaStatus);
-            return;
-        }
     }
 
     // Success!

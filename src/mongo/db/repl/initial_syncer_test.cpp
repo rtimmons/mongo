@@ -35,6 +35,7 @@
 #include "mongo/client/fetcher.h"
 #include "mongo/db/client.h"
 #include "mongo/db/commands/feature_compatibility_version.h"
+#include "mongo/db/commands/feature_compatibility_version_parser.h"
 #include "mongo/db/json.h"
 #include "mongo/db/query/getmore_request.h"
 #include "mongo/db/repl/base_cloner_test_fixture.h"
@@ -239,10 +240,6 @@ protected:
         bool droppedUserDBs = false;
         std::vector<std::string> droppedCollections;
         int documentsInsertedCount = 0;
-        bool schemaUpgraded = false;
-        OptionalCollectionUUID uuid;
-        bool getCollectionUUIDShouldFail = false;
-        bool upgradeUUIDSchemaVersionNonReplicatedShouldFail = false;
     };
 
     stdx::mutex _storageInterfaceWorkDoneMutex;  // protects _storageInterfaceWorkDone.
@@ -255,10 +252,6 @@ protected:
                                                   const NamespaceString& nss) {
             LockGuard lock(_storageInterfaceWorkDoneMutex);
             _storageInterfaceWorkDone.createOplogCalled = true;
-            _storageInterfaceWorkDone.schemaUpgraded = false;
-            _storageInterfaceWorkDone.uuid = boost::none;
-            _storageInterfaceWorkDone.getCollectionUUIDShouldFail = false;
-            _storageInterfaceWorkDone.upgradeUUIDSchemaVersionNonReplicatedShouldFail = false;
             return Status::OK();
         };
         _storageInterface->truncateCollFn = [this](OperationContext* opCtx,
@@ -310,35 +303,6 @@ protected:
 
                 return StatusWith<std::unique_ptr<CollectionBulkLoader>>(
                     std::unique_ptr<CollectionBulkLoader>(collInfo->loader));
-            };
-        _storageInterface->getCollectionUUIDFn = [this](OperationContext* opCtx,
-                                                        const NamespaceString& nss) {
-            LockGuard lock(_storageInterfaceWorkDoneMutex);
-            if (_storageInterfaceWorkDone.getCollectionUUIDShouldFail) {
-                // getCollectionUUID returns NamespaceNotFound if either the db or the collection is
-                // missing.
-                return StatusWith<OptionalCollectionUUID>(Status(
-                    ErrorCodes::NamespaceNotFound,
-                    str::stream() << "getCollectionUUID failed because namespace " << nss.ns()
-                                  << " not found."));
-            } else {
-                return StatusWith<OptionalCollectionUUID>(_storageInterfaceWorkDone.uuid);
-            }
-        };
-
-        _storageInterface->upgradeUUIDSchemaVersionNonReplicatedFn =
-            [this](OperationContext* opCtx) {
-                LockGuard lock(_storageInterfaceWorkDoneMutex);
-                if (_storageInterfaceWorkDone.upgradeUUIDSchemaVersionNonReplicatedShouldFail) {
-                    // One of the status codes a failed upgradeUUIDSchemaVersionNonReplicated call
-                    // can return is NamespaceNotFound.
-                    return Status(ErrorCodes::NamespaceNotFound,
-                                  "upgradeUUIDSchemaVersionNonReplicated failed because the "
-                                  "desired ns was not found.");
-                } else {
-                    _storageInterfaceWorkDone.schemaUpgraded = true;
-                    return Status::OK();
-                }
             };
 
         _dbWorkThreadPool = stdx::make_unique<OldThreadPool>(1);
@@ -610,13 +574,13 @@ void assertFCVRequest(RemoteCommandRequest request) {
         << request.toString();
     ASSERT_EQUALS(nsToCollectionSubstring(FeatureCompatibilityVersion::kCollection),
                   request.cmdObj.getStringField("find"));
-    ASSERT_BSONOBJ_EQ(BSON("_id" << FeatureCompatibilityVersion::kParameterName),
+    ASSERT_BSONOBJ_EQ(BSON("_id" << FeatureCompatibilityVersionParser::kParameterName),
                       request.cmdObj.getObjectField("filter"));
 }
 
 void InitialSyncerTest::processSuccessfulFCVFetcherResponse36() {
-    auto docs = {BSON("_id" << FeatureCompatibilityVersion::kParameterName << "version"
-                            << FeatureCompatibilityVersionCommandParser::kVersion36)};
+    auto docs = {BSON("_id" << FeatureCompatibilityVersionParser::kParameterName << "version"
+                            << FeatureCompatibilityVersionParser::kVersion36)};
     processSuccessfulFCVFetcherResponse(docs);
 }
 
@@ -1532,8 +1496,8 @@ TEST_F(InitialSyncerTest,
 
 TEST_F(InitialSyncerTest,
        InitialSyncerReturnsTooManyMatchingDocumentsWhenFCVFetcherReturnsMultipleDocuments) {
-    auto docs = {BSON("_id" << FeatureCompatibilityVersion::kParameterName << "version"
-                            << FeatureCompatibilityVersionCommandParser::kVersion36),
+    auto docs = {BSON("_id" << FeatureCompatibilityVersionParser::kParameterName << "version"
+                            << FeatureCompatibilityVersionParser::kVersion36),
                  BSON("_id"
                       << "other")};
     runInitialSyncWithBadFCVResponse(docs, ErrorCodes::TooManyMatchingDocuments);
@@ -1541,25 +1505,25 @@ TEST_F(InitialSyncerTest,
 
 TEST_F(InitialSyncerTest,
        InitialSyncerReturnsIncompatibleServerVersionWhenFCVFetcherReturnsUpgradeTargetVersion) {
-    auto docs = {BSON("_id" << FeatureCompatibilityVersion::kParameterName << "version"
-                            << FeatureCompatibilityVersionCommandParser::kVersion36
+    auto docs = {BSON("_id" << FeatureCompatibilityVersionParser::kParameterName << "version"
+                            << FeatureCompatibilityVersionParser::kVersion36
                             << "targetVersion"
-                            << FeatureCompatibilityVersionCommandParser::kVersion40)};
+                            << FeatureCompatibilityVersionParser::kVersion40)};
     runInitialSyncWithBadFCVResponse(docs, ErrorCodes::IncompatibleServerVersion);
 }
 
 TEST_F(InitialSyncerTest,
        InitialSyncerReturnsIncompatibleServerVersionWhenFCVFetcherReturnsDowngradeTargetVersion) {
-    auto docs = {BSON("_id" << FeatureCompatibilityVersion::kParameterName << "version"
-                            << FeatureCompatibilityVersionCommandParser::kVersion36
+    auto docs = {BSON("_id" << FeatureCompatibilityVersionParser::kParameterName << "version"
+                            << FeatureCompatibilityVersionParser::kVersion36
                             << "targetVersion"
-                            << FeatureCompatibilityVersionCommandParser::kVersion36)};
+                            << FeatureCompatibilityVersionParser::kVersion36)};
     runInitialSyncWithBadFCVResponse(docs, ErrorCodes::IncompatibleServerVersion);
 }
 
 TEST_F(InitialSyncerTest, InitialSyncerReturnsBadValueWhenFCVFetcherReturnsNoVersion) {
-    auto docs = {BSON("_id" << FeatureCompatibilityVersion::kParameterName << "targetVersion"
-                            << FeatureCompatibilityVersionCommandParser::kVersion36)};
+    auto docs = {BSON("_id" << FeatureCompatibilityVersionParser::kParameterName << "targetVersion"
+                            << FeatureCompatibilityVersionParser::kVersion36)};
     runInitialSyncWithBadFCVResponse(docs, ErrorCodes::BadValue);
 }
 
@@ -1581,8 +1545,8 @@ TEST_F(InitialSyncerTest, InitialSyncerSucceedsWhenFCVFetcherReturnsOldVersion) 
         // Last oplog entry.
         processSuccessfulLastOplogEntryFetcherResponse({makeOplogEntryObj(1)});
 
-        auto docs = {BSON("_id" << FeatureCompatibilityVersion::kParameterName << "version"
-                                << FeatureCompatibilityVersionCommandParser::kVersion36)};
+        auto docs = {BSON("_id" << FeatureCompatibilityVersionParser::kParameterName << "version"
+                                << FeatureCompatibilityVersionParser::kVersion36)};
         processSuccessfulFCVFetcherResponse(docs);
         ASSERT_TRUE(net->hasReadyRequests());
     }
@@ -3493,13 +3457,7 @@ void InitialSyncerTest::doSuccessfulInitialSyncWithOneBatch() {
 
 TEST_F(InitialSyncerTest,
        InitialSyncerReturnsLastAppliedOnReachingStopTimestampAfterApplyingOneBatch) {
-    // In this test, getCollectionUUID should not return a UUID. Hence,
-    // upgradeUUIDSchemaVersionNonReplicated should not be called.
     doSuccessfulInitialSyncWithOneBatch();
-
-    // Ensure upgradeUUIDSchemaVersionNonReplicated was not called.
-    LockGuard lock(_storageInterfaceWorkDoneMutex);
-    ASSERT_FALSE(_storageInterfaceWorkDone.schemaUpgraded);
 }
 
 TEST_F(InitialSyncerTest,
@@ -4040,53 +3998,4 @@ TEST_F(InitialSyncerTest, GetInitialSyncProgressReturnsCorrectProgress) {
         << attempt1;
 }
 
-TEST_F(InitialSyncerTest, InitialSyncerUpdatesCollectionUUIDsIfgetCollectionUUIDReturnsUUID) {
-    // Ensure getCollectionUUID returns a UUID. This should trigger a call to
-    // upgradeUUIDSchemaVersionNonReplicated.
-    {
-        LockGuard lock(_storageInterfaceWorkDoneMutex);
-        _storageInterfaceWorkDone.uuid = UUID::gen();
-    }
-    doSuccessfulInitialSyncWithOneBatch();
-
-    // Ensure upgradeUUIDSchemaVersionNonReplicated was called.
-    LockGuard lock(_storageInterfaceWorkDoneMutex);
-    ASSERT_TRUE(_storageInterfaceWorkDone.schemaUpgraded);
-}
-
-TEST_F(InitialSyncerTest, InitialSyncerCapturesGetCollectionUUIDError) {
-    // Ensure getCollectionUUID returns a bad status. This should be passed to the initial syncer.
-    {
-        LockGuard lock(_storageInterfaceWorkDoneMutex);
-        _storageInterfaceWorkDone.getCollectionUUIDShouldFail = true;
-    }
-    doInitialSyncWithOneBatch();
-
-    // Ensure the getCollectionUUID status was captured.
-    ASSERT_EQUALS(ErrorCodes::NamespaceNotFound, _lastApplied);
-
-    // Ensure upgradeUUIDSchemaVersionNonReplicated was not called.
-    LockGuard lock(_storageInterfaceWorkDoneMutex);
-    ASSERT_FALSE(_storageInterfaceWorkDone.schemaUpgraded);
-}
-
-TEST_F(InitialSyncerTest, InitialSyncerCapturesUpgradeUUIDSchemaVersionError) {
-    // Ensure getCollectionUUID returns a UUID. This should trigger a call to
-    // upgradeUUIDSchemaVersionNonReplicated.
-    {
-        LockGuard lock(_storageInterfaceWorkDoneMutex);
-        _storageInterfaceWorkDone.uuid = UUID::gen();
-    }
-
-    // Ensure upgradeUUIDSchemaVersionNonReplicated returns a bad status. This should be passed to
-    // the initial syncer.
-    {
-        LockGuard lock(_storageInterfaceWorkDoneMutex);
-        _storageInterfaceWorkDone.upgradeUUIDSchemaVersionNonReplicatedShouldFail = true;
-    }
-    doInitialSyncWithOneBatch();
-
-    // Ensure the upgradeUUIDSchemaVersionNonReplicated status was captured.
-    ASSERT_EQUALS(ErrorCodes::NamespaceNotFound, _lastApplied);
-}
 }  // namespace

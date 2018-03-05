@@ -36,6 +36,8 @@
 #include "mongo/db/catalog/database_holder.h"
 #include "mongo/db/catalog/index_catalog.h"
 #include "mongo/db/commands/feature_compatibility_version.h"
+#include "mongo/db/commands/feature_compatibility_version_documentation.h"
+#include "mongo/db/commands/feature_compatibility_version_parser.h"
 #include "mongo/db/concurrency/write_conflict_exception.h"
 #include "mongo/db/dbdirectclient.h"
 #include "mongo/db/dbhelpers.h"
@@ -43,7 +45,7 @@
 #include "mongo/db/query/internal_plans.h"
 #include "mongo/db/repair_database.h"
 #include "mongo/db/repl/drop_pending_collection_reaper.h"
-#include "mongo/db/repl/replication_coordinator_global.h"
+#include "mongo/db/repl/replication_coordinator.h"
 #include "mongo/db/server_options.h"
 #include "mongo/db/storage/mmap_v1/mmap_v1_options.h"
 #include "mongo/util/log.h"
@@ -61,9 +63,10 @@ using std::endl;
 
 namespace {
 
-constexpr StringData upgradeLink = "http://dochub.mongodb.org/core/4.0-upgrade-fcv"_sd;
-constexpr StringData mustDowngradeErrorMsg =
-    "UPGRADE PROBLEM: The data files need to be fully upgraded to version 3.6 before attempting an upgrade to 4.0; see http://dochub.mongodb.org/core/4.0-upgrade-fcv for more details."_sd;
+const std::string mustDowngradeErrorMsg = str::stream()
+    << "UPGRADE PROBLEM: The data files need to be fully upgraded to version 3.6 before attempting "
+       "an upgrade to 4.0; see "
+    << feature_compatibility_version_documentation::kUpgradeLink << " for more details.";
 
 Status restoreMissingFeatureCompatibilityVersionDocument(OperationContext* opCtx,
                                                          const std::vector<std::string>& dbNames) {
@@ -91,14 +94,14 @@ Status restoreMissingFeatureCompatibilityVersionDocument(OperationContext* opCtx
     BSONObj featureCompatibilityVersion;
     if (!Helpers::findOne(opCtx,
                           fcvColl,
-                          BSON("_id" << FeatureCompatibilityVersion::kParameterName),
+                          BSON("_id" << FeatureCompatibilityVersionParser::kParameterName),
                           featureCompatibilityVersion)) {
         log() << "Re-creating featureCompatibilityVersion document that was deleted with version "
-              << FeatureCompatibilityVersionCommandParser::kVersion36 << ".";
+              << FeatureCompatibilityVersionParser::kVersion36 << ".";
 
-        BSONObj fcvObj = BSON("_id" << FeatureCompatibilityVersion::kParameterName
-                                    << FeatureCompatibilityVersion::kVersionField
-                                    << FeatureCompatibilityVersionCommandParser::kVersion36);
+        BSONObj fcvObj = BSON("_id" << FeatureCompatibilityVersionParser::kParameterName
+                                    << FeatureCompatibilityVersionParser::kVersionField
+                                    << FeatureCompatibilityVersionParser::kVersion36);
 
         writeConflictRetry(opCtx, "insertFCVDocument", fcvNss.ns(), [&] {
             WriteUnitOfWork wunit(opCtx);
@@ -111,7 +114,7 @@ Status restoreMissingFeatureCompatibilityVersionDocument(OperationContext* opCtx
 
     invariant(Helpers::findOne(opCtx,
                                fcvColl,
-                               BSON("_id" << FeatureCompatibilityVersion::kParameterName),
+                               BSON("_id" << FeatureCompatibilityVersionParser::kParameterName),
                                featureCompatibilityVersion));
 
     return Status::OK();
@@ -223,7 +226,9 @@ void checkForIdIndexesAndDropPendingCollections(OperationContext* opCtx, Databas
 unsigned long long checkIfReplMissingFromCommandLine(OperationContext* opCtx) {
     // This is helpful for the query below to work as you can't open files when readlocked
     Lock::GlobalWrite lk(opCtx);
-    if (!repl::getGlobalReplicationCoordinator()->getSettings().usingReplSets()) {
+    if (!repl::ReplicationCoordinator::get(getGlobalServiceContext())
+             ->getSettings()
+             .usingReplSets()) {
         DBDirectClient c(opCtx);
         return c.count(kSystemReplSetCollection.ns());
     }
@@ -287,7 +292,7 @@ StatusWith<bool> repairDatabasesAndCheckVersion(OperationContext* opCtx) {
         if (!db || !(versionColl = db->getCollection(opCtx, nss)) ||
             !Helpers::findOne(opCtx,
                               versionColl,
-                              BSON("_id" << FeatureCompatibilityVersion::kParameterName),
+                              BSON("_id" << FeatureCompatibilityVersionParser::kParameterName),
                               featureCompatibilityVersion)) {
             auto status = restoreMissingFeatureCompatibilityVersionDocument(opCtx, dbNames);
             if (!status.isOK()) {
@@ -409,12 +414,13 @@ StatusWith<bool> repairDatabasesAndCheckVersion(OperationContext* opCtx) {
             if (Collection* versionColl =
                     db->getCollection(opCtx, FeatureCompatibilityVersion::kCollection)) {
                 BSONObj featureCompatibilityVersion;
-                if (Helpers::findOne(opCtx,
-                                     versionColl,
-                                     BSON("_id" << FeatureCompatibilityVersion::kParameterName),
-                                     featureCompatibilityVersion)) {
+                if (Helpers::findOne(
+                        opCtx,
+                        versionColl,
+                        BSON("_id" << FeatureCompatibilityVersionParser::kParameterName),
+                        featureCompatibilityVersion)) {
                     auto swVersion =
-                        FeatureCompatibilityVersion::parse(featureCompatibilityVersion);
+                        FeatureCompatibilityVersionParser::parse(featureCompatibilityVersion);
                     if (!swVersion.isOK()) {
                         severe() << swVersion.getStatus();
                         // Note this error path captures all cases of an FCV document existing,
@@ -426,7 +432,7 @@ StatusWith<bool> repairDatabasesAndCheckVersion(OperationContext* opCtx) {
                                        "featureCompatibilityVersion document. The data files need "
                                        "to be fully upgraded to version 3.4 before attempting an "
                                        "upgrade to 3.6. If you are upgrading to 3.6, see "
-                                    << upgradeLink
+                                    << feature_compatibility_version_documentation::kUpgradeLink
                                     << "."};
                     }
                     fcvDocumentExists = true;
@@ -441,7 +447,7 @@ StatusWith<bool> repairDatabasesAndCheckVersion(OperationContext* opCtx) {
                         log() << "** WARNING: A featureCompatibilityVersion upgrade did not "
                               << "complete. " << startupWarningsLog;
                         log() << "**          The current featureCompatibilityVersion is "
-                              << FeatureCompatibilityVersion::toString(version) << "."
+                              << FeatureCompatibilityVersionParser::toString(version) << "."
                               << startupWarningsLog;
                         log() << "**          To fix this, use the setFeatureCompatibilityVersion "
                               << "command to resume upgrade to 4.0." << startupWarningsLog;
@@ -450,7 +456,7 @@ StatusWith<bool> repairDatabasesAndCheckVersion(OperationContext* opCtx) {
                         log() << "** WARNING: A featureCompatibilityVersion downgrade did not "
                               << "complete. " << startupWarningsLog;
                         log() << "**          The current featureCompatibilityVersion is "
-                              << FeatureCompatibilityVersion::toString(version) << "."
+                              << FeatureCompatibilityVersionParser::toString(version) << "."
                               << startupWarningsLog;
                         log() << "**          To fix this, use the setFeatureCompatibilityVersion "
                               << "command to resume downgrade to 3.6." << startupWarningsLog;

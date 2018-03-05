@@ -48,7 +48,7 @@
 #include "mongo/db/cursor_server_params.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/repl/repl_client_info.h"
-#include "mongo/db/repl/replication_coordinator_global.h"
+#include "mongo/db/repl/replication_coordinator.h"
 #include "mongo/util/background.h"
 #include "mongo/util/concurrency/idle_thread_block.h"
 #include "mongo/util/exit.h"
@@ -209,9 +209,8 @@ void ClientCursorPin::release() {
     // Note it's not safe to dereference _cursor->_cursorManager unless we know we haven't been
     // killed. If we're not locked we assume we haven't been killed because we're working with the
     // global cursor manager which never kills cursors.
-    const bool isLocked =
-        _opCtx->lockState()->isCollectionLockedForMode(_cursor->_nss.ns(), MODE_IS);
-    dassert(isLocked || _cursor->_cursorManager->isGlobalManager());
+    dassert(_opCtx->lockState()->isCollectionLockedForMode(_cursor->_nss.ns(), MODE_IS) ||
+            _cursor->_cursorManager->isGlobalManager());
 
     invariant(_cursor->_operationUsingCursor);
 
@@ -242,9 +241,8 @@ void ClientCursorPin::deleteUnderlying() {
     // Note it's not safe to dereference _cursor->_cursorManager unless we know we haven't been
     // killed. If we're not locked we assume we haven't been killed because we're working with the
     // global cursor manager which never kills cursors.
-    const bool isLocked =
-        _opCtx->lockState()->isCollectionLockedForMode(_cursor->_nss.ns(), MODE_IS);
-    dassert(isLocked || _cursor->_cursorManager->isGlobalManager());
+    dassert(_opCtx->lockState()->isCollectionLockedForMode(_cursor->_nss.ns(), MODE_IS) ||
+            _cursor->_cursorManager->isGlobalManager());
 
     if (!_cursor->getExecutor()->isMarkedAsKilled()) {
         _cursor->_cursorManager->deregisterCursor(_cursor);

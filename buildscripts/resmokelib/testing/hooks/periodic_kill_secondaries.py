@@ -21,7 +21,7 @@ from ..testcases import interface as testcase
 from ... import errors
 
 
-class PeriodicKillSecondaries(interface.CustomBehavior):
+class PeriodicKillSecondaries(interface.Hook):
     """
     Periodically kills the secondaries in a replica set and verifies
     that they can reach the SECONDARY state without having connectivity
@@ -41,7 +41,7 @@ class PeriodicKillSecondaries(interface.CustomBehavior):
 
         description = ("PeriodicKillSecondaries (kills the secondary after running tests for a"
                        " configurable period of time)")
-        interface.CustomBehavior.__init__(self, hook_logger, rs_fixture, description)
+        interface.Hook.__init__(self, hook_logger, rs_fixture, description)
 
         self._period_secs = period_secs
         self._start_time = None
@@ -79,7 +79,7 @@ class PeriodicKillSecondaries(interface.CustomBehavior):
         test_name = "{}:{}".format(self._last_test_name, self.__class__.__name__)
         self.hook_test_case = self.make_dynamic_test(testcase.TestCase, "Hook", test_name)
 
-        interface.CustomBehavior.start_dynamic_test(self.hook_test_case, test_report)
+        interface.Hook.start_dynamic_test(self.hook_test_case, test_report)
         try:
             self._kill_secondaries()
             self._check_secondaries_and_restart_fixture()
@@ -130,9 +130,12 @@ class PeriodicKillSecondaries(interface.CustomBehavior):
                 "Killing the secondary on port %d...", secondary.port)
             secondary.mongod.stop(kill=True)
 
-        # Teardown may or may not be considered a success as a result of killing a secondary, so we
-        # ignore the return value of Fixture.teardown().
-        self.fixture.teardown()
+        try:
+            self.fixture.teardown()
+        except errors.ServerFailure:
+            # Teardown may or may not be considered a success as a result of killing a secondary,
+            # so we ignore ServerFailure raised during teardown.
+            pass
 
     def _check_secondaries_and_restart_fixture(self):
         preserve_dbpaths = []
@@ -149,8 +152,9 @@ class PeriodicKillSecondaries(interface.CustomBehavior):
             secondary.await_ready()
             self._await_secondary_state(secondary)
 
-            teardown_success = secondary.teardown()
-            if not teardown_success:
+            try:
+                secondary.teardown()
+            except errors.ServerFailure:
                 raise errors.ServerFailure(
                     "{} did not exit cleanly after reconciling the end of its oplog".format(
                         secondary))
@@ -188,8 +192,9 @@ class PeriodicKillSecondaries(interface.CustomBehavior):
         self.hook_test_case.logger.info(
             "Finished verifying data consistency, stopping the fixture...")
 
-        teardown_success = self.fixture.teardown()
-        if not teardown_success:
+        try:
+            self.fixture.teardown()
+        except errors.ServerFailure:
             raise errors.ServerFailure(
                 "{} did not exit cleanly after verifying data consistency".format(self.fixture))
 
@@ -336,8 +341,9 @@ class PeriodicKillSecondaries(interface.CustomBehavior):
                             minvalid_ts, latest_oplog_entry_ts, minvalid_doc,
                             latest_oplog_doc))
 
-            teardown_success = secondary.teardown()
-            if not teardown_success:
+            try:
+                secondary.teardown()
+            except errors.ServerFailure:
                 raise errors.ServerFailure(
                     "{} did not exit cleanly after being started up as a standalone".format(
                         secondary))

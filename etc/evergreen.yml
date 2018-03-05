@@ -87,18 +87,37 @@ variables:
 
       ${activate_virtualenv}
       # shared scons cache testing
-      # if 'shared_scons_cache' enabled and project level 'disable_shared_scons_cache' is not true
-      # 'shared_scons_cache is set on a per variant basis
+      # if 'scons_cache_scope' enabled and project level 'disable_shared_scons_cache' is not true
+      # 'scons_cache_scope' is set on a per variant basis
       # 'disable_shared_scons_cache' is set on a project level and applies to all variants
-      if [ "${shared_scons_cache}" = "true" ] && [ "${disable_shared_scons_cache}" != "true" ]; then
-        echo "Shared cache - mounting file system"
-        sudo mount /efs -v || mount /efs
-        MONGO_VERSION=$MONGO_VERSION SCONS_CACHE_MODE=${scons_cache_mode|nolinked} USE_SCONS_CACHE=shared IS_PATCH=${is_patch} ${python|/opt/mongodbtoolchain/v2/bin/python2} buildscripts/generate_compile_expansions_shared_cache.py --out compile_expansions.yml
+
+      # Shared - if scons_cache_scope is set, then use new shared scons cache settings
+      if [ ! -z ${scons_cache_scope} ]; then
+
+        if [ "${disable_shared_scons_cache}" = "true" ]; then
+
+          echo "SCons Cache disabled. All shared scons settings will be ignored"
+          scons_cache_scope=none
+
+        else
+          scons_cache_scope=${scons_cache_scope}
+        fi
+
+        if [ $scons_cache_scope = "shared" ]; then
+          echo "Shared cache - mounting file system"
+          sudo mount /efs || mount /efs
+        fi
+
+        echo "Shared Cache with setting: ${scons_cache_scope}"
+        MONGO_VERSION=$MONGO_VERSION SCONS_CACHE_MODE=${scons_cache_mode|nolinked} SCONS_CACHE_SCOPE=$scons_cache_scope IS_PATCH=${is_patch} ${python|/opt/mongodbtoolchain/v2/bin/python2} buildscripts/generate_compile_expansions_shared_cache.py --out compile_expansions.yml
+
+      # Legacy Expansion generation
       else
-      # Proceed with regular expansions generated
-      # This script converts the generated version string into a sanitized version string for
-      # use by scons and uploading artifacts as well as information about for the scons cache.
-      MONGO_VERSION=$MONGO_VERSION SCONS_CACHE_MODE=${scons_cache_mode|nolinked} USE_SCONS_CACHE=${use_scons_cache|false} ${python|/opt/mongodbtoolchain/v2/bin/python2} buildscripts/generate_compile_expansions.py --out compile_expansions.yml
+        echo "Using legacy expansion generation"
+        # Proceed with regular expansions generated
+        # This script converts the generated version string into a sanitized version string for
+        # use by scons and uploading artifacts as well as information about for the scons cache.
+        MONGO_VERSION=$MONGO_VERSION SCONS_CACHE_MODE=${scons_cache_mode|nolinked} USE_SCONS_CACHE=${use_scons_cache|false} ${python|/opt/mongodbtoolchain/v2/bin/python2} buildscripts/generate_compile_expansions.py --out compile_expansions.yml
       fi
 
 - &apply_compile_expansions
@@ -514,6 +533,50 @@ functions:
             PYTHON=$python ${compile_env|} src/buildscripts/setup-android-toolchain.sh
         fi
 
+  "scons cache pruning" :
+    command: shell.exec
+    params:
+      working_dir: src
+      script: |
+        set -o errexit
+        set -o verbose
+        # removes files from the (local) or shared scons cache when it's over a
+        # threshold, to the $prune_ratio percentage. Ideally override
+        # these default values in the distro config in evergreen.
+
+        ${activate_virtualenv}
+        prune_scons_cache="$python buildscripts/scons_cache_prune.py --cache-dir ${scons_cache_path} --cache-size ${scons_cache_size|200} --prune-ratio ${scons_prune_ratio|0.8}"
+        if [ "${scons_cache_scope}" = "shared" ]; then
+            if [ "${shared_scons_pruning}" = "true" ] && [ "${is_patch}" != "true" ]; then
+              echo "shared_scons_pruning is set to true, checking last prune time"
+              if $python buildscripts/prune_check.py; then
+                echo "Pruning shared cache"
+                $prune_scons_cache
+              else
+                echo "We are less than the 'shared_scons_pruning' num seconds threshold, pruning will be skipped"
+              fi
+            else
+              echo "Shared cache enabled but 'shared_scons_pruning' is not enabled for this variant or we are running a patch build, pruning will be skipped"
+            fi
+        else
+            echo "Legacy local shared cache prune"
+            if [ -d "${scons_cache_path}" ]; then
+              $prune_scons_cache
+            fi
+        fi
+
+  "umount shared scons directory" :
+    command: shell.exec
+    params:
+      working_dir: src
+      script: |
+        set -o errexit
+        set -o verbose
+
+        if [ "${scons_cache_scope}" = "shared" ]; then
+            sudo umount /efs || umount /efs || true
+        fi
+
   "build cdriver" :
     command: shell.exec
     params:
@@ -601,6 +664,12 @@ functions:
         set -o verbose
         set -o errexit
 
+        ### TODO - Remove this temporary disabling of bypass compile when SERVER-33657
+        ### is fully implemented.
+        if [ ${build_variant} = "linux-64" ] || [ ${build_variant} = "windows-64-2k8-ssl" ]; then
+          exit 0
+        fi
+        ###
         # For patch builds determine if we can bypass compile.
         if [ "${is_patch}" = "true" ]; then
           ${activate_virtualenv}
@@ -1148,11 +1217,12 @@ functions:
         pip install 'pyOpenSSL ; sys_platform == "win32" or sys_platform == "cygwin"'
 
         rm -rf /data/install /data/multiversion
-        $python buildscripts/setup_multiversion_mongodb.py                  \
-          --installDir /data/install                                        \
-          --linkDir /data/multiversion                                      \
-          --edition ${multiversion_edition|base}                            \
-          --platformArchitecture ${multiversion_platform_arch|linux/x86_64} \
+        $python buildscripts/setup_multiversion_mongodb.py   \
+          --installDir /data/install                         \
+          --linkDir /data/multiversion                       \
+          --edition ${multiversion_edition|base}             \
+          --platform ${multiversion_platform|linux}          \
+          --architecture ${multiversion_architecture|x86_64} \
           --useLatest 3.0 3.2 3.4 3.6
 
   "do snmp setup" :
@@ -2195,31 +2265,6 @@ post:
       optional: true
 
   # Cleanup steps.
-  - command: shell.exec
-    params:
-      working_dir: src
-      script: |
-        # removes files from the (local) scons cache when it's over a
-        # threshold, to the $prune_ratio percentage. Ideally override
-        # these default values in the distro config in evergreen.
-
-        ${activate_virtualenv}
-        if [ -d "${scons_cache_path}" ]; then
-            $python buildscripts/scons_cache_prune.py --cache-dir '${scons_cache_path}' --cache-size ${scons_cache_size|200} --prune-ratio ${scons_prune_ratio|0.8}
-        fi
-
-  - command: shell.exec
-    type: test
-    params:
-      working_dir: src
-      shell: bash
-      script: |
-        set -o verbose
-        set -o errexit
-
-        # umount shared scons mounts
-        sudo umount /efs || umount /efs
-
   - func: "cleanup environment"
 
 timeout:
@@ -2499,6 +2544,8 @@ tasks:
         ignore_artifacts_for_spawn: false
         files:
           - src/artifacts.json
+    - func: "scons cache pruning"
+    - func: "umount shared scons directory"
 
 ## compile_all - build all scons targets including unittests ##
 - name: compile_all
@@ -2533,7 +2580,7 @@ tasks:
           fi
 
           ${activate_virtualenv}
-          ${compile_env|} $python ./buildscripts/scons.py ${compile_flags|} ${scons_cache_args|} --use-new-tools --build-mongoreplay="${build_mongoreplay}" --detect-odr-violations $extra_args all ${additional_targets|} MONGO_VERSION=${version}
+          ${compile_env|} $python ./buildscripts/scons.py ${compile_flags|} ${scons_cache_args|} --use-new-tools --build-mongoreplay="${build_mongoreplay}" --detect-odr-violations $extra_args all benchmarks ${additional_targets|} MONGO_VERSION=${version}
 
     - command: s3.put
       params:
@@ -2562,6 +2609,8 @@ tasks:
     # Run the android embedded CAPI tests in the android emulator
     # noop if ${enable_android_emu_tests} is not "true"
     - func: "run android emulator tests"
+    - func: "scons cache pruning"
+    - func: "umount shared scons directory"
 
 ## lint ##
 - name: lint
@@ -4604,16 +4653,19 @@ tasks:
 
         # Create the jira credentials configuration file
         cat > ~/.jira.yml <<END_OF_CREDS
-        user: "${testlifecycle_jira_user}"
-        password: "${testlifecycle_jira_password}"
         server: "https://jira.mongodb.org"
+        access_token: "${testlifecycle_jira_access_token}"
+        access_token_secret: "${testlifecycle_jira_access_token_secret}"
+        consumer_key: "${testlifecycle_jira_consumer_key}"
+        key_cert: |
+        $(echo "${testlifecycle_jira_key_certificate}" | sed  's/^/  /')
         END_OF_CREDS
 
         set -o verbose
 
         ${activate_virtualenv}
-        # Install Python jira client with pip until it is available in the toolchain
-        pip install jira==1.0.10
+        # Install Python modules to support OAuth with pip until it is available in the toolchain.
+        pip install cryptography==1.7.2 pyjwt==1.5.3
 
         # We use a small batch size to avoid hitting the load balancer timeout if the Evergreen
         # API query is not fast enough.
@@ -4666,6 +4718,7 @@ buildvariants:
   - rhel62-small
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     push_path: linux
     push_bucket: downloads.mongodb.org
     push_name: linux
@@ -4758,10 +4811,11 @@ buildvariants:
   - rhel62-small
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     compile_flags: -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_gcc.vars
     num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
     test_flags: --repeat=10 --shuffle
-    use_scons_cache: true
+    scons_cache_scope: shared
     build_mongoreplay: true
   tasks:
   - name: compile
@@ -4787,6 +4841,7 @@ buildvariants:
   run_on:
   - rhel62-large
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     push_path: linux
     push_bucket: downloads.mongodb.org
     push_name: linux-debug
@@ -4891,8 +4946,8 @@ buildvariants:
     num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
     # Running WiredTiger with --nojournal in a replica set is no longer supported,
     # so this variant does not include replica set tests.
-    test_flags: --nojournal --excludeWithAnyTags=requires_journaling,requires_replication
-    use_scons_cache: true
+    test_flags: --nojournal --excludeWithAnyTags=requires_journaling,requires_replication,requires_mmapv1
+    scons_cache_scope: shared
     build_mongoreplay: true
   tasks:
   - name: compile
@@ -4926,8 +4981,8 @@ buildvariants:
   expansions:
     compile_flags: -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_gcc.vars
     num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
-    test_flags: --wiredTigerCollectionConfig=type=lsm --wiredTigerIndexConfig=type=lsm
-    use_scons_cache: true
+    test_flags: --wiredTigerCollectionConfig=type=lsm --wiredTigerIndexConfig=type=lsm --excludeWithAnyTags=requires_mmapv1
+    scons_cache_scope: shared
     build_mongoreplay: true
   tasks:
   - name: compile
@@ -4980,14 +5035,15 @@ buildvariants:
   - ubuntu1204-test
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     tooltags: "-tags ssl"
     push_path: linux
     push_bucket: downloads.mongodb.org
     push_name: linux
     push_arch: x86_64-ubuntu1204
     compile_flags: --ssl MONGO_DISTMOD=ubuntu1204 -j$(grep -c ^processor /proc/cpuinfo) --release --variables-files=etc/scons/mongodbtoolchain_gcc.vars
-    multiversion_platform_arch: "ubuntu1204"
-    multiversion_edition: "targeted"
+    multiversion_platform: ubuntu1204
+    multiversion_edition: targeted
     num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
     has_packages: true
     packager_script: packager.py
@@ -5061,14 +5117,15 @@ buildvariants:
   - ubuntu1404-test
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     tooltags: "-tags ssl"
     push_path: linux
     push_bucket: downloads.mongodb.org
     push_name: linux
     push_arch: x86_64-ubuntu1404
     compile_flags: --ssl MONGO_DISTMOD=ubuntu1404 -j$(grep -c ^processor /proc/cpuinfo) --release --variables-files=etc/scons/mongodbtoolchain_gcc.vars
-    multiversion_platform_arch: "ubuntu1404"
-    multiversion_edition: "targeted"
+    multiversion_platform: ubuntu1404
+    multiversion_edition: targeted
     num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
     has_packages: true
     packager_script: packager.py
@@ -5169,6 +5226,7 @@ buildvariants:
   - ubuntu1604-test
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     tooltags: "-tags ssl"
     push_path: linux
     push_bucket: downloads.mongodb.org
@@ -5176,11 +5234,8 @@ buildvariants:
     push_arch: x86_64-ubuntu1604
     lang_environment: LANG=C
     compile_flags: --ssl MONGO_DISTMOD=ubuntu1604 -j$(grep -c ^processor /proc/cpuinfo) --release --variables-files=etc/scons/mongodbtoolchain_gcc.vars
-    # TODO SERVER-32600: Re-enable targeted downloads after setup_multiversion_mongodb.py is
-    # guaranteed to download x86_64 binaries for this platform.
-    #
-    # multiversion_platform_arch: "ubuntu1604"
-    # multiversion_edition: "targeted"
+    multiversion_platform: ubuntu1604
+    multiversion_edition: targeted
     num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
     has_packages: true
     packager_script: packager.py
@@ -5564,6 +5619,7 @@ buildvariants:
   - linux-64-amzn-test
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     tooltags: "-tags 'ssl sasl'"
     push_path: linux
     push_bucket: downloads.10gen.com
@@ -5634,14 +5690,15 @@ buildvariants:
   - linux-64-amzn-test
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     tooltags: "-tags 'ssl'"
     push_path: linux
     push_bucket: downloads.mongodb.org
     push_name: linux
     push_arch: x86_64-amazon
     compile_flags: --ssl MONGO_DISTMOD=amazon -j$(grep -c ^processor /proc/cpuinfo) --release --variables-files=etc/scons/mongodbtoolchain_gcc.vars
-    multiversion_platform_arch: "amzn64"
-    multiversion_edition: "enterprise"
+    multiversion_platform: amzn64
+    multiversion_edition: enterprise
     num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
     has_packages: true
     packager_script: packager.py
@@ -5721,6 +5778,7 @@ buildvariants:
   run_on:
   - windows-64-vs2015-small
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     platform_decompress: unzip
     exe: ".exe"
     push_path: win32
@@ -5848,6 +5906,7 @@ buildvariants:
   run_on:
   - windows-64-vs2015-small
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     platform_decompress: unzip
     tooltags: "-tags 'ssl sasl'"
     exe: ".exe"
@@ -5919,6 +5978,7 @@ buildvariants:
   - enterprise
   - wtdevelop
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     use_wt_develop: true
     platform_decompress: unzip
     tooltags: "-tags 'ssl sasl'"
@@ -5944,6 +6004,7 @@ buildvariants:
   stepback: true
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     platform_decompress: unzip
     tooltags: "-tags 'ssl sasl'"
     exe: ".exe"
@@ -5995,7 +6056,7 @@ buildvariants:
     num_scons_compile_all_jobs_available: $(( $(grep -c ^processor /proc/cpuinfo) / 4 ))
     python: python
     num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
-    test_flags: --storageEngine=inMemory --excludeWithAnyTags=requires_persistence,requires_journaling
+    test_flags: --storageEngine=inMemory --excludeWithAnyTags=requires_persistence,requires_journaling,requires_mmapv1
     ext: zip
     use_scons_cache: true
   tasks:
@@ -6043,6 +6104,7 @@ buildvariants:
   - windows-64-vs2015-small
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     platform_decompress: unzip
     exe: ".exe"
     gorootvars: 'PATH="/cygdrive/c/mingw-w64/x86_64-4.9.1-posix-seh-rt_v3-rev1/mingw64/bin:/cygdrive/c/sasl/:$PATH" CGO_CFLAGS="-D_WIN32_WINNT=0x0601 -DNTDDI_VERSION=0x06010000"'
@@ -6051,7 +6113,7 @@ buildvariants:
     push_bucket: downloads.mongodb.org
     push_name: win32
     push_arch: x86_64-2008plus-ssl
-    multiversion_platform_arch: windows/x86_64-2008plus-ssl
+    multiversion_platform: windows_x86_64-2008plus-ssl
     msi_target: msi
     content_type: application/zip
     compile_flags: --release --ssl MONGO_DISTMOD=2008plus-ssl CPPPATH="c:/openssl/include" LIBPATH="c:/openssl/lib" -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) --dynamic-windows --win-version-min=ws08r2
@@ -6154,6 +6216,7 @@ buildvariants:
   - windows-64-vs2015-small
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     platform_decompress: unzip
     tooltags: "-tags 'ssl sasl'"
     exe: ".exe"
@@ -6187,6 +6250,7 @@ buildvariants:
   - macos-1012
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     push_path: osx
     push_bucket: downloads.mongodb.org
     push_name: osx-ssl
@@ -6195,7 +6259,7 @@ buildvariants:
     gorootvars: CGO_CPPFLAGS=-I/opt/mongodbtoolchain/v2/include CGO_CFLAGS=-mmacosx-version-min=10.10 CGO_LDFLAGS=-mmacosx-version-min=10.10
     compile_env: DEVELOPER_DIR=/Applications/Xcode8.3.app
     compile_flags: --ssl -j$(sysctl -n hw.logicalcpu) --release --libc++ CCFLAGS="-mmacosx-version-min=10.10" LINKFLAGS="-mmacosx-version-min=10.10" CPPPATH=/opt/mongodbtoolchain/v2/include
-    multiversion_platform_arch: "osx-ssl"
+    multiversion_platform: osx-ssl
     num_jobs_available: 1
     build_mongoreplay: true
   tasks:
@@ -6280,6 +6344,7 @@ buildvariants:
   run_on:
   - macos-1012
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     push_path: osx
     push_bucket: downloads.mongodb.org
     push_name: osx-debug
@@ -6312,6 +6377,7 @@ buildvariants:
   - macos-1012
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     push_path: osx
     push_bucket: downloads.10gen.com
     push_name: osx
@@ -6352,6 +6418,7 @@ buildvariants:
   - macos-1012
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     build_cdriver: true
     cdriver_configure_flags: --build x86_64-apple-darwin16.6.0 --host arm-apple-darwin CC="$(xcrun -f --sdk iphoneos clang)" CXX="$(xcrun -f --sdk iphoneos clang++)" CPPFLAGS="-isysroot $(xcrun --sdk iphoneos --show-sdk-path) -miphoneos-version-min=10.2 -arch arm64 "  CFLAGS="-isysroot $(xcrun --sdk iphoneos --show-sdk-path) -miphoneos-version-min=10.2 -arch arm64 " CXXFLAGS="-isysroot $(xcrun --sdk iphoneos --show-sdk-path) -miphoneos-version-min=10.2 -arch arm64 " LDFLAGS="-miphoneos-version-min=10.2 -arch arm64"
     compile_env: DEVELOPER_DIR=/Applications/Xcode8.3.app
@@ -6366,6 +6433,7 @@ buildvariants:
   - macos-1012
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     build_cdriver: true
     cdriver_configure_flags: --build x86_64-apple-darwin16.6.0 --host x86_64-apple-darwin CC="$(xcrun -f --sdk iphonesimulator clang)" CXX="$(xcrun -f --sdk iphonesimulator clang++)" CPPFLAGS="-isysroot $(xcrun --sdk iphonesimulator --show-sdk-path) -miphoneos-version-min=10.2 "  CFLAGS="-isysroot $(xcrun --sdk iphonesimulator --show-sdk-path) -miphoneos-version-min=10.2 " CXXFLAGS="-isysroot $(xcrun --sdk iphonesimulator --show-sdk-path) -miphoneos-version-min=10.2 " LDFLAGS="-miphoneos-version-min=10.2 "
     compile_env: DEVELOPER_DIR=/Applications/Xcode8.3.app
@@ -6385,6 +6453,7 @@ buildvariants:
   expansions:
     build_cdriver: true
     cdriver_configure_flags: --build x86_64-apple-darwin16.6.0 --host arm-apple-darwin CC="$(xcrun -f --sdk appletvos clang)" CXX="$(xcrun -f --sdk appletvos clang++)" CPPFLAGS="-isysroot $(xcrun --sdk appletvos --show-sdk-path) -mtvos-version-min=10.1 -arch arm64"  CFLAGS="-isysroot $(xcrun --sdk appletvos --show-sdk-path) -mtvos-version-min=10.1 -arch arm64" CXXFLAGS="-isysroot $(xcrun --sdk appletvos --show-sdk-path) -mtvos-version-min=10.1 -arch arm64" LDFLAGS="-mtvos-version-min=10.1 -arch arm64"
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     compile_env: DEVELOPER_DIR=/Applications/Xcode8.3.app
     compile_flags: -j$(sysctl -n hw.logicalcpu) --dbg=on --disable-warnings-as-errors --js-engine=none --variables-files=etc/scons/xcode_tvos.vars CPPPATH="$(dirname $PWD)/mongo-c-driver/install/include/libbson-1.0 $(dirname $PWD)/mongo-c-driver/install/include/libmongoc-1.0" LIBPATH="$(dirname $PWD)/mongo-c-driver/install/lib"
     disable_unit_tests: true
@@ -6399,6 +6468,7 @@ buildvariants:
   expansions:
     build_cdriver: true
     cdriver_configure_flags: --build x86_64-apple-darwin16.6.0 --host x86_64-apple-darwin CC="$(xcrun -f --sdk appletvsimulator clang)" CXX="$(xcrun -f --sdk appletvsimulator clang++)" CPPFLAGS="-isysroot $(xcrun --sdk appletvsimulator --show-sdk-path) -mtvos-version-min=10.1"  CFLAGS="-isysroot $(xcrun --sdk appletvsimulator --show-sdk-path) -mtvos-version-min=10.1" CXXFLAGS="-isysroot $(xcrun --sdk appletvsimulator --show-sdk-path) -mtvos-version-min=10.1" LDFLAGS="-mtvos-version-min=10.1"
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     compile_env: DEVELOPER_DIR=/Applications/Xcode8.3.app
     compile_flags: -j$(sysctl -n hw.logicalcpu) --dbg=on --disable-warnings-as-errors --js-engine=none --variables-files=etc/scons/xcode_tvos_sim.vars CPPPATH="$(dirname $PWD)/mongo-c-driver/install/include/libbson-1.0 $(dirname $PWD)/mongo-c-driver/install/include/libmongoc-1.0" LIBPATH="$(dirname $PWD)/mongo-c-driver/install/lib"
     disable_unit_tests: true
@@ -6414,6 +6484,7 @@ buildvariants:
   - ubuntu1604-build
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     build_cdriver: true
     cdriver_configure_flags: --prefix=$(pwd)/install --host aarch64-unknown-linux-gnu CC=$(dirname $(pwd))/android_toolchain/bin/clang CXX=$(dirname $(pwd))/android_toolchain/clang++
     compile_env: JAVA_HOME=/opt/java/jdk8/
@@ -6435,6 +6506,7 @@ buildvariants:
   run_on:
   - rhel62-small
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
     tooltags: "-tags 'ssl sasl'"
     push_path: linux
@@ -6443,8 +6515,8 @@ buildvariants:
     push_arch: x86_64-enterprise-rhel62
     rlp_environment: MONGOD_UNITTEST_RLP_LANGUAGE_TEST_BTROOT=/opt/basis
     compile_flags: --ssl MONGO_DISTMOD=rhel62 -j$(grep -c ^processor /proc/cpuinfo) --release --variables-files=etc/scons/mongodbtoolchain_gcc.vars CPPPATH="/opt/basis/rlp/rlp/include /opt/basis/rlp/utilities/include" --use-basis-tech-rosette-linguistics-platform=on
-    multiversion_platform_arch: "rhel62"
-    multiversion_edition: "targeted"
+    multiversion_platform: rhel62
+    multiversion_edition: targeted
     num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
     has_packages: true
     packager_script: packager-enterprise.py
@@ -6634,11 +6706,12 @@ buildvariants:
   batchtime: 10080 # 7 days
   stepback: false
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
     tooltags: "-tags 'ssl sasl'"
     compile_flags: --dbg=on --gcov --ssl MONGO_DISTMOD=rhel62 -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_gcc.vars
-    multiversion_platform_arch: "rhel62"
-    multiversion_edition: "targeted"
+    multiversion_platform: rhel62
+    multiversion_edition: targeted
     num_jobs_available: $(($(grep -c ^processor /proc/cpuinfo) / 2)) # Avoid starting too many mongod's
     # The gcov instrumentation saves the path the .gcno files were created in as the default path
     # for the .gcda files. In Evergreen the path will start with /data/mci/[Hashed ID]/src/... where
@@ -6748,6 +6821,7 @@ buildvariants:
   run_on:
   - rhel70-small
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
     tooltags: "-tags 'ssl sasl'"
     push_path: linux
@@ -6802,9 +6876,11 @@ buildvariants:
   run_on:
   - ubuntu1604-test
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     num_jobs_available: $(($(grep -c ^processor /proc/cpuinfo) / 2)) # Avoid starting too many mongod's
     compile_flags: MONGO_DISTMOD=ubuntu1604 --dbg=on --opt=on -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_gcc.vars
-    shared_scons_cache: true
+    scons_cache_scope: shared
+    shared_scons_pruning: true
     build_mongoreplay: true
   tasks:
   - name: compile
@@ -6824,6 +6900,7 @@ buildvariants:
   - rhel62-small
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
     tooltags: "-tags ssl"
     push_path: linux
@@ -6831,8 +6908,8 @@ buildvariants:
     push_name: linux
     push_arch: x86_64-rhel62
     compile_flags: --ssl MONGO_DISTMOD=rhel62 -j$(grep -c ^processor /proc/cpuinfo) --release --variables-files=etc/scons/mongodbtoolchain_gcc.vars
-    multiversion_platform_arch: "rhel62"
-    multiversion_edition: "targeted"
+    multiversion_platform: rhel62
+    multiversion_edition: targeted
     num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
     has_packages: true
     packager_script: packager.py
@@ -6906,6 +6983,7 @@ buildvariants:
   - rhel70-small
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
     tooltags: "-tags ssl"
     push_path: linux
@@ -6913,8 +6991,8 @@ buildvariants:
     push_name: linux
     push_arch: x86_64-rhel70
     compile_flags: --ssl MONGO_DISTMOD=rhel70 -j$(grep -c ^processor /proc/cpuinfo) --release --variables-files=etc/scons/mongodbtoolchain_gcc.vars
-    multiversion_platform_arch: "rhel70"
-    multiversion_edition: "targeted"
+    multiversion_platform: rhel70
+    multiversion_edition: targeted
     num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
     has_packages: true
     packager_script: packager.py
@@ -7000,6 +7078,7 @@ buildvariants:
   batchtime: 1440 # 1 day
   stepback: false
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     gorootvars: PATH=/opt/mongodbtoolchain/v2/bin:$PATH
     tooltags: -gccgoflags "$(pkg-config --libs --cflags libssl libsasl2)" -tags 'sasl ssl'
     # We need to compensate for SMT8 setting the cpu count very high and lower the amount of parallelism down
@@ -7310,6 +7389,7 @@ buildvariants:
   - ubuntu1204-test
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
     tooltags: "-tags 'ssl sasl'"
     push_path: linux
@@ -7364,6 +7444,7 @@ buildvariants:
   - ubuntu1404-test
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
     tooltags: "-tags 'ssl sasl'"
     push_path: linux
@@ -7439,6 +7520,7 @@ buildvariants:
   - ubuntu1604-test
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
     tooltags: "-tags 'ssl sasl'"
     push_path: linux
@@ -7496,6 +7578,7 @@ buildvariants:
   run_on:
    - ubuntu1604-test
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
     tooltags: "-tags 'ssl sasl'"
     lang_environment: LANG=C
@@ -7522,6 +7605,7 @@ buildvariants:
   - suse12-test
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
     tooltags: "-tags 'ssl sasl'"
     push_path: linux
@@ -7678,6 +7762,7 @@ buildvariants:
   - suse12-test
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
     tooltags: "-tags ssl"
     push_path: linux
@@ -7686,8 +7771,8 @@ buildvariants:
     push_arch: x86_64-suse12
     compile_flags: --ssl MONGO_DISTMOD=suse12 -j$(grep -c ^processor /proc/cpuinfo) --release --variables-files=etc/scons/mongodbtoolchain_gcc.vars
     num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
-    multiversion_platform_arch: "suse12"
-    multiversion_edition: "targeted"
+    multiversion_platform: suse12
+    multiversion_edition: targeted
     has_packages: true
     packager_script: packager.py
     packager_arch: x86_64
@@ -7765,6 +7850,7 @@ buildvariants:
   - debian71-test
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
     tooltags: "-tags 'ssl sasl'"
     push_path: linux
@@ -7819,6 +7905,7 @@ buildvariants:
   - debian81-test
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
     tooltags: "-tags 'ssl sasl'"
     push_path: linux
@@ -7871,6 +7958,7 @@ buildvariants:
   - debian71-test
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
     tooltags: "-tags ssl"
     push_path: linux
@@ -7878,8 +7966,8 @@ buildvariants:
     push_name: linux
     push_arch: x86_64-debian71
     compile_flags: --ssl MONGO_DISTMOD=debian71 -j$(grep -c ^processor /proc/cpuinfo) --release --variables-files=etc/scons/mongodbtoolchain_gcc.vars
-    multiversion_platform_arch: "debian71"
-    multiversion_edition: "targeted"
+    multiversion_platform: debian71
+    multiversion_edition: targeted
     num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
     has_packages: true
     packager_script: packager.py
@@ -7956,6 +8044,7 @@ buildvariants:
   - debian81-test
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
     tooltags: "-tags ssl"
     push_path: linux
@@ -7963,8 +8052,8 @@ buildvariants:
     push_name: linux
     push_arch: x86_64-debian81
     compile_flags: --ssl MONGO_DISTMOD=debian81 -j$(grep -c ^processor /proc/cpuinfo) --release --variables-files=etc/scons/mongodbtoolchain_gcc.vars
-    multiversion_platform_arch: "debian81"
-    multiversion_edition: "targeted"
+    multiversion_platform: debian81
+    multiversion_edition: targeted
     num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
     has_packages: true
     packager_script: packager.py
@@ -8042,6 +8131,7 @@ buildvariants:
   - debian92-test
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
     tooltags: "-tags 'ssl sasl'"
     push_path: linux
@@ -8093,6 +8183,7 @@ buildvariants:
   - debian92-test
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
     tooltags: "-tags ssl"
     push_path: linux
@@ -8100,8 +8191,8 @@ buildvariants:
     push_name: linux
     push_arch: x86_64-debian92
     compile_flags: --ssl MONGO_DISTMOD=debian92 -j$(grep -c ^processor /proc/cpuinfo) --release --variables-files=etc/scons/mongodbtoolchain_gcc.vars
-    multiversion_platform_arch: "debian92"
-    multiversion_edition: "targeted"
+    multiversion_platform: debian92
+    multiversion_edition: targeted
     num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
     has_packages: true
     packager_script: packager.py
@@ -8186,12 +8277,12 @@ buildvariants:
     gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
     tooltags: "-tags 'ssl sasl'"
     rlp_environment: MONGOD_UNITTEST_RLP_LANGUAGE_TEST_BTROOT=/opt/basis
-    test_flags: --storageEngine=inMemory --excludeWithAnyTags=requires_persistence,requires_journaling
+    test_flags: --storageEngine=inMemory --excludeWithAnyTags=requires_persistence,requires_journaling,requires_mmapv1
     compile_flags: --ssl MONGO_DISTMOD=rhel62 -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_gcc.vars CPPPATH="/opt/basis/rlp/rlp/include /opt/basis/rlp/utilities/include" --use-basis-tech-rosette-linguistics-platform=on
-    multiversion_platform_arch: "rhel62"
-    multiversion_edition: "enterprise"
+    multiversion_platform: rhel62
+    multiversion_edition: enterprise
     num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
-    use_scons_cache: true
+    scons_cache_scope: shared
     build_mongoreplay: true
   tasks:
   - name: compile
@@ -8304,7 +8395,7 @@ buildvariants:
     tooltags: "-tags 'ssl sasl'"
     rlp_environment: MONGOD_UNITTEST_RLP_LANGUAGE_TEST_BTROOT=/opt/basis
     test_flags: --storageEngine=mobile --excludeWithAnyTags=requires_mmapv1,requires_wiredtiger,requires_sharding,requires_replication,SERVER-32709,SERVER-32869,SERVER-32993,SERVER-32997
-    compile_flags: --ssl MONGO_DISTMOD=rhel62 -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_gcc.vars CPPPATH="/opt/basis/rlp/rlp/include /opt/basis/rlp/utilities/include" --use-basis-tech-rosette-linguistics-platform=on
+    compile_flags: --mobile-se=on --ssl MONGO_DISTMOD=rhel62 -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_gcc.vars CPPPATH="/opt/basis/rlp/rlp/include /opt/basis/rlp/utilities/include" --use-basis-tech-rosette-linguistics-platform=on
     num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
     use_scons_cache: true
     build_mongoreplay: true
@@ -8365,7 +8456,7 @@ buildvariants:
     tooltags: "-tags 'ssl sasl openssl_pre_1.0'"
     test_flags: --storageEngine=mobile --excludeWithAnyTags=requires_mmapv1,requires_wiredtiger,requires_sharding,requires_replication,SERVER-32709,SERVER-32869,SERVER-32993,SERVER-32997
     compile_env: DEVELOPER_DIR=/Applications/Xcode8.3.app
-    compile_flags: --ssl -j$(sysctl -n hw.logicalcpu) --release --libc++ CCFLAGS="-mmacosx-version-min=10.10" LINKFLAGS="-mmacosx-version-min=10.10" CPPPATH=/opt/mongodbtoolchain/v2/include
+    compile_flags: --mobile-se=on --ssl -j$(sysctl -n hw.logicalcpu) --release --libc++ CCFLAGS="-mmacosx-version-min=10.10" LINKFLAGS="-mmacosx-version-min=10.10" CPPPATH=/opt/mongodbtoolchain/v2/include
     num_jobs_available: 1
     build_mongoreplay: true
   tasks:
@@ -8407,10 +8498,10 @@ buildvariants:
   - rhel62-small
   batchtime: 1440 # 1 day
   expansions:
-    test_flags: --storageEngine=ephemeralForTest --excludeWithAnyTags=requires_persistence,requires_fsync,SERVER-21420,SERVER-21658,requires_journaling
+    test_flags: --storageEngine=ephemeralForTest --excludeWithAnyTags=requires_persistence,requires_fsync,SERVER-21420,SERVER-21658,requires_journaling,requires_mmapv1,requires_wiredtiger
     compile_flags: -j$(grep -c ^processor /proc/cpuinfo) --dbg=off --opt=on --variables-files=etc/scons/mongodbtoolchain_gcc.vars
     num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
-    use_scons_cache: true
+    scons_cache_scope: shared
     build_mongoreplay: true
   tasks:
   - name: compile
@@ -8656,7 +8747,7 @@ buildvariants:
     build_rocksdb: true
     compile_flags: -j$(grep -c ^processor /proc/cpuinfo) --dbg=off --opt=on CPPPATH=$(readlink -f ../rocksdb/include/) LIBPATH=$(readlink -f ../rocksdb/) LIBS=rocksdb --variables-files=etc/scons/mongodbtoolchain_gcc.vars --runtime-hardening=off
     num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
-    test_flags: --storageEngine=rocksdb
+    test_flags: --storageEngine=rocksdb --excludeWithAnyTags=requires_mmapv1,requires_wiredtiger
     use_scons_cache: true
     build_mongoreplay: true
   stepback: false
@@ -8680,17 +8771,15 @@ buildvariants:
   stepback: true
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     tooltags: "-tags 'ssl'"
     # We need llvm-symbolizer in the PATH for ASAN for clang-3.7 or later.
     variant_path_suffix: /opt/mongodbtoolchain/v2/bin
     lang_environment: LANG=C
     san_options: LSAN_OPTIONS="suppressions=etc/lsan.suppressions:report_objects=1" ASAN_OPTIONS=detect_leaks=1:check_initialization_order=true:strict_init_order=true:abort_on_error=1:disable_coredump=0:handle_abort=0:handle_segv=0:handle_sigbus=0:handle_sigill=0:handle_sigfpe=0
     compile_flags: --variables-files=etc/scons/mongodbtoolchain_clang.vars --dbg=on --opt=on --allocator=system --sanitize=address --ssl -j$(grep -c ^processor /proc/cpuinfo) --nostrip
-    # TODO SERVER-32600: Re-enable targeted downloads after setup_multiversion_mongodb.py is
-    # guaranteed to download x86_64 binaries for this platform.
-    #
-    # multiversion_platform_arch: "ubuntu1604"
-    # multiversion_edition: "targeted"
+    multiversion_platform: ubuntu1604
+    multiversion_edition: targeted
     num_jobs_available: $(($(grep -c ^processor /proc/cpuinfo) / 3)) # Avoid starting too many mongod's under ASAN build.
     build_mongoreplay: true
     hang_analyzer_dump_core: false
@@ -8798,6 +8887,7 @@ buildvariants:
   stepback: true
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     tooltags: "-tags 'ssl'"
     # We need llvm-symbolizer in the PATH for ASAN for clang-3.7 or later.
     variant_path_suffix: /opt/mongodbtoolchain/v2/bin
@@ -8835,6 +8925,7 @@ buildvariants:
   stepback: true
   batchtime: 1440 # 1 day
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     # We need llvm-symbolizer in the PATH for UBSAN.
     variant_path_suffix: /opt/mongodbtoolchain/v2/bin
     gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
@@ -8842,11 +8933,8 @@ buildvariants:
     lang_environment: LANG=C
     san_options: UBSAN_OPTIONS="print_stacktrace=1:handle_abort=0:handle_segv=0:handle_sigbus=0:handle_sigill=0:handle_sigfpe=0"
     compile_flags: --variables-files=etc/scons/mongodbtoolchain_clang.vars --dbg=on --opt=on --allocator=system --sanitize=undefined --ssl -j$(grep -c ^processor /proc/cpuinfo) --nostrip
-    # TODO SERVER-32600: Re-enable targeted downloads after setup_multiversion_mongodb.py is
-    # guaranteed to download x86_64 binaries for this platform.
-    #
-    # multiversion_platform_arch: "ubuntu1604"
-    # multiversion_edition: "targeted"
+    multiversion_platform: ubuntu1604
+    multiversion_edition: targeted
     num_jobs_available: $(($(grep -c ^processor /proc/cpuinfo) / 3)) # Avoid starting too many mongod's under UBSAN build.
     build_mongoreplay: true
   tasks:
@@ -8955,6 +9043,7 @@ buildvariants:
   - ubuntu1604-build
   stepback: true
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     tooltags: "-tags 'ssl'"
     # We need llvm-symbolizer in the PATH for ASAN for clang-3.7 or later.
     variant_path_suffix: /opt/mongodbtoolchain/v2/bin
@@ -8989,7 +9078,7 @@ buildvariants:
     num_jobs_available: $(($(grep -c ^processor /proc/cpuinfo) / 3)) # Avoid starting too many mongod's under {A,UB}SAN build.
     build_mongoreplay: false
     hang_analyzer_dump_core: false
-    test_flags: --serviceExecutor=adaptive
+    test_flags: --serviceExecutor=adaptive --excludeWithAnyTags=requires_mmapv1
   tasks:
   - name: compile
   - name: compile_all
@@ -9076,12 +9165,13 @@ buildvariants:
   modules:
   - enterprise
   expansions:
+    test_flags: --excludeWithAnyTags=requires_mmapv1
     gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
     tooltags: "-tags 'ssl sasl'"
     lang_environment: LANG=C
     compile_flags: --ssl MONGO_DISTMOD=ubuntu1604 -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_gcc.vars --link-model=dynamic
     num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
-    shared_scons_cache: true
+    scons_cache_scope: shared
     scons_cache_mode: all
     build_mongoreplay: true
   tasks:
@@ -9121,7 +9211,7 @@ buildvariants:
       --variables-files=etc/scons/mongodbtoolchain_gcc.vars
       CPPPATH="/opt/basis/rlp/rlp/include /opt/basis/rlp/utilities/include"
       --use-basis-tech-rosette-linguistics-platform=on
-    multiversion_platform_arch: rhel62
+    multiversion_platform: rhel62
     multiversion_edition: targeted
     num_jobs_available: $(grep -c ^processor /proc/cpuinfo)
     has_packages: true
@@ -9231,8 +9321,8 @@ buildvariants:
     gorootvars: >-
       PATH="/cygdrive/c/mingw-w64/x86_64-4.9.1-posix-seh-rt_v3-rev1/mingw64/bin:/cygdrive/c/sasl/:$PATH"
       CGO_CFLAGS="-D_WIN32_WINNT=0x0601 -DNTDDI_VERSION=0x06010000"
-    multiversion_platform_arch: windows
-    multiversion_edition: "enterprise"
+    multiversion_platform: windows
+    multiversion_edition: enterprise
     msi_target: msi
     content_type: application/zip
     compile_flags: >-
@@ -9356,8 +9446,8 @@ buildvariants:
     compile_flags: >-
       --ssl -j$(sysctl -n hw.logicalcpu) --release --libc++ CCFLAGS="-mmacosx-version-min=10.10"
       LINKFLAGS="-mmacosx-version-min=10.10" CPPPATH=/opt/mongodbtoolchain/v2/include
-    multiversion_platform_arch: "osx"
-    multiversion_edition: "enterprise"
+    multiversion_platform: osx
+    multiversion_edition: enterprise
     num_jobs_available: 1
     build_mongoreplay: true
   tasks:

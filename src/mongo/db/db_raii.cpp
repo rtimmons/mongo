@@ -34,6 +34,7 @@
 #include "mongo/db/curop.h"
 #include "mongo/db/repl/replication_coordinator.h"
 #include "mongo/db/s/collection_sharding_state.h"
+#include "mongo/db/session_catalog.h"
 
 namespace mongo {
 namespace {
@@ -167,9 +168,13 @@ OldClientContext::OldClientContext(
 }
 
 OldClientContext::~OldClientContext() {
-    // Lock must still be held
-    invariant(_opCtx->lockState()->isLocked());
+    // If in an interrupt, don't record any stats.
+    // It is possible to have no lock after saving the lock state and being interrupted while
+    // waiting to restore.
+    if (_opCtx->getKillStatus() != ErrorCodes::OK)
+        return;
 
+    invariant(_opCtx->lockState()->isLocked());
     auto currentOp = CurOp::get(_opCtx);
     Top::get(_opCtx->getClient()->getServiceContext())
         .record(_opCtx,
@@ -228,9 +233,12 @@ OldClientWriteContext::OldClientWriteContext(OperationContext* opCtx, StringData
 LockMode getLockModeForQuery(OperationContext* opCtx) {
     invariant(opCtx);
 
-    if (repl::ReadConcernArgs::get(opCtx).getLevel() ==
-        repl::ReadConcernLevel::kSnapshotReadConcern) {
-        return MODE_IX;
+    // Use IX locks for autocommit:false multi-statement transactions; otherwise, use IS locks.
+    if (opCtx->getWriteUnitOfWork()) {
+        invariant(OperationContextSession::get(opCtx));
+        if (!OperationContextSession::get(opCtx)->getAutocommit()) {
+            return MODE_IX;
+        }
     }
 
     return MODE_IS;

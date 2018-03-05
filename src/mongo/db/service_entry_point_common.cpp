@@ -60,7 +60,7 @@
 #include "mongo/db/repl/optime.h"
 #include "mongo/db/repl/read_concern_args.h"
 #include "mongo/db/repl/repl_client_info.h"
-#include "mongo/db/repl/replication_coordinator_global.h"
+#include "mongo/db/repl/replication_coordinator.h"
 #include "mongo/db/s/operation_sharding_state.h"
 #include "mongo/db/s/shard_filtering_metadata_refresh.h"
 #include "mongo/db/s/sharded_connection_info.h"
@@ -101,15 +101,20 @@ using logger::LogComponent;
 // session for commands that can take a lock and then run another whitelisted command in
 // DBDirectClient. Otherwise, the nested command would try to check out a session under a lock,
 // which is not allowed.
-const StringMap<int> sessionCheckoutWhitelist = {{"applyOps", 1},
+const StringMap<int> sessionCheckoutWhitelist = {{"aggregate", 1},
+                                                 {"applyOps", 1},
                                                  {"count", 1},
                                                  {"delete", 1},
+                                                 {"distinct", 1},
+                                                 {"doTxn", 1},
                                                  {"eval", 1},
                                                  {"$eval", 1},
                                                  {"explain", 1},
+                                                 {"filemd5", 1},
                                                  {"find", 1},
                                                  {"findandmodify", 1},
                                                  {"findAndModify", 1},
+                                                 {"geoNear", 1},
                                                  {"geoSearch", 1},
                                                  {"getMore", 1},
                                                  {"group", 1},
@@ -121,8 +126,12 @@ const StringMap<int> sessionCheckoutWhitelist = {{"applyOps", 1},
 
 // The command names for which readConcern level snapshot is allowed. The getMore command is
 // implicitly allowed to operate on a cursor which was opened under readConcern level snapshot.
-const StringMap<int> readConcernSnapshotWhitelist = {
-    {"find", 1}, {"count", 1}, {"geoSearch", 1}, {"parallelCollectionScan", 1}, {"update", 1}};
+const StringMap<int> readConcernSnapshotWhitelist = {{"find", 1},
+                                                     {"count", 1},
+                                                     {"geoSearch", 1},
+                                                     {"insert", 1},
+                                                     {"parallelCollectionScan", 1},
+                                                     {"update", 1}};
 
 void generateLegacyQueryErrorResponse(const AssertionException* exception,
                                       const QueryMessage& queryMessage,
@@ -394,22 +403,14 @@ bool runCommandImpl(OperationContext* opCtx,
         bytesToReserve = 0;
 #endif
 
-    // run expects non-const bsonobj
-    BSONObj cmd = request.body;
-
-    // run expects const db std::string (can't bind to temporary)
-    const std::string db = request.getDatabase().toString();
-
     BSONObjBuilder inPlaceReplyBob = replyBuilder->getInPlaceReplyBuilder(bytesToReserve);
 
-    behaviors.waitForReadConcern(opCtx, command, db, request, cmd);
-
     bool result;
-    if (!command->supportsWriteConcern(cmd)) {
-        behaviors.uassertCommandDoesNotSpecifyWriteConcern(cmd);
+    if (!command->supportsWriteConcern(request.body)) {
+        behaviors.uassertCommandDoesNotSpecifyWriteConcern(request.body);
         result = command->publicRun(opCtx, request, inPlaceReplyBob);
     } else {
-        auto wcResult = uassertStatusOK(extractWriteConcern(opCtx, cmd, db));
+        auto wcResult = uassertStatusOK(extractWriteConcern(opCtx, request.body));
 
         auto lastOpBeforeRun = repl::ReplClientInfo::forClient(opCtx->getClient()).getLastOp();
 
@@ -496,6 +497,11 @@ void execCommandDatabase(OperationContext* opCtx,
         boost::optional<bool> autocommitVal = boost::none;
         if (sessionOptions && sessionOptions->getAutocommit()) {
             autocommitVal = *sessionOptions->getAutocommit();
+        } else if (sessionOptions && command->getName() == "doTxn") {
+            // Autocommit is overridden specifically for doTxn to get the oplog entry generation
+            // behavior used for multi-document transactions.
+            // The doTxn command still logically behaves as a commit.
+            autocommitVal = false;
         }
 
         OperationContextSession sessionTxnState(opCtx, shouldCheckoutSession, autocommitVal);
@@ -634,12 +640,6 @@ void execCommandDatabase(OperationContext* opCtx,
                     "readConcernLevel snapshot requires a txnNumber",
                     opCtx->getTxnNumber());
 
-            // TODO SERVER-33355: Remove once readConcern level snapshot is supported on
-            // secondaries.
-            uassert(ErrorCodes::InvalidOptions,
-                    "readConcern level snapshot only supported on primaries",
-                    iAmPrimary);
-
             opCtx->lockState()->setSharedLocksShouldTwoPhaseLock(true);
         }
 
@@ -679,6 +679,8 @@ void execCommandDatabase(OperationContext* opCtx,
                 << rpc::TrackingMetadata::get(opCtx).toString();
             rpc::TrackingMetadata::get(opCtx).setIsLogged(true);
         }
+
+        behaviors.waitForReadConcern(opCtx, command, request);
 
         sessionTxnState.unstashTransactionResources();
         retval =
