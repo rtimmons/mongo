@@ -721,6 +721,7 @@ buildvariants:
     - name: agg_query_comparison_bestbuy_MMAPv1
     - name: change_streams
     - name: snapshot_reads_WT
+    - name: linkbench
 
 - name: linux-standalone
   display_name: Linux Standalone
