@@ -229,7 +229,6 @@ env.Library(
     LIBDEPS=[
         'optime',
         '$BUILD_DIR/mongo/db/service_context',
-        '$BUILD_DIR/mongo/util/decorable',
     ],
 )
 
@@ -343,7 +342,6 @@ env.Library(
         'rollback_idl',
         'storage_interface',
         '$BUILD_DIR/mongo/db/service_context',
-        '$BUILD_DIR/mongo/util/decorable',
     ],
 )
 
@@ -372,7 +370,6 @@ env.Library(
         '$BUILD_DIR/mongo/base',
         '$BUILD_DIR/mongo/db/namespace_string',
         '$BUILD_DIR/mongo/db/service_context',
-        '$BUILD_DIR/mongo/util/decorable',
     ],
 )
 
@@ -614,6 +611,7 @@ env.Library(
 env.Library(
     target='sync_tail',
     source=[
+        'applier_helpers.cpp',
         'sync_tail.cpp',
     ],
     LIBDEPS=[
@@ -951,7 +949,6 @@ env.Library(
         '$BUILD_DIR/mongo/db/namespace_string',
         '$BUILD_DIR/mongo/db/service_context',
         '$BUILD_DIR/mongo/util/net/network',
-        '$BUILD_DIR/mongo/util/decorable',
     ],
 )
 
@@ -1325,7 +1322,6 @@ env.Library(
         '$BUILD_DIR/mongo/db/service_context',
         '$BUILD_DIR/mongo/unittest/concurrency',
         '$BUILD_DIR/mongo/unittest/unittest',
-        '$BUILD_DIR/mongo/util/decorable',
     ],
 )
 

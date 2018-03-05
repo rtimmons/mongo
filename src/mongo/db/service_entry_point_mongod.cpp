@@ -52,16 +52,16 @@ public:
 
     void waitForReadConcern(OperationContext* opCtx,
                             const Command* command,
-                            const std::string& db,
-                            const OpMsgRequest& request,
-                            const BSONObj& cmdObj) const override {
-        Status rcStatus = mongo::waitForReadConcern(
-            opCtx, repl::ReadConcernArgs::get(opCtx), command->allowsAfterClusterTime(cmdObj));
+                            const OpMsgRequest& request) const override {
+        Status rcStatus = mongo::waitForReadConcern(opCtx,
+                                                    repl::ReadConcernArgs::get(opCtx),
+                                                    command->allowsAfterClusterTime(request.body));
+
         if (!rcStatus.isOK()) {
             if (rcStatus == ErrorCodes::ExceededTimeLimit) {
                 const int debugLevel =
                     serverGlobalParams.clusterRole == ClusterRole::ConfigServer ? 0 : 2;
-                LOG(debugLevel) << "Command on database " << db
+                LOG(debugLevel) << "Command on database " << request.getDatabase()
                                 << " timed out waiting for read concern to be satisfied. Command: "
                                 << redact(ServiceEntryPointCommon::getRedactedCopyForLogging(
                                        command, request.body));

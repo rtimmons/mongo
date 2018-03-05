@@ -91,11 +91,8 @@ public:
         return false;
     }
 
-    void waitForReadConcern(OperationContext*,
-                            const Command*,
-                            const std::string&,
-                            const OpMsgRequest&,
-                            const BSONObj&) const override {}
+    void waitForReadConcern(OperationContext*, const Command*, const OpMsgRequest&) const override {
+    }
 
     void waitForWriteConcern(OperationContext* opCtx,
                              const std::string& commandName,

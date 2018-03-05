@@ -28,7 +28,7 @@
 
 #include "mongo/platform/basic.h"
 
-#include "mongo/db/catalog/catalog_raii.h"
+#include "mongo/db/catalog_raii.h"
 
 #include "mongo/db/catalog/database_holder.h"
 #include "mongo/db/catalog/uuid_catalog.h"
@@ -129,6 +129,12 @@ NamespaceString AutoGetCollection::resolveNamespaceStringOrUUID(OperationContext
     uassert(ErrorCodes::NamespaceNotFound,
             str::stream() << "Unable to resolve " << nsOrUUID.toString(),
             resolvedNss.isValid());
+
+    uassert(ErrorCodes::NamespaceNotFound,
+            str::stream() << "UUID " << nsOrUUID.toString() << " specified in " << nsOrUUID.dbname()
+                          << " resolved to a collection in a different database: "
+                          << resolvedNss.toString(),
+            resolvedNss.db() == nsOrUUID.dbname());
 
     return resolvedNss;
 }

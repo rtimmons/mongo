@@ -40,12 +40,12 @@
 #include "mongo/bson/bsonelement_comparator.h"
 #include "mongo/bson/timestamp.h"
 #include "mongo/db/auth/authorization_session.h"
-#include "mongo/db/catalog/catalog_raii.h"
 #include "mongo/db/catalog/collection.h"
 #include "mongo/db/catalog/database.h"
 #include "mongo/db/catalog/database_holder.h"
 #include "mongo/db/catalog/document_validation.h"
 #include "mongo/db/catalog/uuid_catalog.h"
+#include "mongo/db/catalog_raii.h"
 #include "mongo/db/client.h"
 #include "mongo/db/commands/fsync.h"
 #include "mongo/db/commands/server_status_metric.h"
@@ -58,6 +58,7 @@
 #include "mongo/db/namespace_string.h"
 #include "mongo/db/prefetch.h"
 #include "mongo/db/query/query_knobs.h"
+#include "mongo/db/repl/applier_helpers.h"
 #include "mongo/db/repl/apply_ops.h"
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/db/repl/initial_syncer.h"
@@ -283,7 +284,7 @@ NamespaceString parseUUIDOrNs(OperationContext* opCtx, const OplogEntry& oplogEn
 
 NamespaceStringOrUUID getNsOrUUID(const NamespaceString& nss, const BSONObj& op) {
     if (auto ui = op["ui"]) {
-        return uassertStatusOK(UUID::parse(ui));
+        return {nss.db().toString(), uassertStatusOK(UUID::parse(ui))};
     }
     return nss;
 }
@@ -480,10 +481,10 @@ void scheduleWritesToOplog(OperationContext* opCtx,
         // guarantees that 'ops' will stay in scope until the spawned threads complete.
         return [&ops, begin, end] {
             initializeWriterThread();
-            const auto opCtxHolder = cc().makeOperationContext();
-            const auto opCtx = opCtxHolder.get();
-            opCtx->lockState()->setShouldConflictWithSecondaryBatchApplication(false);
-            UnreplicatedWritesBlock uwb(opCtx);
+            auto opCtx = cc().makeOperationContext();
+            UnreplicatedWritesBlock uwb(opCtx.get());
+            ShouldNotConflictWithSecondaryBatchApplicationBlock shouldNotConflictBlock(
+                opCtx->lockState());
 
             std::vector<InsertStatement> docs;
             docs.reserve(end - begin);
@@ -494,9 +495,10 @@ void scheduleWritesToOplog(OperationContext* opCtx,
                     ops[i].raw, ops[i].getOpTime().getTimestamp(), ops[i].getOpTime().getTerm()});
             }
 
-            fassertStatusOK(40141,
-                            StorageInterface::get(opCtx)->insertDocuments(
-                                opCtx, NamespaceString::kRsOplogNamespace, docs));
+            fassertStatusOK(
+                40141,
+                StorageInterface::get(opCtx.get())
+                    ->insertDocuments(opCtx.get(), NamespaceString::kRsOplogNamespace, docs));
         };
     };
 
@@ -539,11 +541,10 @@ void scheduleTxnTableUpdates(OperationContext* opCtx,
 
         threadPool->schedule([&record]() {
             initializeWriterThread();
-            const auto opCtxHolder = cc().makeOperationContext();
-            const auto opCtx = opCtxHolder.get();
-            opCtx->lockState()->setShouldConflictWithSecondaryBatchApplication(false);
-
-            Session::updateSessionRecordOnSecondary(opCtx, record);
+            auto opCtx = cc().makeOperationContext();
+            ShouldNotConflictWithSecondaryBatchApplicationBlock shouldNotConflictBlock(
+                opCtx->lockState());
+            Session::updateSessionRecordOnSecondary(opCtx.get(), record);
         });
     }
 }
@@ -1274,175 +1275,44 @@ void multiSyncApply(MultiApplier::OperationPtrs* ops,
 }
 
 Status multiSyncApply_noAbort(OperationContext* opCtx,
-                              MultiApplier::OperationPtrs* oplogEntryPointers,
+                              MultiApplier::OperationPtrs* ops,
                               SyncApplyFn syncApply) {
     UnreplicatedWritesBlock uwb(opCtx);
     DisableDocumentValidation validationDisabler(opCtx);
+    ShouldNotConflictWithSecondaryBatchApplicationBlock shouldNotConflictBlock(opCtx->lockState());
 
-    // Allow us to get through the magic barrier.
-    opCtx->lockState()->setShouldConflictWithSecondaryBatchApplication(false);
-
-    // Sort the oplog entries by namespace, so that entries from the same namespace will be next to
-    // each other in the list.
-    if (oplogEntryPointers->size() > 1) {
-        std::stable_sort(oplogEntryPointers->begin(),
-                         oplogEntryPointers->end(),
-                         [](const OplogEntry* l, const OplogEntry* r) {
-                             return l->getNamespace() < r->getNamespace();
-                         });
-    }
+    ApplierHelpers::stableSortByNamespace(ops);
 
     // This function is only called in steady state replication.
     // TODO: This function can be called when we're in recovering as well as secondary. Set this
     // mode correctly.
     const OplogApplication::Mode oplogApplicationMode = OplogApplication::Mode::kSecondary;
 
-    // doNotGroupBeforePoint is used to prevent retrying bad group inserts by marking the final op
-    // of a failed group and not allowing further group inserts until that op has been processed.
-    auto doNotGroupBeforePoint = oplogEntryPointers->begin();
+    ApplierHelpers::InsertGroup insertGroup(ops, syncApply, opCtx, oplogApplicationMode);
 
-    for (auto oplogEntriesIterator = oplogEntryPointers->begin();
-         oplogEntriesIterator != oplogEntryPointers->end();
-         ++oplogEntriesIterator) {
+    for (auto it = ops->cbegin(); it != ops->cend(); ++it) {
+        const auto& entry = **it;
 
-        auto entry = *oplogEntriesIterator;
-
-        // Attempt to group 'insert' ops if possible.
-        if (entry->getOpType() == OpTypeEnum::kInsert && !entry->isForCappedCollection &&
-            oplogEntriesIterator > doNotGroupBeforePoint) {
-
-            std::vector<BSONObj> toInsert;
-
-            auto maxBatchSize = insertVectorMaxBytes;
-            auto maxBatchCount = 64;
-
-            // Make sure to include the first op in the batch size.
-            int batchSize = (*oplogEntriesIterator)->getObject().objsize();
-            int batchCount = 1;
-            auto batchNamespace = entry->getNamespace();
-
-            /**
-             * Search for the op that delimits this insert batch, and save its position
-             * in endOfGroupableOpsIterator. For example, given the following list of oplog
-             * entries with a sequence of groupable inserts:
-             *
-             *                S--------------E
-             *       u, u, u, i, i, i, i, i, d, d
-             *
-             *       S: start of insert group
-             *       E: end of groupable ops
-             *
-             * E is the position of endOfGroupableOpsIterator. i.e. endOfGroupableOpsIterator
-             * will point to the first op that *can't* be added to the current insert group.
-             */
-            auto endOfGroupableOpsIterator = std::find_if(
-                oplogEntriesIterator + 1,
-                oplogEntryPointers->end(),
-                [&](const OplogEntry* nextEntry) -> bool {
-                    auto opNamespace = nextEntry->getNamespace();
-                    batchSize += nextEntry->getObject().objsize();
-                    batchCount += 1;
-
-                    // Only add the op to this batch if it passes the criteria.
-                    return nextEntry->getOpType() != OpTypeEnum::kInsert  // Must be an insert.
-                        || opNamespace != batchNamespace  // Must be in the same namespace.
-                        || batchSize > maxBatchSize       // Must not create too large an object.
-                        || batchCount > maxBatchCount;    // Limit number of ops in a single group.
-                });
-
-            // See if we were able to create a group that contains more than a single op.
-            bool isGroup = (endOfGroupableOpsIterator > oplogEntriesIterator + 1);
-
-            if (isGroup) {
-                // Since we found more than one document, create grouped insert of many docs.
-                // We are going to group many 'i' ops into one big 'i' op, with array fields for
-                // 'ts', 't', and 'o', corresponding to each individual op.
-                // For example:
-                // { ts: Timestamp(1,1), t:1, ns: "test.foo", op:"i", o: {_id:1} }
-                // { ts: Timestamp(1,2), t:1, ns: "test.foo", op:"i", o: {_id:2} }
-                // become:
-                // { ts: [Timestamp(1, 1), Timestamp(1, 2)],
-                //    t: [1, 1],
-                //    o: [{_id: 1}, {_id: 2}],
-                //   ns: "test.foo",
-                //   op: "i" }
-                BSONObjBuilder groupedInsertBuilder;
-
-                // Populate the "ts" field with an array of all the grouped inserts' timestamps.
-                BSONArrayBuilder tsArrayBuilder(groupedInsertBuilder.subarrayStart("ts"));
-                for (auto groupingIterator = oplogEntriesIterator;
-                     groupingIterator != endOfGroupableOpsIterator;
-                     ++groupingIterator) {
-                    tsArrayBuilder.append((*groupingIterator)->getTimestamp());
-                }
-                tsArrayBuilder.done();
-
-                // Populate the "t" (term) field with an array of all the grouped inserts' terms.
-                BSONArrayBuilder tArrayBuilder(groupedInsertBuilder.subarrayStart("t"));
-                for (auto groupingIterator = oplogEntriesIterator;
-                     groupingIterator != endOfGroupableOpsIterator;
-                     ++groupingIterator) {
-                    auto parsedTerm = (*groupingIterator)->getTerm();
-                    long long term = OpTime::kUninitializedTerm;
-                    // Term may not be present (pv0)
-                    if (parsedTerm) {
-                        term = parsedTerm.get();
-                    }
-                    tArrayBuilder.append(term);
-                }
-                tArrayBuilder.done();
-
-                // Generate an op object of all elements except for "ts", "t", and "o", since we
-                // need to make those fields arrays of all the ts's, t's, and o's.
-                for (auto elem : entry->raw) {
-                    if (elem.fieldNameStringData() != "o" && elem.fieldNameStringData() != "ts" &&
-                        elem.fieldNameStringData() != "t") {
-                        groupedInsertBuilder.append(elem);
-                    }
-                }
-
-                // Populate the "o" field with an array of all the grouped inserts.
-                BSONArrayBuilder oArrayBuilder(groupedInsertBuilder.subarrayStart("o"));
-                for (auto groupingIterator = oplogEntriesIterator;
-                     groupingIterator != endOfGroupableOpsIterator;
-                     ++groupingIterator) {
-                    oArrayBuilder.append((*groupingIterator)->getObject());
-                }
-                oArrayBuilder.done();
-
-                try {
-                    // Apply the group of inserts.
-                    uassertStatusOK(
-                        syncApply(opCtx, groupedInsertBuilder.done(), oplogApplicationMode));
-                    // It succeeded, advance the oplogEntriesIterator to the end of the
-                    // group of inserts.
-                    oplogEntriesIterator = endOfGroupableOpsIterator - 1;
-                    continue;
-                } catch (const DBException& e) {
-                    // The group insert failed, log an error and fall through to the
-                    // application of an individual op.
-                    error() << "Error applying inserts in bulk " << causedBy(redact(e))
-                            << " trying first insert as a lone insert";
-
-                    // Avoid quadratic run time from failed insert by not retrying until we
-                    // are beyond this group of ops.
-                    doNotGroupBeforePoint = endOfGroupableOpsIterator - 1;
-                }
-            }
+        // If we are successful in grouping and applying inserts, advance the current iterator past
+        // the end of the inserted group of entries.
+        auto groupResult = insertGroup.groupAndApplyInserts(it);
+        if (groupResult.isOK()) {
+            it = groupResult.getValue();
+            continue;
         }
 
         // If we didn't create a group, try to apply the op individually.
         try {
-            const Status status = syncApply(opCtx, entry->raw, oplogApplicationMode);
+            const Status status = syncApply(opCtx, entry.raw, oplogApplicationMode);
 
             if (!status.isOK()) {
-                severe() << "Error applying operation (" << redact(entry->toBSON())
+                severe() << "Error applying operation (" << redact(entry.toBSON())
                          << "): " << causedBy(redact(status));
                 return status;
             }
         } catch (const DBException& e) {
             severe() << "writer worker caught exception: " << redact(e)
-                     << " on: " << redact(entry->toBSON());
+                     << " on: " << redact(entry.toBSON());
             return e.toStatus();
         }
     }
@@ -1466,12 +1336,11 @@ Status multiInitialSyncApply_noAbort(OperationContext* opCtx,
                                      WorkerMultikeyPathInfo* workerMultikeyPathInfo) {
     UnreplicatedWritesBlock uwb(opCtx);
     DisableDocumentValidation validationDisabler(opCtx);
+    ShouldNotConflictWithSecondaryBatchApplicationBlock shouldNotConflictBlock(opCtx->lockState());
+
     {  // Ensure that the MultikeyPathTracker stops tracking paths.
         ON_BLOCK_EXIT([opCtx] { MultikeyPathTracker::get(opCtx).stopTrackingMultikeyPathInfo(); });
         MultikeyPathTracker::get(opCtx).startTrackingMultikeyPathInfo();
-
-        // allow us to get through the magic barrier
-        opCtx->lockState()->setShouldConflictWithSecondaryBatchApplication(false);
 
         for (auto it = ops->begin(); it != ops->end(); ++it) {
             auto& entry = **it;

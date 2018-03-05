@@ -126,8 +126,12 @@ const StringMap<int> sessionCheckoutWhitelist = {{"aggregate", 1},
 
 // The command names for which readConcern level snapshot is allowed. The getMore command is
 // implicitly allowed to operate on a cursor which was opened under readConcern level snapshot.
-const StringMap<int> readConcernSnapshotWhitelist = {
-    {"find", 1}, {"count", 1}, {"geoSearch", 1}, {"parallelCollectionScan", 1}, {"update", 1}};
+const StringMap<int> readConcernSnapshotWhitelist = {{"find", 1},
+                                                     {"count", 1},
+                                                     {"geoSearch", 1},
+                                                     {"insert", 1},
+                                                     {"parallelCollectionScan", 1},
+                                                     {"update", 1}};
 
 void generateLegacyQueryErrorResponse(const AssertionException* exception,
                                       const QueryMessage& queryMessage,
@@ -399,22 +403,14 @@ bool runCommandImpl(OperationContext* opCtx,
         bytesToReserve = 0;
 #endif
 
-    // run expects non-const bsonobj
-    BSONObj cmd = request.body;
-
-    // run expects const db std::string (can't bind to temporary)
-    const std::string db = request.getDatabase().toString();
-
     BSONObjBuilder inPlaceReplyBob = replyBuilder->getInPlaceReplyBuilder(bytesToReserve);
 
-    behaviors.waitForReadConcern(opCtx, command, db, request, cmd);
-
     bool result;
-    if (!command->supportsWriteConcern(cmd)) {
-        behaviors.uassertCommandDoesNotSpecifyWriteConcern(cmd);
+    if (!command->supportsWriteConcern(request.body)) {
+        behaviors.uassertCommandDoesNotSpecifyWriteConcern(request.body);
         result = command->publicRun(opCtx, request, inPlaceReplyBob);
     } else {
-        auto wcResult = uassertStatusOK(extractWriteConcern(opCtx, cmd, db));
+        auto wcResult = uassertStatusOK(extractWriteConcern(opCtx, request.body));
 
         auto lastOpBeforeRun = repl::ReplClientInfo::forClient(opCtx->getClient()).getLastOp();
 
@@ -644,12 +640,6 @@ void execCommandDatabase(OperationContext* opCtx,
                     "readConcernLevel snapshot requires a txnNumber",
                     opCtx->getTxnNumber());
 
-            // TODO SERVER-33355: Remove once readConcern level snapshot is supported on
-            // secondaries.
-            uassert(ErrorCodes::InvalidOptions,
-                    "readConcern level snapshot only supported on primaries",
-                    iAmPrimary);
-
             opCtx->lockState()->setSharedLocksShouldTwoPhaseLock(true);
         }
 
@@ -689,6 +679,8 @@ void execCommandDatabase(OperationContext* opCtx,
                 << rpc::TrackingMetadata::get(opCtx).toString();
             rpc::TrackingMetadata::get(opCtx).setIsLogged(true);
         }
+
+        behaviors.waitForReadConcern(opCtx, command, request);
 
         sessionTxnState.unstashTransactionResources();
         retval =

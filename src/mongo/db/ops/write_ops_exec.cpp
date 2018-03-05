@@ -35,10 +35,10 @@
 #include "mongo/base/checked_cast.h"
 #include "mongo/db/audit.h"
 #include "mongo/db/auth/authorization_session.h"
-#include "mongo/db/catalog/catalog_raii.h"
 #include "mongo/db/catalog/collection.h"
 #include "mongo/db/catalog/database_holder.h"
 #include "mongo/db/catalog/document_validation.h"
+#include "mongo/db/catalog_raii.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/concurrency/write_conflict_exception.h"
 #include "mongo/db/curop_metrics.h"
@@ -415,8 +415,11 @@ bool insertBatchAndHandleErrors(OperationContext* opCtx,
                     out->results.emplace_back(std::move(result));
                     curOp.debug().ninserted++;
                 } catch (...) {
-                    // Release the lock following any error. Among other things, this ensures that
-                    // we don't sleep in the WCE retry loop with the lock held.
+                    // Release the lock following any error if we are not in multi-statement
+                    // transaction. Among other things, this ensures that we don't sleep in the WCE
+                    // retry loop with the lock held.
+                    // If we are in multi-statement transaction and under a under a WUOW, we will
+                    // not actually release the lock.
                     collection.reset();
                     throw;
                 }
@@ -448,7 +451,9 @@ SingleWriteResult makeWriteResultForInsertOrDeleteRetry() {
 }  // namespace
 
 WriteResult performInserts(OperationContext* opCtx, const write_ops::Insert& wholeOp) {
-    invariant(!opCtx->lockState()->inAWriteUnitOfWork());  // Does own retries.
+    // Insert performs its own retries and should only be performed within a WriteUnitOfWork when
+    // run under snapshot read concern.
+    invariant(!opCtx->lockState()->inAWriteUnitOfWork() || opCtx->getWriteUnitOfWork());
     auto& curOp = *CurOp::get(opCtx);
     ON_BLOCK_EXIT([&] {
         // This is the only part of finishCurOp we need to do for inserts because they reuse the
@@ -649,7 +654,7 @@ static SingleWriteResult performSingleUpdateOp(OperationContext* opCtx,
 WriteResult performUpdates(OperationContext* opCtx, const write_ops::Update& wholeOp) {
     // Update performs its own retries, so we should not be in a WriteUnitOfWork unless we are in a
     // transaction.
-    invariant(opCtx->getWriteUnitOfWork() || !opCtx->lockState()->inAWriteUnitOfWork());
+    invariant(!opCtx->lockState()->inAWriteUnitOfWork() || opCtx->getWriteUnitOfWork());
     uassertStatusOK(userAllowedWriteNS(wholeOp.getNamespace()));
 
     DisableDocumentValidationIfTrue docValidationDisabler(
