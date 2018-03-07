@@ -482,7 +482,7 @@ void Session::stashTransactionResources(OperationContext* opCtx) {
         return;
     }
 
-    invariant(opCtx->hasStashedCursor());
+    invariant(opCtx->hasStashedCursor() || !_autocommit);
 
     if (*opCtx->getTxnNumber() != _activeTxnNumber) {
         // The session is checked out, so _activeTxnNumber cannot advance due to a user operation.
@@ -535,7 +535,7 @@ void Session::unstashTransactionResources(OperationContext* opCtx) {
 
     if (_stashedLocker) {
         invariant(_stashedRecoveryUnit);
-        _stashedLocker->reacquireTicket();
+        _stashedLocker->reacquireTicket(opCtx);
 
         // We intentionally do not capture the return value of swapLockState(), which is just an
         // empty locker. At the end of the operation, if the transaction is not complete, we will
@@ -548,7 +548,8 @@ void Session::unstashTransactionResources(OperationContext* opCtx) {
         opCtx->setWriteUnitOfWork(WriteUnitOfWork::createForSnapshotResume(opCtx));
     } else {
         auto readConcernArgs = repl::ReadConcernArgs::get(opCtx);
-        if (readConcernArgs.getLevel() == repl::ReadConcernLevel::kSnapshotReadConcern) {
+        if (readConcernArgs.getLevel() == repl::ReadConcernLevel::kSnapshotReadConcern ||
+            _txnState == MultiDocumentTransactionState::kInProgress) {
             opCtx->setWriteUnitOfWork(std::make_unique<WriteUnitOfWork>(opCtx));
             _isSnapshotTxn = true;
         }
