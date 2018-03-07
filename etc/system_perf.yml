@@ -359,8 +359,7 @@ tasks:
 - name: linkbench
   priority: 5
   depends_on:
-    - name: compile
-      variant: linux-standalone
+    - name: compile_proxy
   commands:
     - func: "prepare environment"
       vars:
@@ -447,8 +446,7 @@ tasks:
 - name: smoke_test
   priority: 5
   depends_on:
-    - name: compile
-      variant: linux-standalone
+    - name: compile_proxy
   commands:
     - func: "prepare environment"
       vars:
@@ -957,6 +955,7 @@ buildvariants:
     - name: non_sharded_workloads_WT
     - name: agg_query_comparison_bestbuy_WT
     - name: change_streams
+    - name: linkbench
 
 - name: wtdevelop-standalone
   display_name: WT Develop Standalone
@@ -1009,3 +1008,5 @@ buildvariants:
     - name: non_sharded_workloads_WT
     - name: agg_query_comparison_bestbuy_WT
     - name: change_streams
+    - name: linkbench
+
