@@ -766,7 +766,6 @@ buildvariants:
     - name: non_sharded_workloads_MMAPv1
     - name: agg_query_comparison_bestbuy_WT
     - name: agg_query_comparison_bestbuy_MMAPv1
-    - name: linkbench
 
 - name: linux-3-shard
   display_name: Linux 3-Shard Cluster
@@ -796,7 +795,6 @@ buildvariants:
     - name: agg_query_comparison_bestbuy_MMAPv1
     - name: change_streams
     - name: change_streams_multi_mongos
-    - name: linkbench
 
 - name: linux-3-node-replSet
   display_name: Linux 3-Node ReplSet
