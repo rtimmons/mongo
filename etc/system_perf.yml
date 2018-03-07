@@ -313,6 +313,7 @@ tasks:
         display_name: mongodb.tar.gz
 
 - name: linkbench
+  priority: 5
   depends_on:
     - name: compile
       variant: linux-standalone
