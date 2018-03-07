@@ -359,7 +359,7 @@ executor::TaskExecutor* ReplicationCoordinatorExternalStateImpl::getTaskExecutor
     return _taskExecutor.get();
 }
 
-OldThreadPool* ReplicationCoordinatorExternalStateImpl::getDbWorkThreadPool() const {
+ThreadPool* ReplicationCoordinatorExternalStateImpl::getDbWorkThreadPool() const {
     return _writerPool.get();
 }
 
