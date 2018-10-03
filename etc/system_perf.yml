@@ -672,7 +672,7 @@ buildvariants:
     tooltags: ""
     use_scons_cache: true
   run_on:
-      - "amazon2-test"
+      - "amazon2-build"
   tasks:
     - name: compile
     - name: compile_enterprise
