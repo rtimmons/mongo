@@ -70,11 +70,6 @@ functions:
           # We get the raw version string (r1.2.3-45-gabcdef) from git
           MONGO_VERSION=$(git describe)
 
-          # Remove enterprise if we're not compiling enterprise
-          if [ "${compile-variant|}" != "-enterprise" ]; then
-              rm -rf src/mongo/db/modules/enterprise
-          fi
-
           # If we're going to compile the upstream wtdevelop repository for wiredtiger, add
           # that githash to version string.
           if [ "${compile-variant|}" = "-wtdevelop" ]; then
