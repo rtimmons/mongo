@@ -669,7 +669,6 @@ buildvariants:
   batchtime: 1440 # 24 hours
   modules:
     - wtdevelop
-    - enterprise
   expansions:
     compile_flags: --ssl MONGO_DISTMOD=linux-64-amzn-build -j$(grep -c ^processor /proc/cpuinfo) --release --variables-files=etc/scons/mongodbtoolchain_gcc.vars
     gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
@@ -685,6 +684,8 @@ buildvariants:
 
 - name: compile-amazon2
   display_name: Compile on Amazon Linux 2
+  modules:
+    - enterprise
   expansions:
     compile_flags: --ssl MONGO_DISTMOD=amazon2 -j$(grep -c ^processor /proc/cpuinfo) --release --variables-files=etc/scons/mongodbtoolchain_gcc.vars
     gorootvars: GOROOT=/opt/go PATH="/opt/go/bin:$PATH"
