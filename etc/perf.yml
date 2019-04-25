@@ -217,11 +217,13 @@ functions:
           genny: ${genny_rev}
     - command: shell.exec
       params:
-        working_dir: src/genny
+        working_dir: src
         script: |
           set -o errexit
           set -o verbose
-          pwd; ls
+          echo "pwd = $(pwd)"
+          pwd; ls;
+          find . -type f -name '*genny*'
           ./scripts/lamp --linux-distro rhel62
           ./dist/bin/genny --version 
 
@@ -586,6 +588,7 @@ buildvariants:
   - name: compile
     distros:
     - rhel62-large
+  - name: genny
   - name: aggregation
   - name: agg-query-comparison
   - name: query
@@ -624,6 +627,7 @@ buildvariants:
   run_on:
   - "centos6-perf"
   tasks:
+  - name: genny
   - name: update
   - name: insert
   - name: misc
