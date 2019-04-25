@@ -47,7 +47,10 @@ modules:
   repo: git@github.com:10gen/mongo-enterprise-modules.git
   prefix: src/mongo/db/modules
   branch: master
-
+- name: genny
+  repo: git@github.com:mongodb/genny.git
+  prefix: genny
+  branch: master
 
 functions:
   "download analysis scripts":
@@ -205,6 +208,23 @@ functions:
           REFTAG="3.6.5-Baseline"
           OVERRIDE="../dsi/analysis/${branch_name}/perf_override.json"
           python ../dsi/analysis/perf_regression_check.py $cmd_flags -f history.json --rev ${revision} -t tags.json --refTag $REFTAG --overrideFile $OVERRIDE --variant ${build_variant} --task ${task_name} --threshold 0.075 --threadThreshold 0.12
+
+  "run genny tests":
+    - command: git.get_project
+      params:
+        directory: src
+        revisions:
+          genny: ${genny_rev}
+    - command: shell.exec
+      params:
+        working_dir: src/genny
+        script: |
+          set -o errexit
+          set -o verbose
+          pwd; ls
+          ./scripts/lamp --linux-distro rhel62
+          ./dist/bin/genny --version 
+
   "run perf tests":
     - command: shell.exec
       params:
@@ -235,6 +255,10 @@ functions:
         file: "src/perf/perf.json"
 
 tasks:
+- name: genny
+  commands:
+  - func: "run genny tests"
+
 - name: compile
   commands:
     - command: git.get_project
