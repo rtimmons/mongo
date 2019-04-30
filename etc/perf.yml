@@ -210,6 +210,7 @@ functions:
           python ../dsi/analysis/perf_regression_check.py $cmd_flags -f history.json --rev ${revision} -t tags.json --refTag $REFTAG --overrideFile $OVERRIDE --variant ${build_variant} --task ${task_name} --threshold 0.075 --threadThreshold 0.12
 
   "run genny tests":
+    - command: manifest.load
     - command: git.get_project
       params:
         directory: src
