@@ -2,6 +2,7 @@ command_type: system
 stepback: false
 
 pre:
+    - command: manifest.load
     - command: shell.exec
       params:
         silent: true
@@ -562,6 +563,7 @@ buildvariants:
   batchtime: 90  # 1.5 hours
   modules:
     - enterprise
+    - genny
   expansions:
     # We are explicitly tracking the rhel62 variant compile options from evergreen.yml for
     # microbenchmarks, since they run on the centos6 boxes.  If we can get proper artifacts directly
@@ -607,6 +609,9 @@ buildvariants:
 - name: linux-wt-repl
   display_name: 1-Node ReplSet Linux inMemory
   batchtime: 90  # 1.5 hours
+  modules:
+    # - enterprise  TODO: should this be here???
+    - genny
   expansions:
     mongod_exec_wrapper: *exec_wrapper
     perf_exec_wrapper: *perf_wrapper
