@@ -226,6 +226,10 @@ functions:
           echo "pwd = $(pwd)"
           pwd; ls;
           find . -type f -name '*genny*'
+          cd genny/genny
+          echo "pwd = $(pwd)"
+          pwd; ls;
+          find . -type f -name '*genny*'
           ./scripts/lamp --linux-distro rhel62
           ./dist/bin/genny --version 
 
