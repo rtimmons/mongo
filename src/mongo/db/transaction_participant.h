@@ -177,9 +177,14 @@ class TransactionParticipant {
 
         static std::string toString(StateFlag state);
 
+        // An optional promise that is non-none while the participant is in prepare. The promise is
+        // fulfilled and the optional is reset when the participant transitions out of prepare.
+        boost::optional<SharedPromise<void>> _exitPreparePromise;
+
     private:
         static bool _isLegalTransition(StateFlag oldState, StateFlag newState);
 
+        // Private because any modifications should go through transitionTo.
         StateFlag _state = kNone;
     };
 
@@ -192,7 +197,7 @@ public:
      */
     class TxnResources {
     public:
-        enum class StashStyle { kPrimary, kSecondary, kSideTransaction };
+        enum class StashStyle { kPrimary, kSecondary };
 
         /**
          * Stashes transaction state from 'opCtx' in the newly constructed TxnResources.
@@ -236,8 +241,10 @@ public:
     };
 
     /**
-     *  An RAII object that stashes `TxnResouces` from the `opCtx` onto the stack. At destruction
-     *  it unstashes the `TxnResources` back onto the `opCtx`.
+     *  An RAII object that stashes the recovery unit from the `opCtx` onto the stack and keeps
+     *  using the same locker of `opCtx`. The locker opts out of two-phase locking of the
+     *  current WUOW. At destruction it unstashes the recovery unit back onto the `opCtx` and
+     *  restores the locker state relevant to the original WUOW.
      */
     class SideTransactionBlock {
     public:
@@ -245,7 +252,9 @@ public:
         ~SideTransactionBlock();
 
     private:
-        boost::optional<TxnResources> _txnResources;
+        Locker::WUOWLockSnapshot _WUOWLockSnapshot;
+        std::unique_ptr<RecoveryUnit> _recoveryUnit;
+        WriteUnitOfWork::RecoveryUnitState _ruState;
         OperationContext* _opCtx;
     };
 
@@ -395,11 +404,15 @@ public:
          * the caller has performed the necessary customer input validations.
          *
          * Exceptions of note, which can be thrown are:
-         *   - TransactionTooOld - if attempt is made to start a transaction older than the
+         *   - TransactionTooOld - if an attempt is made to start a transaction older than the
          * currently active one or the last one which committed
          *   - PreparedTransactionInProgress - if the transaction is in the prepared state and a new
          * transaction or retryable write is attempted
          *   - NotMaster - if the node is not a primary when this method is called.
+         *   - IncompleteTransactionHistory - if an attempt is made to begin a retryable write for a
+         * TransactionParticipant that is not in retryable write mode. This is expected behavior if
+         * a retryable write has been upgraded to a transaction by the server, which can happen e.g.
+         * when updating the shard key.
          */
         void beginOrContinue(OperationContext* opCtx,
                              TxnNumber txnNumber,
@@ -413,6 +426,17 @@ public:
          */
         void beginOrContinueTransactionUnconditionally(OperationContext* opCtx,
                                                        TxnNumber txnNumber);
+
+        /**
+         * If the participant is in prepare, returns a future whose promise is fulfilled when the
+         * participant transitions out of prepare.
+         *
+         * If the participant is not in prepare, returns an immediately ready future.
+         *
+         * The caller should not wait on the future with the session checked out, since that will
+         * prevent the promise from being able to be fulfilled, i.e., will cause a deadlock.
+         */
+        SharedSemiFuture<void> onExitPrepare() const;
 
         /**
          * Transfers management of transaction resources from the currently checked-out
@@ -830,16 +854,15 @@ private:
 
     private:
         OperationContext* _opCtx;
-        std::unique_ptr<Locker> _locker;
         std::unique_ptr<RecoveryUnit> _recoveryUnit;
         std::vector<OplogSlot> _oplogSlots;
     };
 
-    friend std::ostream& operator<<(std::ostream& s, TransactionState txnState) {
+    friend std::ostream& operator<<(std::ostream& s, const TransactionState& txnState) {
         return (s << txnState.toString());
     }
 
-    friend StringBuilder& operator<<(StringBuilder& s, TransactionState txnState) {
+    friend StringBuilder& operator<<(StringBuilder& s, const TransactionState& txnState) {
         return (s << txnState.toString());
     }
 

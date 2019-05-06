@@ -40,134 +40,6 @@
 #include "mongo/util/uuid.h"
 
 namespace mongo {
-/**
- * Class used for updating the UUID catalog on metadata operations.
- */
-class UUIDCatalogObserver : public OpObserver {
-public:
-    void onCreateIndex(OperationContext* opCtx,
-                       const NamespaceString& nss,
-                       CollectionUUID uuid,
-                       BSONObj indexDoc,
-                       bool fromMigrate) override {}
-
-    void onStartIndexBuild(OperationContext* opCtx,
-                           const NamespaceString& nss,
-                           CollectionUUID collUUID,
-                           const UUID& indexBuildUUID,
-                           const std::vector<BSONObj>& indexes,
-                           bool fromMigrate) override {}
-
-    void onCommitIndexBuild(OperationContext* opCtx,
-                            const NamespaceString& nss,
-                            CollectionUUID collUUID,
-                            const UUID& indexBuildUUID,
-                            const std::vector<BSONObj>& indexes,
-                            bool fromMigrate) override {}
-
-    void onAbortIndexBuild(OperationContext* opCtx,
-                           const NamespaceString& nss,
-                           CollectionUUID collUUID,
-                           const UUID& indexBuildUUID,
-                           const std::vector<BSONObj>& indexes,
-                           bool fromMigrate) override {}
-
-    void onInserts(OperationContext* opCtx,
-                   const NamespaceString& nss,
-                   OptionalCollectionUUID uuid,
-                   std::vector<InsertStatement>::const_iterator begin,
-                   std::vector<InsertStatement>::const_iterator end,
-                   bool fromMigrate) override {}
-    void onUpdate(OperationContext* opCtx, const OplogUpdateEntryArgs& args) override {}
-    void aboutToDelete(OperationContext* opCtx,
-                       const NamespaceString& nss,
-                       const BSONObj& doc) override {}
-    void onDelete(OperationContext* opCtx,
-                  const NamespaceString& nss,
-                  OptionalCollectionUUID uuid,
-                  StmtId stmtId,
-                  bool fromMigrate,
-                  const boost::optional<BSONObj>& deletedDoc) override {}
-    void onInternalOpMessage(OperationContext* opCtx,
-                             const NamespaceString& nss,
-                             const boost::optional<UUID> uuid,
-                             const BSONObj& msgObj,
-                             const boost::optional<BSONObj> o2MsgObj) override {}
-    void onCreateCollection(OperationContext* opCtx,
-                            Collection* coll,
-                            const NamespaceString& collectionName,
-                            const CollectionOptions& options,
-                            const BSONObj& idIndex,
-                            const OplogSlot& createOpTime) override {}
-    void onCollMod(OperationContext* opCtx,
-                   const NamespaceString& nss,
-                   OptionalCollectionUUID uuid,
-                   const BSONObj& collModCmd,
-                   const CollectionOptions& oldCollOptions,
-                   boost::optional<TTLCollModInfo> ttlInfo) override;
-    void onDropDatabase(OperationContext* opCtx, const std::string& dbName) override {}
-    repl::OpTime onDropCollection(OperationContext* opCtx,
-                                  const NamespaceString& collectionName,
-                                  OptionalCollectionUUID uuid,
-                                  std::uint64_t numRecords,
-                                  CollectionDropType dropType) override;
-    void onDropIndex(OperationContext* opCtx,
-                     const NamespaceString& nss,
-                     OptionalCollectionUUID uuid,
-                     const std::string& indexName,
-                     const BSONObj& idxDescriptor) override {}
-
-    void onRenameCollection(OperationContext* opCtx,
-                            const NamespaceString& fromCollection,
-                            const NamespaceString& toCollection,
-                            OptionalCollectionUUID uuid,
-                            OptionalCollectionUUID dropTargetUUID,
-                            std::uint64_t numRecords,
-                            bool stayTemp) override {
-        // Do nothing: collection renames don't affect the UUID mapping.
-    }
-
-    repl::OpTime preRenameCollection(OperationContext* opCtx,
-                                     const NamespaceString& fromCollection,
-                                     const NamespaceString& toCollection,
-                                     OptionalCollectionUUID uuid,
-                                     OptionalCollectionUUID dropTargetUUID,
-                                     std::uint64_t numRecords,
-                                     bool stayTemp) override {
-        // Do nothing: collection renames don't affect the UUID mapping.
-        return {};
-    }
-
-    void postRenameCollection(OperationContext* opCtx,
-                              const NamespaceString& fromCollection,
-                              const NamespaceString& toCollection,
-                              OptionalCollectionUUID uuid,
-                              OptionalCollectionUUID dropTargetUUID,
-                              bool stayTemp) override {
-        // Do nothing: collection renames don't affect the UUID mapping.
-    }
-
-    void onApplyOps(OperationContext* opCtx,
-                    const std::string& dbName,
-                    const BSONObj& applyOpCmd) override {}
-    void onEmptyCapped(OperationContext* opCtx,
-                       const NamespaceString& collectionName,
-                       OptionalCollectionUUID uuid) override {}
-    void onUnpreparedTransactionCommit(
-        OperationContext* opCtx, const std::vector<repl::ReplOperation>& statements) override {}
-    void onPreparedTransactionCommit(
-        OperationContext* opCtx,
-        OplogSlot commitOplogEntryOpTime,
-        Timestamp commitTimestamp,
-        const std::vector<repl::ReplOperation>& statements) noexcept override {}
-    void onTransactionPrepare(OperationContext* opCtx,
-                              const std::vector<OplogSlot>& reservedSlots,
-                              std::vector<repl::ReplOperation>& statements) override {}
-    void onTransactionAbort(OperationContext* opCtx,
-                            boost::optional<OplogSlot> abortOplogEntryOpTime) override {}
-    void onReplicationRollback(OperationContext* opCtx,
-                               const RollbackObserverInfo& rbInfo) override {}
-};
 
 /**
  * This class comprises a UUID to collection catalog, allowing for efficient
@@ -197,7 +69,6 @@ public:
         reference operator*();
         iterator operator++();
         iterator operator++(int);
-        boost::optional<CollectionCatalogEntry*> catalogEntry();
         boost::optional<CollectionUUID> uuid();
 
         /*
@@ -260,7 +131,7 @@ public:
     /**
      * Implies onDropCollection for all collections in db, but is not transactional.
      */
-    void onCloseDatabase(Database* db);
+    void onCloseDatabase(OperationContext* opCtx, Database* db);
 
     /**
      * Register the collection catalog entry with `uuid`. The collection object with `uuid` must not
@@ -346,14 +217,10 @@ public:
     boost::optional<CollectionUUID> lookupUUIDByNSS(const NamespaceString& nss) const;
 
     /**
-     * This function gets the pointers of all the CollectionCatalogEntries from `dbName`.
-     *
-     * Returns empty vector if the 'dbName' is not known.
-     */
-    std::vector<CollectionCatalogEntry*> getAllCatalogEntriesFromDb(StringData dbName) const;
-
-    /**
      * This function gets the UUIDs of all collections from `dbName`.
+     *
+     * If the caller does not take a strong database lock, some of UUIDs might no longer exist (due
+     * to collection drop) after this function returns.
      *
      * Returns empty vector if the 'dbName' is not known.
      */
@@ -362,9 +229,13 @@ public:
     /**
      * This function gets the ns of all collections from `dbName`. The result is not sorted.
      *
+     * Caller must take a strong database lock; otherwise, collections returned could be dropped or
+     * renamed.
+     *
      * Returns empty vector if the 'dbName' is not known.
      */
-    std::vector<NamespaceString> getAllCollectionNamesFromDb(StringData dbName) const;
+    std::vector<NamespaceString> getAllCollectionNamesFromDb(OperationContext* opCtx,
+                                                             StringData dbName) const;
 
     /**
      * This functions gets all the database names. The result is sorted in alphabetical ascending
@@ -388,20 +259,6 @@ public:
      * Must be called with the global lock acquired in exclusive mode.
      */
     void onOpenCatalog(OperationContext* opCtx);
-
-    /**
-     * Return the UUID lexicographically preceding `uuid` in the database named by `db`.
-     *
-     * Return `boost::none` if `uuid` is not found, or is the first UUID in that database.
-     */
-    boost::optional<CollectionUUID> prev(StringData db, CollectionUUID uuid);
-
-    /**
-     * Return the UUID lexicographically following `uuid` in the database named by `db`.
-     *
-     * Return `boost::none` if `uuid` is not found, or is the last UUID in that database.
-     */
-    boost::optional<CollectionUUID> next(StringData db, CollectionUUID uuid);
 
     iterator begin(StringData db) const;
     iterator end() const;

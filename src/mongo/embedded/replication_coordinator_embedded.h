@@ -92,6 +92,8 @@ public:
 
     repl::MemberState getMemberState() const override;
 
+    bool canAcceptNonLocalWrites() const override;
+
     std::vector<repl::MemberData> getMemberData() const override;
 
     Status waitForMemberState(repl::MemberState, Milliseconds) override;
@@ -233,6 +235,8 @@ public:
     Status updateTerm(OperationContext*, long long) override;
 
     repl::OpTime getCurrentCommittedSnapshotOpTime() const override;
+
+    repl::OpTimeAndWallTime getCurrentCommittedSnapshotOpTimeAndWallTime() const override;
 
     void waitUntilSnapshotCommitted(OperationContext*, const Timestamp&) override;
 

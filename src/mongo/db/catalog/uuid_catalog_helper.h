@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2018-present MongoDB, Inc.
+ *    Copyright (C) 2019-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -27,39 +27,27 @@
  *    it in the license file.
  */
 
-#include "mongo/db/catalog/namespace_uuid_cache.h"
+#pragma once
 
-#include "mongo/unittest/unittest.h"
+#include "mongo/db/catalog/uuid_catalog.h"
+#include "mongo/db/concurrency/lock_manager_defs.h"
 
-using namespace mongo;
+namespace mongo {
 
-namespace {
+class Collection;
+class CollectionCatalogEntry;
 
-TEST(NamespaceUUIDCache, ensureNamespaceInCache) {
-    NamespaceUUIDCache cache;
-    CollectionUUID uuid = CollectionUUID::gen();
-    CollectionUUID uuidConflict = CollectionUUID::gen();
-    NamespaceString nss("test", "test_collection_ns");
-    // Add nss, uuid to cache.
-    cache.ensureNamespaceInCache(nss, uuid);
-    // Do nothing if we query for existing nss, uuid pairing.
-    cache.ensureNamespaceInCache(nss, uuid);
+namespace catalog {
 
-    if (debugCollectionUUIDs) {
-        // Uassert if we query for existing nss and uuid that does not match.
-        ASSERT_THROWS(cache.ensureNamespaceInCache(nss, uuidConflict), AssertionException);
-    }
-}
+/**
+ * Looping through all the collections in the database and run callback function on each one of
+ * them. The return value of the callback decides whether we should continue the loop.
+ */
+void forEachCollectionFromDb(
+    OperationContext* opCtx,
+    StringData dbName,
+    LockMode collLockMode,
+    std::function<bool(Collection* collection, CollectionCatalogEntry* catalogEntry)> callback);
 
-TEST(NamespaceUUIDCache, onDropCollection) {
-    NamespaceUUIDCache cache;
-    CollectionUUID uuid = CollectionUUID::gen();
-    CollectionUUID newUuid = CollectionUUID::gen();
-    NamespaceString nss("test", "test_collection_ns");
-    cache.ensureNamespaceInCache(nss, uuid);
-    cache.evictNamespace(nss);
-    // Add nss to the cache with a different uuid. This should not throw since
-    // we evicted the previous entry from the cache.
-    cache.ensureNamespaceInCache(nss, newUuid);
-}
-}  // namespace
+}  // namespace catalog
+}  // namespace mongo

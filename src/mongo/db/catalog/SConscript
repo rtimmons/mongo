@@ -309,8 +309,6 @@ env.CppUnitTest(
 env.Library(
     target='uuid_catalog',
     source=[
-        'namespace_uuid_cache.cpp',
-        env.Idlc('namespace_uuid_cache.idl')[0],
         'uuid_catalog.cpp',
     ],
     LIBDEPS=[
@@ -325,14 +323,15 @@ env.Library(
     ]
 )
 
-env.CppUnitTest(
-    target='namespace_uuid_cache_test',
+env.Library(
+    target='uuid_catalog_helper',
     source=[
-        'namespace_uuid_cache_test.cpp'
+        'uuid_catalog_helper.cpp',
     ],
-    LIBDEPS=[
+    LIBDEPS_PRIVATE=[
         'uuid_catalog',
-    ],
+        '$BUILD_DIR/mongo/db/concurrency/lock_manager',
+    ]
 )
 
 env.CppUnitTest(
@@ -342,7 +341,6 @@ env.CppUnitTest(
     ],
     LIBDEPS=[
         'uuid_catalog',
-        '$BUILD_DIR/mongo/db/concurrency/lock_manager',
         '$BUILD_DIR/mongo/db/service_context',
         '$BUILD_DIR/mongo/db/storage/kv/kv_prefix',
     ],
@@ -417,6 +415,7 @@ env.Library(
         '$BUILD_DIR/mongo/db/views/views_mongod',
     ],
     LIBDEPS_PRIVATE=[
+        '$BUILD_DIR/mongo/db/catalog/uuid_catalog_helper',
         '$BUILD_DIR/mongo/db/commands/server_status_core',
         '$BUILD_DIR/mongo/db/index/index_build_interceptor',
         '$BUILD_DIR/mongo/db/logical_clock',

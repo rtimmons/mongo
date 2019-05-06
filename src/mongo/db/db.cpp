@@ -270,7 +270,6 @@ ExitCode _initAndListen(int listenPort) {
     serviceContext->setFastClockSource(FastClockSourceFactory::create(Milliseconds(10)));
     auto opObserverRegistry = stdx::make_unique<OpObserverRegistry>();
     opObserverRegistry->addObserver(stdx::make_unique<OpObserverShardingImpl>());
-    opObserverRegistry->addObserver(stdx::make_unique<UUIDCatalogObserver>());
     opObserverRegistry->addObserver(stdx::make_unique<AuthOpObserver>());
 
     if (serverGlobalParams.clusterRole == ClusterRole::ShardServer) {
@@ -976,7 +975,7 @@ void shutdownTask(const ShutdownTaskArgs& shutdownArgs) {
 
     // Shutdown and wait for the service executor to exit
     if (auto svcExec = serviceContext->getServiceExecutor()) {
-        Status status = svcExec->shutdown(Seconds(5));
+        Status status = svcExec->shutdown(Seconds(10));
         if (!status.isOK()) {
             log(LogComponent::kNetwork) << "Service executor failed to shutdown within timelimit: "
                                         << status.reason();

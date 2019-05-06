@@ -197,7 +197,6 @@ public:
         repl::ReplClientInfo::forClient(_opCtx->getClient()).clearLastOp_forTest();
 
         auto registry = stdx::make_unique<OpObserverRegistry>();
-        registry->addObserver(stdx::make_unique<UUIDCatalogObserver>());
         registry->addObserver(stdx::make_unique<OpObserverShardingImpl>());
         _opCtx->getServiceContext()->setOpObserver(std::move(registry));
 
@@ -238,7 +237,7 @@ public:
 
             AutoGetOrCreateDb dbRaii(_opCtx, nss.db(), LockMode::MODE_X);
             WriteUnitOfWork wunit(_opCtx);
-            invariant(dbRaii.getDb()->createCollection(_opCtx, nss.ns()));
+            invariant(dbRaii.getDb()->createCollection(_opCtx, nss));
             wunit.commit();
         });
     }
@@ -311,7 +310,7 @@ public:
                                                            NamespaceString ns,
                                                            const Timestamp& ts) {
         OneOffRead oor(_opCtx, ts);
-        return kvCatalog->getMetaData(_opCtx, ns.ns());
+        return kvCatalog->getMetaData(_opCtx, ns);
     }
 
     StatusWith<BSONObj> doAtomicApplyOps(const std::string& dbName,
@@ -469,7 +468,7 @@ public:
         // getAllIdents() actually looks in the RecordStore for a list of all idents, and is thus
         // versioned by timestamp. We can expect a namespace to have a consistent ident across
         // timestamps, provided the collection does not get renamed.
-        auto expectedIdent = kvCatalog->getCollectionIdent(nss.ns());
+        auto expectedIdent = kvCatalog->getCollectionIdent(nss);
         auto idents = kvCatalog->getAllIdents(_opCtx);
         auto found = std::find(idents.begin(), idents.end(), expectedIdent);
 
@@ -1796,7 +1795,7 @@ public:
             // Drop/rename `kvDropDatabase`. `system.profile` does not get dropped/renamed.
             WriteUnitOfWork wuow(_opCtx);
             Database* db = coll.getDb();
-            ASSERT_OK(db->dropCollection(_opCtx, nss.ns()));
+            ASSERT_OK(db->dropCollection(_opCtx, nss));
             wuow.commit();
         }
 
@@ -2685,7 +2684,7 @@ public:
         auto kvStorageEngine =
             dynamic_cast<KVStorageEngine*>(_opCtx->getServiceContext()->getStorageEngine());
         KVCatalog* kvCatalog = kvStorageEngine->getCatalog();
-        auto indexIdent = kvCatalog->getIndexIdent(_opCtx, nss.ns(), "user_1_db_1");
+        auto indexIdent = kvCatalog->getIndexIdent(_opCtx, nss, "user_1_db_1");
         assertIdentsMissingAtTimestamp(kvCatalog, "", indexIdent, pastTs);
         assertIdentsMissingAtTimestamp(kvCatalog, "", indexIdent, presentTs);
         assertIdentsMissingAtTimestamp(kvCatalog, "", indexIdent, futureTs);
@@ -2824,18 +2823,29 @@ public:
     }
 };
 
+class MultiOplogScopedSettings {
+public:
+    MultiOplogScopedSettings()
+        : _prevPackingLimit(gMaxNumberOfTransactionOperationsInSingleOplogEntry) {
+        gUseMultipleOplogEntryFormatForTransactions = true;
+        gMaxNumberOfTransactionOperationsInSingleOplogEntry = 1;
+    }
+    ~MultiOplogScopedSettings() {
+        gUseMultipleOplogEntryFormatForTransactions = false;
+        gMaxNumberOfTransactionOperationsInSingleOplogEntry = _prevPackingLimit;
+    }
+
+private:
+    int _prevPackingLimit;
+};
+
 class MultiOplogEntryTransaction : public MultiDocumentTransactionTest {
 public:
     MultiOplogEntryTransaction() : MultiDocumentTransactionTest("multiOplogEntryTransaction") {
-        gUseMultipleOplogEntryFormatForTransactions = true;
         const auto currentTime = _clock->getClusterTime();
         firstOplogEntryTs = currentTime.addTicks(1).asTimestamp();
         secondOplogEntryTs = currentTime.addTicks(2).asTimestamp();
         commitEntryTs = currentTime.addTicks(3).asTimestamp();
-    }
-
-    ~MultiOplogEntryTransaction() {
-        gUseMultipleOplogEntryFormatForTransactions = false;
     }
 
     void run() {
@@ -2890,10 +2900,18 @@ public:
             assertOldestActiveTxnTimestampEquals(boost::none, nullTs);
 
             // first oplog entry should exist at firstOplogEntryTs and after it.
-            const auto firstOplogEntryFilter = BSON("ts" << firstOplogEntryTs << "op"
-                                                         << "i"
-                                                         << "o"
-                                                         << doc);
+            const auto firstOplogEntryFilter =
+                BSON("ts" << firstOplogEntryTs << "o"
+                          << BSON("applyOps" << BSON_ARRAY(BSON("op"
+                                                                << "i"
+                                                                << "ns"
+                                                                << nss.ns()
+                                                                << "ui"
+                                                                << coll->uuid().get()
+                                                                << "o"
+                                                                << doc))
+                                             << "partialTxn"
+                                             << true));
             assertOplogDocumentExistsAtTimestamp(firstOplogEntryFilter, presentTs, false);
             assertOplogDocumentExistsAtTimestamp(firstOplogEntryFilter, beforeTxnTs, false);
             assertOplogDocumentExistsAtTimestamp(firstOplogEntryFilter, firstOplogEntryTs, true);
@@ -2902,10 +2920,18 @@ public:
             assertOplogDocumentExistsAtTimestamp(firstOplogEntryFilter, nullTs, true);
 
             // second oplog entry should exist at secondOplogEntryTs and after it.
-            const auto secondOplogEntryFilter = BSON("ts" << secondOplogEntryTs << "op"
-                                                          << "i"
-                                                          << "o"
-                                                          << doc2);
+            const auto secondOplogEntryFilter =
+                BSON("ts" << secondOplogEntryTs << "o"
+                          << BSON("applyOps" << BSON_ARRAY(BSON("op"
+                                                                << "i"
+                                                                << "ns"
+                                                                << nss.ns()
+                                                                << "ui"
+                                                                << coll->uuid().get()
+                                                                << "o"
+                                                                << doc2))
+                                             << "partialTxn"
+                                             << true));
             assertOplogDocumentExistsAtTimestamp(secondOplogEntryFilter, presentTs, false);
             assertOplogDocumentExistsAtTimestamp(secondOplogEntryFilter, beforeTxnTs, false);
             assertOplogDocumentExistsAtTimestamp(secondOplogEntryFilter, firstOplogEntryTs, false);
@@ -2938,22 +2964,20 @@ public:
 
 protected:
     Timestamp firstOplogEntryTs, secondOplogEntryTs;
+
+private:
+    MultiOplogScopedSettings multiOplogSettings;
 };
 
 class CommitPreparedMultiOplogEntryTransaction : public MultiDocumentTransactionTest {
 public:
     CommitPreparedMultiOplogEntryTransaction()
         : MultiDocumentTransactionTest("preparedMultiOplogEntryTransaction") {
-        gUseMultipleOplogEntryFormatForTransactions = true;
         const auto currentTime = _clock->getClusterTime();
         firstOplogEntryTs = currentTime.addTicks(1).asTimestamp();
         secondOplogEntryTs = currentTime.addTicks(2).asTimestamp();
         prepareEntryTs = currentTime.addTicks(3).asTimestamp();
         commitEntryTs = currentTime.addTicks(4).asTimestamp();
-    }
-
-    ~CommitPreparedMultiOplogEntryTransaction() {
-        gUseMultipleOplogEntryFormatForTransactions = false;
     }
 
     void run() {
@@ -3083,10 +3107,18 @@ public:
             assertOplogDocumentExistsAtTimestamp(commitFilter, nullTs, true);
 
             // The first oplog entry should exist at firstOplogEntryTs and onwards.
-            const auto firstOplogEntryFilter = BSON("ts" << firstOplogEntryTs << "op"
-                                                         << "i"
-                                                         << "o"
-                                                         << doc);
+            const auto firstOplogEntryFilter =
+                BSON("ts" << firstOplogEntryTs << "o"
+                          << BSON("applyOps" << BSON_ARRAY(BSON("op"
+                                                                << "i"
+                                                                << "ns"
+                                                                << nss.ns()
+                                                                << "ui"
+                                                                << coll->uuid().get()
+                                                                << "o"
+                                                                << doc))
+                                             << "partialTxn"
+                                             << true));
             assertOplogDocumentExistsAtTimestamp(firstOplogEntryFilter, presentTs, false);
             assertOplogDocumentExistsAtTimestamp(firstOplogEntryFilter, beforeTxnTs, false);
             assertOplogDocumentExistsAtTimestamp(firstOplogEntryFilter, firstOplogEntryTs, true);
@@ -3094,12 +3126,19 @@ public:
             assertOplogDocumentExistsAtTimestamp(firstOplogEntryFilter, prepareEntryTs, true);
             assertOplogDocumentExistsAtTimestamp(firstOplogEntryFilter, commitEntryTs, true);
             assertOplogDocumentExistsAtTimestamp(firstOplogEntryFilter, nullTs, true);
-
             // The second oplog entry should exist at secondOplogEntryTs and onwards.
-            const auto secondOplogEntryFilter = BSON("ts" << secondOplogEntryTs << "op"
-                                                          << "i"
-                                                          << "o"
-                                                          << doc2);
+            const auto secondOplogEntryFilter =
+                BSON("ts" << secondOplogEntryTs << "o"
+                          << BSON("applyOps" << BSON_ARRAY(BSON("op"
+                                                                << "i"
+                                                                << "ns"
+                                                                << nss.ns()
+                                                                << "ui"
+                                                                << coll->uuid().get()
+                                                                << "o"
+                                                                << doc2))
+                                             << "partialTxn"
+                                             << true));
             assertOplogDocumentExistsAtTimestamp(secondOplogEntryFilter, presentTs, false);
             assertOplogDocumentExistsAtTimestamp(secondOplogEntryFilter, beforeTxnTs, false);
             assertOplogDocumentExistsAtTimestamp(secondOplogEntryFilter, firstOplogEntryTs, false);
@@ -3140,21 +3179,19 @@ public:
 
 protected:
     Timestamp firstOplogEntryTs, secondOplogEntryTs, prepareEntryTs;
+
+private:
+    MultiOplogScopedSettings multiOplogSettings;
 };
 
 class AbortPreparedMultiOplogEntryTransaction : public MultiDocumentTransactionTest {
 public:
     AbortPreparedMultiOplogEntryTransaction()
         : MultiDocumentTransactionTest("preparedMultiOplogEntryTransaction") {
-        gUseMultipleOplogEntryFormatForTransactions = true;
         const auto currentTime = _clock->getClusterTime();
         firstOplogEntryTs = currentTime.addTicks(1).asTimestamp();
         prepareEntryTs = currentTime.addTicks(2).asTimestamp();
         abortEntryTs = currentTime.addTicks(3).asTimestamp();
-    }
-
-    ~AbortPreparedMultiOplogEntryTransaction() {
-        gUseMultipleOplogEntryFormatForTransactions = false;
     }
 
     void run() {
@@ -3196,7 +3233,6 @@ public:
         txnParticipant.abortActiveTransaction(_opCtx);
 
         txnParticipant.stashTransactionResources(_opCtx);
-        const BSONObj query1 = BSON("_id" << 1);
         {
             // The prepare oplog entry should exist at prepareEntryTs and onwards.
             assertOplogDocumentExistsAtTimestamp(prepareFilter, presentTs, false);
@@ -3212,11 +3248,26 @@ public:
             assertOplogDocumentExistsAtTimestamp(abortFilter, abortEntryTs, true);
             assertOplogDocumentExistsAtTimestamp(abortFilter, nullTs, true);
 
+            UUID ui = UUID::gen();
+            {
+                AutoGetCollection autoColl(_opCtx, nss, LockMode::MODE_X, LockMode::MODE_IX);
+                auto coll = autoColl.getCollection();
+                ASSERT(coll);
+                ui = coll->uuid().get();
+            }
+
             // The first oplog entry should exist at firstOplogEntryTs and onwards.
-            const auto firstOplogEntryFilter = BSON("ts" << firstOplogEntryTs << "op"
-                                                         << "i"
-                                                         << "o"
-                                                         << doc);
+            const auto firstOplogEntryFilter = BSON(
+                "ts" << firstOplogEntryTs << "o" << BSON("applyOps" << BSON_ARRAY(BSON("op"
+                                                                                       << "i"
+                                                                                       << "ns"
+                                                                                       << nss.ns()
+                                                                                       << "ui"
+                                                                                       << ui
+                                                                                       << "o"
+                                                                                       << doc))
+                                                                    << "partialTxn"
+                                                                    << true));
             assertOplogDocumentExistsAtTimestamp(firstOplogEntryFilter, presentTs, false);
             assertOplogDocumentExistsAtTimestamp(firstOplogEntryFilter, beforeTxnTs, false);
             assertOplogDocumentExistsAtTimestamp(firstOplogEntryFilter, firstOplogEntryTs, true);
@@ -3240,6 +3291,9 @@ public:
 
 protected:
     Timestamp firstOplogEntryTs, secondOplogEntryTs, prepareEntryTs, abortEntryTs;
+
+private:
+    MultiOplogScopedSettings multiOplogSettings;
 };
 
 class PreparedMultiDocumentTransaction : public MultiDocumentTransactionTest {
@@ -3474,8 +3528,9 @@ public:
         // TimestampIndexBuilds<SimulatePrimary>
         add<TimestampIndexBuilds<false>>();
         add<TimestampIndexBuilds<true>>();
-        add<TimestampIndexBuildDrain<false>>();
-        add<TimestampIndexBuildDrain<true>>();
+        // TODO (SERVER-40894): Make index builds timestamp drained writes
+        // add<TimestampIndexBuildDrain<false>>();
+        // add<TimestampIndexBuildDrain<true>>();
         add<TimestampMultiIndexBuilds>();
         add<TimestampMultiIndexBuildsDuringRename>();
         add<TimestampIndexDrops>();

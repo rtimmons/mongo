@@ -167,7 +167,7 @@ IndexCatalogEntry* IndexCatalogImpl::_setupInMemoryStructures(
     KVStorageEngine* engine =
         checked_cast<KVStorageEngine*>(opCtx->getServiceContext()->getStorageEngine());
     std::string ident =
-        engine->getCatalog()->getIndexIdent(opCtx, _collection->ns().ns(), desc->indexName());
+        engine->getCatalog()->getIndexIdent(opCtx, _collection->ns(), desc->indexName());
 
     SortedDataInterface* sdi =
         engine->getEngine()->getGroupedSortedDataInterface(opCtx, ident, desc, entry->getPrefix());
@@ -321,6 +321,61 @@ Status IndexCatalogImpl::_isNonIDIndexAndNotAllowedToBuild(OperationContext* opC
     }
 
     return Status::OK();
+}
+
+void IndexCatalogImpl::_logInternalState(OperationContext* opCtx,
+                                         long long numIndexesInCollectionCatalogEntry,
+                                         const std::vector<std::string>& indexNamesToDrop,
+                                         bool haveIdIndex) {
+    invariant(opCtx->lockState()->isCollectionLockedForMode(_collection->ns(), MODE_X));
+
+    error() << "Internal Index Catalog state: "
+            << " numIndexesTotal(): " << numIndexesTotal(opCtx)
+            << " numSystemIndexesEntries: " << numIndexesInCollectionCatalogEntry
+            << " _readyIndexes.size(): " << _readyIndexes.size()
+            << " _buildingIndexes.size(): " << _buildingIndexes.size()
+            << " indexNamesToDrop: " << indexNamesToDrop.size() << " haveIdIndex: " << haveIdIndex;
+
+    // Report the ready indexes.
+    error() << "Ready indexes:";
+    for (const auto& entry : _readyIndexes) {
+        const IndexDescriptor* desc = entry->descriptor();
+        error() << "Index '" << desc->indexName()
+                << "' with specification: " << redact(desc->infoObj());
+    }
+
+    // Report the in-progress indexes.
+    error() << "In-progress indexes:";
+    for (const auto& entry : _buildingIndexes) {
+        const IndexDescriptor* desc = entry->descriptor();
+        error() << "Index '" << desc->indexName()
+                << "' with specification: " << redact(desc->infoObj());
+    }
+
+    error() << "Internal Collection Catalog Entry state:";
+    std::vector<std::string> allIndexes;
+    std::vector<std::string> readyIndexes;
+
+    _collection->getCatalogEntry()->getAllIndexes(opCtx, &allIndexes);
+    _collection->getCatalogEntry()->getReadyIndexes(opCtx, &readyIndexes);
+
+    error() << "All indexes:";
+    for (const auto& index : allIndexes) {
+        error() << "Index '" << index << "' with specification: "
+                << redact(_collection->getCatalogEntry()->getIndexSpec(opCtx, index));
+    }
+
+    error() << "Ready indexes:";
+    for (const auto& index : readyIndexes) {
+        error() << "Index '" << index << "' with specification: "
+                << redact(_collection->getCatalogEntry()->getIndexSpec(opCtx, index));
+    }
+
+    error() << "Index names to drop:";
+    for (const auto& indexNameToDrop : indexNamesToDrop) {
+        error() << "Index '" << indexNameToDrop << "' with specification: "
+                << redact(_collection->getCatalogEntry()->getIndexSpec(opCtx, indexNameToDrop));
+    }
 }
 
 StatusWith<BSONObj> IndexCatalogImpl::prepareSpecForCreate(OperationContext* opCtx,
@@ -876,12 +931,8 @@ void IndexCatalogImpl::dropAllIndexes(OperationContext* opCtx,
         fassert(17336, _readyIndexes.size() == 1);
     } else {
         if (numIndexesTotal(opCtx) || numIndexesInCollectionCatalogEntry || _readyIndexes.size()) {
-            error() << "About to fassert - "
-                    << " numIndexesTotal(): " << numIndexesTotal(opCtx)
-                    << " numSystemIndexesEntries: " << numIndexesInCollectionCatalogEntry
-                    << " _readyIndexes.size(): " << _readyIndexes.size()
-                    << " indexNamesToDrop: " << indexNamesToDrop.size()
-                    << " haveIdIndex: " << haveIdIndex;
+            _logInternalState(
+                opCtx, numIndexesInCollectionCatalogEntry, indexNamesToDrop, haveIdIndex);
         }
         fassert(17327, numIndexesTotal(opCtx) == 0);
         fassert(17328, numIndexesInCollectionCatalogEntry == 0);

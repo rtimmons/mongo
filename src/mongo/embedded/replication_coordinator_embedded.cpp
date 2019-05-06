@@ -138,6 +138,10 @@ OpTime ReplicationCoordinatorEmbedded::getCurrentCommittedSnapshotOpTime() const
     UASSERT_NOT_IMPLEMENTED;
 }
 
+OpTimeAndWallTime ReplicationCoordinatorEmbedded::getCurrentCommittedSnapshotOpTimeAndWallTime()
+    const {
+    UASSERT_NOT_IMPLEMENTED;
+}
 void ReplicationCoordinatorEmbedded::appendDiagnosticBSON(mongo::BSONObjBuilder*) {
     UASSERT_NOT_IMPLEMENTED;
 }
@@ -152,6 +156,10 @@ MemberState ReplicationCoordinatorEmbedded::getMemberState() const {
 }
 
 std::vector<repl::MemberData> ReplicationCoordinatorEmbedded::getMemberData() const {
+    UASSERT_NOT_IMPLEMENTED;
+}
+
+bool ReplicationCoordinatorEmbedded::canAcceptNonLocalWrites() const {
     UASSERT_NOT_IMPLEMENTED;
 }
 

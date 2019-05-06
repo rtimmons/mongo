@@ -98,7 +98,7 @@ void NetworkInterfaceTL::startup() {
     _reactor = _tl->getReactor(transport::TransportLayer::kNewReactor);
     auto typeFactory = std::make_unique<connection_pool_tl::TLTypeFactory>(
         _reactor, _tl, std::move(_onConnectHook), _connPoolOpts);
-    _pool = std::make_unique<ConnectionPool>(
+    _pool = std::make_shared<ConnectionPool>(
         std::move(typeFactory), std::string("NetworkInterfaceTL-") + _instanceName, _connPoolOpts);
     _ioThread = stdx::thread([this] {
         setThreadName(_instanceName);
@@ -254,15 +254,14 @@ Status NetworkInterfaceTL::startCommand(const TaskExecutor::CallbackHandle& cbHa
         std::move(connFuture)
             .getAsync([ baton, reactor = _reactor.get(), rw = std::move(remainingWork) ](
                 StatusWith<ConnectionPool::ConnectionHandle> swConn) mutable {
-                baton->schedule([ rw = std::move(rw),
-                                  swConn = std::move(swConn) ](OperationContext * opCtx) mutable {
-                    if (opCtx) {
-                        std::move(rw)(std::move(swConn));
-                    } else {
-                        std::move(rw)(Status(ErrorCodes::ShutdownInProgress,
-                                             "baton is detached, failing operation"));
-                    }
-                });
+                baton->schedule(
+                    [ rw = std::move(rw), swConn = std::move(swConn) ](Status status) mutable {
+                        if (status.isOK()) {
+                            std::move(rw)(std::move(swConn));
+                        } else {
+                            std::move(rw)(std::move(status));
+                        }
+                    });
             });
     } else {
         // otherwise we're happy to run inline

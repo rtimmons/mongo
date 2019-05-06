@@ -81,6 +81,8 @@ public:
 
     virtual MemberState getMemberState() const;
 
+    virtual bool canAcceptNonLocalWrites() const;
+
     virtual Status waitForMemberState(MemberState expectedState, Milliseconds timeout) override;
 
     virtual bool isInPrimaryOrSecondaryState(OperationContext* opCtx) const;
@@ -264,6 +266,8 @@ public:
 
     virtual OpTime getCurrentCommittedSnapshotOpTime() const override;
 
+    virtual OpTimeAndWallTime getCurrentCommittedSnapshotOpTimeAndWallTime() const override;
+
     virtual void waitUntilSnapshotCommitted(OperationContext* opCtx,
                                             const Timestamp& untilSnapshot) override;
 
@@ -291,8 +295,6 @@ public:
      * Always allow writes even if this node is not master. Used by sharding unit tests.
      */
     void alwaysAllowWrites(bool allowWrites);
-
-    void setMaster(bool isMaster);
 
     virtual ServiceContext* getServiceContext() override {
         return _service;

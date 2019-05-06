@@ -37,6 +37,7 @@
 
 #include "mongo/db/catalog/catalog_control.h"
 #include "mongo/db/catalog/uuid_catalog.h"
+#include "mongo/db/catalog/uuid_catalog_helper.h"
 #include "mongo/db/client.h"
 #include "mongo/db/concurrency/d_concurrency.h"
 #include "mongo/db/logical_clock.h"
@@ -134,8 +135,7 @@ void KVStorageEngine::loadCatalog(OperationContext* opCtx) {
         std::sort(identsKnownToStorageEngine.begin(), identsKnownToStorageEngine.end());
     }
 
-    std::vector<std::string> collectionsKnownToCatalog;
-    _catalog->getAllCollections(&collectionsKnownToCatalog);
+    auto collectionsKnownToCatalog = _catalog->getAllCollections();
 
     if (_options.forRepair) {
         // It's possible that there are collection files on disk that are unknown to the catalog. In
@@ -147,7 +147,8 @@ void KVStorageEngine::loadCatalog(OperationContext* opCtx) {
                 bool isOrphan = !std::any_of(collectionsKnownToCatalog.begin(),
                                              collectionsKnownToCatalog.end(),
                                              [this, &ident](const auto& coll) {
-                                                 return _catalog->getCollectionIdent(coll) == ident;
+                                                 return _catalog->getCollectionIdent(
+                                                            NamespaceString(coll)) == ident;
                                              });
                 if (isOrphan) {
                     // If the catalog does not have information about this
@@ -257,9 +258,9 @@ Status KVStorageEngine::_recoverOrphanedCollection(OperationContext* opCtx,
           << collectionIdent;
 
     WriteUnitOfWork wuow(opCtx);
-    const auto metadata = _catalog->getMetaData(opCtx, collectionName.toString());
-    auto status = _engine->recoverOrphanedIdent(
-        opCtx, collectionName.toString(), collectionIdent, metadata.options);
+    const auto metadata = _catalog->getMetaData(opCtx, collectionName);
+    auto status =
+        _engine->recoverOrphanedIdent(opCtx, collectionName, collectionIdent, metadata.options);
 
 
     bool dataModified = status.code() == ErrorCodes::DataModifiedByRepair;
@@ -360,8 +361,7 @@ KVStorageEngine::reconcileCatalogAndIdents(OperationContext* opCtx) {
     // engine. An omission here is fatal. A missing ident could mean a collection drop was rolled
     // back. Note that startup already attempts to open tables; this should only catch errors in
     // other contexts such as `recoverToStableTimestamp`.
-    std::vector<std::string> collections;
-    _catalog->getAllCollections(&collections);
+    auto collections = _catalog->getAllCollections();
     if (!_options.forRepair) {
         for (const auto& coll : collections) {
             const auto& identForColl = _catalog->getCollectionIdent(coll);
@@ -397,7 +397,7 @@ KVStorageEngine::reconcileCatalogAndIdents(OperationContext* opCtx) {
             if (indexMetaData.ready && !foundIdent) {
                 log() << "Expected index data is missing, rebuilding. Collection: " << coll
                       << " Index: " << indexName;
-                ret.emplace_back(coll, indexName);
+                ret.emplace_back(coll.ns(), indexName);
                 continue;
             }
 
@@ -434,7 +434,7 @@ KVStorageEngine::reconcileCatalogAndIdents(OperationContext* opCtx) {
                 log()
                     << "Expected background index build did not complete, rebuilding. Collection: "
                     << coll << " Index: " << indexName;
-                ret.emplace_back(coll, indexName);
+                ret.emplace_back(coll.ns(), indexName);
                 continue;
             }
 
@@ -532,7 +532,8 @@ Status KVStorageEngine::dropDatabase(OperationContext* opCtx, StringData db) {
         }
     }
 
-    std::vector<NamespaceString> toDrop = UUIDCatalog::get(opCtx).getAllCollectionNamesFromDb(db);
+    std::vector<NamespaceString> toDrop =
+        UUIDCatalog::get(opCtx).getAllCollectionNamesFromDb(opCtx, db);
 
     // Do not timestamp any of the following writes. This will remove entries from the catalog as
     // well as drop any underlying tables. It's not expected for dropping tables to be reversible
@@ -569,7 +570,7 @@ Status KVStorageEngine::_dropCollectionsNoTimestamp(OperationContext* opCtx,
     WriteUnitOfWork untimestampedDropWuow(opCtx);
     for (auto& nss : toDrop) {
         invariant(getCatalog());
-        Status result = getCatalog()->dropCollection(opCtx, nss.ns());
+        Status result = getCatalog()->dropCollection(opCtx, nss);
         if (!result.isOK() && firstError.isOK()) {
             firstError = result;
         }
@@ -625,21 +626,21 @@ SnapshotManager* KVStorageEngine::getSnapshotManager() const {
     return _engine->getSnapshotManager();
 }
 
-Status KVStorageEngine::repairRecordStore(OperationContext* opCtx, const std::string& ns) {
+Status KVStorageEngine::repairRecordStore(OperationContext* opCtx, const NamespaceString& nss) {
     auto repairObserver = StorageRepairObserver::get(getGlobalServiceContext());
     invariant(repairObserver->isIncomplete());
 
-    Status status = _engine->repairIdent(opCtx, _catalog->getCollectionIdent(ns));
+    Status status = _engine->repairIdent(opCtx, _catalog->getCollectionIdent(nss));
     bool dataModified = status.code() == ErrorCodes::DataModifiedByRepair;
     if (!status.isOK() && !dataModified) {
         return status;
     }
 
     if (dataModified) {
-        repairObserver->onModification(str::stream() << "Collection " << ns << ": "
+        repairObserver->onModification(str::stream() << "Collection " << nss << ": "
                                                      << status.reason());
     }
-    _catalog->reinitCollectionAfterRepair(opCtx, ns);
+    _catalog->reinitCollectionAfterRepair(opCtx, nss);
 
     return Status::OK();
 }
@@ -911,20 +912,22 @@ void KVStorageEngine::TimestampMonitor::removeListener(TimestampListener* listen
 
 int64_t KVStorageEngine::sizeOnDiskForDb(OperationContext* opCtx, StringData dbName) {
     int64_t size = 0;
-    auto catalogEntries = UUIDCatalog::get(opCtx).getAllCatalogEntriesFromDb(dbName);
 
-    for (auto catalogEntry : catalogEntries) {
-        size += catalogEntry->getRecordStore()->storageSize(opCtx);
+    catalog::forEachCollectionFromDb(
+        opCtx, dbName, MODE_IS, [&](Collection* collection, CollectionCatalogEntry* catalogEntry) {
+            size += catalogEntry->getRecordStore()->storageSize(opCtx);
 
-        std::vector<std::string> indexNames;
-        catalogEntry->getAllIndexes(opCtx, &indexNames);
+            std::vector<std::string> indexNames;
+            catalogEntry->getAllIndexes(opCtx, &indexNames);
 
-        for (size_t i = 0; i < indexNames.size(); i++) {
-            std::string ident =
-                _catalog->getIndexIdent(opCtx, catalogEntry->ns().ns(), indexNames[i]);
-            size += _engine->getIdentSize(opCtx, ident);
-        }
-    }
+            for (size_t i = 0; i < indexNames.size(); i++) {
+                std::string ident =
+                    _catalog->getIndexIdent(opCtx, catalogEntry->ns(), indexNames[i]);
+                size += _engine->getIdentSize(opCtx, ident);
+            }
+
+            return true;
+        });
 
     return size;
 }

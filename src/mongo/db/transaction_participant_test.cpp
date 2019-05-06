@@ -247,7 +247,7 @@ protected:
             WriteUnitOfWork wuow(opCtx());
             CollectionOptions options;
             options.uuid = _uuid;
-            db->createCollection(opCtx(), kNss.ns(), options);
+            db->createCollection(opCtx(), kNss, options);
             wuow.commit();
         }
 
@@ -418,7 +418,7 @@ TEST_F(TxnParticipantTest, AutocommitRequiredOnEveryTxnOp) {
     // Omitting 'autocommit' after the first statement of a transaction should throw an error.
     ASSERT_THROWS_CODE(txnParticipant.beginOrContinue(opCtx(), txnNum, boost::none, boost::none),
                        AssertionException,
-                       ErrorCodes::InvalidOptions);
+                       ErrorCodes::IncompleteTransactionHistory);
 
     // Including autocommit=false should succeed.
     txnParticipant.beginOrContinue(opCtx(), *opCtx()->getTxnNumber(), false, boost::none);
@@ -545,7 +545,7 @@ TEST_F(TxnParticipantTest, PrepareFailsOnTemporaryCollection) {
         CollectionOptions options;
         options.uuid = tempCollUUID;
         options.temp = true;
-        db->createCollection(opCtx(), tempCollNss.ns(), options);
+        db->createCollection(opCtx(), tempCollNss, options);
         wuow.commit();
     }
 
@@ -571,7 +571,7 @@ TEST_F(TxnParticipantTest, CommitTransactionSetsCommitTimestampOnPreparedTransac
     txnParticipant.unstashTransactionResources(opCtx(), "commitTransaction");
 
     // The transaction machinery cannot store an empty locker.
-    Lock::GlobalLock lk(opCtx(), MODE_IX, Date_t::now(), Lock::InterruptBehavior::kThrow);
+    { Lock::GlobalLock lk(opCtx(), MODE_IX, Date_t::now(), Lock::InterruptBehavior::kThrow); }
     const auto prepareTimestamp = txnParticipant.prepareTransaction(opCtx(), {});
     const auto commitTS = Timestamp(prepareTimestamp.getSecs(), prepareTimestamp.getInc() + 1);
 
@@ -605,7 +605,7 @@ TEST_F(TxnParticipantTest, CommitTransactionWithCommitTimestampFailsOnUnprepared
     txnParticipant.unstashTransactionResources(opCtx(), "commitTransaction");
 
     // The transaction machinery cannot store an empty locker.
-    Lock::GlobalLock lk(opCtx(), MODE_IX, Date_t::now(), Lock::InterruptBehavior::kThrow);
+    { Lock::GlobalLock lk(opCtx(), MODE_IX, Date_t::now(), Lock::InterruptBehavior::kThrow); }
     ASSERT_THROWS_CODE(txnParticipant.commitPreparedTransaction(opCtx(), commitTimestamp, {}),
                        AssertionException,
                        ErrorCodes::InvalidOptions);
@@ -626,7 +626,7 @@ TEST_F(TxnParticipantTest, CommitTransactionDoesNotSetCommitTimestampOnUnprepare
     txnParticipant.unstashTransactionResources(opCtx(), "commitTransaction");
 
     // The transaction machinery cannot store an empty locker.
-    Lock::GlobalLock lk(opCtx(), MODE_IX, Date_t::now(), Lock::InterruptBehavior::kThrow);
+    { Lock::GlobalLock lk(opCtx(), MODE_IX, Date_t::now(), Lock::InterruptBehavior::kThrow); }
     txnParticipant.commitUnpreparedTransaction(opCtx());
 
     ASSERT(opCtx()->recoveryUnit()->getCommitTimestamp().isNull());
@@ -643,7 +643,7 @@ TEST_F(TxnParticipantTest, CommitTransactionWithoutCommitTimestampFailsOnPrepare
     txnParticipant.unstashTransactionResources(opCtx(), "commitTransaction");
 
     // The transaction machinery cannot store an empty locker.
-    Lock::GlobalLock lk(opCtx(), MODE_IX, Date_t::now(), Lock::InterruptBehavior::kThrow);
+    { Lock::GlobalLock lk(opCtx(), MODE_IX, Date_t::now(), Lock::InterruptBehavior::kThrow); }
     txnParticipant.prepareTransaction(opCtx(), {});
     ASSERT_THROWS_CODE(txnParticipant.commitUnpreparedTransaction(opCtx()),
                        AssertionException,
@@ -657,7 +657,7 @@ TEST_F(TxnParticipantTest, CommitTransactionWithNullCommitTimestampFailsOnPrepar
     txnParticipant.unstashTransactionResources(opCtx(), "commitTransaction");
 
     // The transaction machinery cannot store an empty locker.
-    Lock::GlobalLock lk(opCtx(), MODE_IX, Date_t::now(), Lock::InterruptBehavior::kThrow);
+    { Lock::GlobalLock lk(opCtx(), MODE_IX, Date_t::now(), Lock::InterruptBehavior::kThrow); }
     txnParticipant.prepareTransaction(opCtx(), {});
     ASSERT_THROWS_CODE(txnParticipant.commitPreparedTransaction(opCtx(), Timestamp(), {}),
                        AssertionException,
@@ -672,7 +672,7 @@ TEST_F(TxnParticipantTest,
     txnParticipant.unstashTransactionResources(opCtx(), "commitTransaction");
 
     // The transaction machinery cannot store an empty locker.
-    Lock::GlobalLock lk(opCtx(), MODE_IX, Date_t::now(), Lock::InterruptBehavior::kThrow);
+    { Lock::GlobalLock lk(opCtx(), MODE_IX, Date_t::now(), Lock::InterruptBehavior::kThrow); }
     auto prepareTimestamp = txnParticipant.prepareTransaction(opCtx(), {});
     ASSERT_THROWS_CODE(txnParticipant.commitPreparedTransaction(
                            opCtx(), Timestamp(prepareTimestamp.getSecs() - 1, 1), {}),
@@ -3640,7 +3640,7 @@ TEST_F(TxnParticipantTest, OldestActiveTransactionTimestamp) {
 
         AutoGetOrCreateDb autoDb(opCtx(), nss.db(), MODE_X);
         WriteUnitOfWork wuow(opCtx());
-        auto coll = autoDb.getDb()->getCollection(opCtx(), nss.ns());
+        auto coll = autoDb.getDb()->getCollection(opCtx(), nss);
         ASSERT(coll);
         OpDebug* const nullOpDebug = nullptr;
         ASSERT_OK(
@@ -3652,7 +3652,7 @@ TEST_F(TxnParticipantTest, OldestActiveTransactionTimestamp) {
         Timestamp ts(1, i);
         AutoGetOrCreateDb autoDb(opCtx(), nss.db(), MODE_X);
         WriteUnitOfWork wuow(opCtx());
-        auto coll = autoDb.getDb()->getCollection(opCtx(), nss.ns());
+        auto coll = autoDb.getDb()->getCollection(opCtx(), nss);
         ASSERT(coll);
         auto cursor = coll->getCursor(opCtx());
         while (auto record = cursor->next()) {
@@ -3710,6 +3710,83 @@ TEST_F(TxnParticipantTest, OldestActiveTransactionTimestampTimeout) {
     ASSERT_FALSE(statusWith.isOK());
     ASSERT_TRUE(ErrorCodes::isInterruption(statusWith.getStatus().code()));
 };
+
+TEST_F(TxnParticipantTest, ExitPreparePromiseIsFulfilledOnAbortAfterPrepare) {
+    MongoDOperationContextSession opCtxSession(opCtx());
+    auto txnParticipant = TransactionParticipant::get(opCtx());
+
+    txnParticipant.beginOrContinue(
+        opCtx(), *opCtx()->getTxnNumber(), false /* autocommit */, true /* startTransaction */);
+    ASSERT_TRUE(txnParticipant.onExitPrepare().isReady());
+
+    txnParticipant.unstashTransactionResources(opCtx(), "find");
+    ASSERT_TRUE(txnParticipant.onExitPrepare().isReady());
+
+    const auto prepareOpTime = repl::OpTime({3, 2}, 0);
+    txnParticipant.prepareTransaction(opCtx(), prepareOpTime);
+    const auto exitPrepareFuture = txnParticipant.onExitPrepare();
+    ASSERT_FALSE(exitPrepareFuture.isReady());
+
+    txnParticipant.abortActiveTransaction(opCtx());
+    ASSERT_TRUE(exitPrepareFuture.isReady());
+
+    // Once the promise has been fulfilled, new callers of onExitPrepare should immediately be
+    // ready.
+    ASSERT_TRUE(txnParticipant.onExitPrepare().isReady());
+
+    // abortTransaction is retryable, but does not cause the completion promise to be set again.
+    txnParticipant.abortActiveTransaction(opCtx());
+}
+
+TEST_F(TxnParticipantTest, ExitPreparePromiseIsFulfilledOnCommitAfterPrepare) {
+    MongoDOperationContextSession opCtxSession(opCtx());
+    auto txnParticipant = TransactionParticipant::get(opCtx());
+
+    txnParticipant.beginOrContinue(
+        opCtx(), *opCtx()->getTxnNumber(), false /* autocommit */, true /* startTransaction */);
+    ASSERT_TRUE(txnParticipant.onExitPrepare().isReady());
+
+    txnParticipant.unstashTransactionResources(opCtx(), "find");
+    ASSERT_TRUE(txnParticipant.onExitPrepare().isReady());
+
+    const auto prepareOpTime = repl::OpTime({3, 2}, 0);
+    const auto prepareTimestamp = txnParticipant.prepareTransaction(opCtx(), prepareOpTime);
+    const auto exitPrepareFuture = txnParticipant.onExitPrepare();
+    ASSERT_FALSE(exitPrepareFuture.isReady());
+
+    const auto commitTimestamp =
+        Timestamp(prepareTimestamp.getSecs(), prepareTimestamp.getInc() + 1);
+    txnParticipant.commitPreparedTransaction(opCtx(), commitTimestamp, {});
+    ASSERT_TRUE(exitPrepareFuture.isReady());
+
+    // Once the promise has been fulfilled, new callers of onExitPrepare should immediately be
+    // ready.
+    ASSERT_TRUE(txnParticipant.onExitPrepare().isReady());
+}
+
+TEST_F(TxnParticipantTest, ExitPreparePromiseIsFulfilledOnAbortPreparedTransactionForRollback) {
+    MongoDOperationContextSession opCtxSession(opCtx());
+    auto txnParticipant = TransactionParticipant::get(opCtx());
+
+    txnParticipant.beginOrContinue(
+        opCtx(), *opCtx()->getTxnNumber(), false /* autocommit */, true /* startTransaction */);
+    ASSERT_TRUE(txnParticipant.onExitPrepare().isReady());
+
+    txnParticipant.unstashTransactionResources(opCtx(), "find");
+    ASSERT_TRUE(txnParticipant.onExitPrepare().isReady());
+
+    const auto prepareOpTime = repl::OpTime({3, 2}, 0);
+    txnParticipant.prepareTransaction(opCtx(), prepareOpTime);
+    const auto exitPrepareFuture = txnParticipant.onExitPrepare();
+    ASSERT_FALSE(exitPrepareFuture.isReady());
+
+    txnParticipant.abortPreparedTransactionForRollback(opCtx());
+    ASSERT_TRUE(exitPrepareFuture.isReady());
+
+    // Once the promise has been fulfilled, new callers of onExitPrepare should immediately be
+    // ready.
+    ASSERT_TRUE(txnParticipant.onExitPrepare().isReady());
+}
 
 }  // namespace
 }  // namespace mongo

@@ -47,7 +47,6 @@
 #include "mongo/db/catalog/document_validation.h"
 #include "mongo/db/catalog/index_key_validate.h"
 #include "mongo/db/catalog/multi_index_block.h"
-#include "mongo/db/catalog/namespace_uuid_cache.h"
 #include "mongo/db/catalog/uuid_catalog.h"
 #include "mongo/db/concurrency/write_conflict_exception.h"
 #include "mongo/db/index/index_descriptor.h"
@@ -142,14 +141,14 @@ Status repairCollections(OperationContext* opCtx,
                          const std::string& dbName,
                          stdx::function<void(const std::string& dbName)> onRecordStoreRepair) {
 
-    auto colls = UUIDCatalog::get(opCtx).getAllCollectionNamesFromDb(dbName);
+    auto colls = UUIDCatalog::get(opCtx).getAllCollectionNamesFromDb(opCtx, dbName);
 
     for (const auto& nss : colls) {
         opCtx->checkForInterrupt();
 
         log() << "Repairing collection " << nss;
 
-        Status status = engine->repairRecordStore(opCtx, nss.ns());
+        Status status = engine->repairRecordStore(opCtx, nss);
         if (!status.isOK())
             return status;
     }
@@ -183,7 +182,7 @@ Status repairDatabase(OperationContext* opCtx,
     DisableDocumentValidation validationDisabler(opCtx);
 
     // We must hold some form of lock here
-    invariant(opCtx->lockState()->isLocked());
+    invariant(opCtx->lockState()->isW());
     invariant(dbName.find('.') == std::string::npos);
 
     log() << "repairDatabase " << dbName;

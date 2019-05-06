@@ -46,44 +46,6 @@ const ServiceContext::Decoration<UUIDCatalog> getCatalog =
     ServiceContext::declareDecoration<UUIDCatalog>();
 }  // namespace
 
-void UUIDCatalogObserver::onCollMod(OperationContext* opCtx,
-                                    const NamespaceString& nss,
-                                    OptionalCollectionUUID uuid,
-                                    const BSONObj& collModCmd,
-                                    const CollectionOptions& oldCollOptions,
-                                    boost::optional<TTLCollModInfo> ttlInfo) {
-    if (!uuid)
-        return;
-    UUIDCatalog& catalog = UUIDCatalog::get(opCtx);
-    Collection* catalogColl = catalog.lookupCollectionByUUID(uuid.get());
-    invariant(
-        catalogColl->uuid() == uuid,
-        str::stream() << (uuid ? uuid->toString() : "<no uuid>") << ","
-                      << (catalogColl->uuid() ? catalogColl->uuid()->toString() : "<no uuid>"));
-}
-
-repl::OpTime UUIDCatalogObserver::onDropCollection(OperationContext* opCtx,
-                                                   const NamespaceString& collectionName,
-                                                   OptionalCollectionUUID uuid,
-                                                   std::uint64_t numRecords,
-                                                   const CollectionDropType dropType) {
-
-    invariant(uuid);
-
-    // Replicated drops are two-phase, meaning that the collection is first renamed into a "drop
-    // pending" state and reaped later. This op observer is only called for the rename phase, which
-    // means the UUID mapping is still valid.
-    //
-    // On the other hand, if the drop is not replicated, it takes effect immediately. In this case,
-    // the UUID mapping must be removed from the UUID catalog.
-    if (dropType == CollectionDropType::kOnePhase) {
-        UUIDCatalog& catalog = UUIDCatalog::get(opCtx);
-        catalog.onDropCollection(opCtx, uuid.get());
-    }
-
-    return {};
-}
-
 class UUIDCatalog::FinishDropChange : public RecoveryUnit::Change {
 public:
     FinishDropChange(UUIDCatalog& catalog, std::unique_ptr<Collection> coll, CollectionUUID uuid)
@@ -145,23 +107,7 @@ UUIDCatalog::iterator::reference UUIDCatalog::iterator::operator*() {
     return _mapIter->second->collectionPtr;
 }
 
-boost::optional<CollectionCatalogEntry*> UUIDCatalog::iterator::catalogEntry() {
-    stdx::lock_guard<stdx::mutex> lock(_uuidCatalog->_catalogLock);
-    _repositionIfNeeded();
-    if (_exhausted()) {
-        return boost::none;
-    }
-
-    return _mapIter->second->collectionCatalogEntry.get();
-}
-
 boost::optional<CollectionUUID> UUIDCatalog::iterator::uuid() {
-    stdx::lock_guard<stdx::mutex> lock(_uuidCatalog->_catalogLock);
-    _repositionIfNeeded();
-    if (_exhausted()) {
-        return boost::none;
-    }
-
     return _uuid;
 }
 
@@ -304,14 +250,10 @@ void UUIDCatalog::setCollectionNamespace(OperationContext* opCtx,
     });
 }
 
-void UUIDCatalog::onCloseDatabase(Database* db) {
+void UUIDCatalog::onCloseDatabase(OperationContext* opCtx, Database* db) {
+    invariant(opCtx->lockState()->isW());
     for (auto it = begin(db->name()); it != end(); ++it) {
-        auto coll = *it;
-        if (coll && coll->uuid()) {
-            // While the collection does not actually get dropped, we're going to destroy the
-            // Collection object, so for purposes of the UUIDCatalog it looks the same.
-            deregisterCollectionObject(coll->uuid().get());
-        }
+        deregisterCollectionObject(it.uuid().get());
     }
 
     auto rid = ResourceId(RESOURCE_DATABASE, db->name());
@@ -367,7 +309,7 @@ NamespaceString UUIDCatalog::lookupNSSByUUID(CollectionUUID uuid) const {
     stdx::lock_guard<stdx::mutex> lock(_catalogLock);
     auto foundIt = _catalog.find(uuid);
     if (foundIt != _catalog.end())
-        return foundIt->second.collection->ns();
+        return foundIt->second.collectionCatalogEntry->ns();
 
     // Only in the case that the catalog is closed and a UUID is currently unknown, resolve it
     // using the pre-close state. This ensures that any tasks reloading the catalog can see their
@@ -396,16 +338,6 @@ boost::optional<CollectionUUID> UUIDCatalog::lookupUUIDByNSS(const NamespaceStri
     return boost::none;
 }
 
-std::vector<CollectionCatalogEntry*> UUIDCatalog::getAllCatalogEntriesFromDb(
-    StringData dbName) const {
-    std::vector<UUID> uuids = getAllCollectionUUIDsFromDb(dbName);
-    std::vector<CollectionCatalogEntry*> ret;
-    for (auto& uuid : uuids) {
-        ret.push_back(lookupCollectionCatalogEntryByUUID(uuid));
-    }
-    return ret;
-}
-
 std::vector<CollectionUUID> UUIDCatalog::getAllCollectionUUIDsFromDb(StringData dbName) const {
     stdx::lock_guard<stdx::mutex> lock(_catalogLock);
     auto minUuid = UUID::parse("00000000-0000-0000-0000-000000000000").getValue();
@@ -419,10 +351,18 @@ std::vector<CollectionUUID> UUIDCatalog::getAllCollectionUUIDsFromDb(StringData 
     return ret;
 }
 
-std::vector<NamespaceString> UUIDCatalog::getAllCollectionNamesFromDb(StringData dbName) const {
+std::vector<NamespaceString> UUIDCatalog::getAllCollectionNamesFromDb(OperationContext* opCtx,
+                                                                      StringData dbName) const {
+    invariant(opCtx->lockState()->isDbLockedForMode(dbName, MODE_S));
+
+    stdx::lock_guard<stdx::mutex> lock(_catalogLock);
+    auto minUuid = UUID::parse("00000000-0000-0000-0000-000000000000").getValue();
+
     std::vector<NamespaceString> ret;
-    for (auto catalogEntry : getAllCatalogEntriesFromDb(dbName)) {
-        ret.push_back(catalogEntry->ns());
+    for (auto it = _orderedCollections.lower_bound(std::make_pair(dbName.toString(), minUuid));
+         it != _orderedCollections.end() && it->first.first == dbName;
+         ++it) {
+        ret.push_back(it->second->collectionCatalogEntry->ns());
     }
     return ret;
 }
@@ -438,50 +378,6 @@ std::vector<std::string> UUIDCatalog::getAllDbNames() const {
         iter = _orderedCollections.upper_bound(std::make_pair(dbName, maxUuid));
     }
     return ret;
-}
-
-boost::optional<CollectionUUID> UUIDCatalog::prev(StringData db, CollectionUUID uuid) {
-    stdx::lock_guard<stdx::mutex> lock(_catalogLock);
-    auto dbIdPair = std::make_pair(db.toString(), uuid);
-    auto entry = _orderedCollections.find(dbIdPair);
-
-    // If the element does not appear or is the first element.
-    if (entry == _orderedCollections.end() || entry == _orderedCollections.begin()) {
-        return boost::none;
-    }
-
-    auto prevEntry = std::prev(entry, 1);
-    while (prevEntry->first.first == db && prevEntry->second->collectionPtr == nullptr) {
-        prevEntry = std::prev(prevEntry, 1);
-    }
-
-    // If the entry is from a different database, there is no previous entry.
-    if (prevEntry->first.first != db) {
-        return boost::none;
-    }
-    return prevEntry->first.second;
-}
-
-boost::optional<CollectionUUID> UUIDCatalog::next(StringData db, CollectionUUID uuid) {
-    stdx::lock_guard<stdx::mutex> lock(_catalogLock);
-    auto dbIdPair = std::make_pair(db.toString(), uuid);
-    auto entry = _orderedCollections.find(dbIdPair);
-
-    // If the element does not appear.
-    if (entry == _orderedCollections.end()) {
-        return boost::none;
-    }
-
-    auto nextEntry = std::next(entry, 1);
-    while (nextEntry != _orderedCollections.end() && nextEntry->first.first == db &&
-           nextEntry->second->collectionPtr == nullptr) {
-        nextEntry = std::next(nextEntry, 1);
-    }
-    // If the element was the last entry or is from a different database.
-    if (nextEntry == _orderedCollections.end() || nextEntry->first.first != db) {
-        return boost::none;
-    }
-    return nextEntry->first.second;
 }
 
 void UUIDCatalog::registerCatalogEntry(
@@ -554,7 +450,7 @@ std::unique_ptr<Collection> UUIDCatalog::deregisterCollectionObject(CollectionUU
 
     LOG(0) << "Deregistering collection object " << ns << " with UUID " << uuid;
 
-    // Make sure collection object eixsts.
+    // Make sure collection object exists.
     invariant(_collections.find(ns) != _collections.end());
     invariant(_orderedCollections.find(dbIdPair) != _orderedCollections.end());
 

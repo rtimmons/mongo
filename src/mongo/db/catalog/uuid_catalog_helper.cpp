@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2018-present MongoDB, Inc.
+ *    Copyright (C) 2019-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -27,33 +27,43 @@
  *    it in the license file.
  */
 
-#pragma once
-
-#include "mongo/db/namespace_string.h"
-#include "mongo/stdx/functional.h"
+#include "mongo/db/catalog/uuid_catalog_helper.h"
+#include "mongo/db/catalog/collection.h"
+#include "mongo/db/catalog/collection_catalog_entry.h"
+#include "mongo/db/concurrency/d_concurrency.h"
 
 namespace mongo {
+namespace catalog {
 
-class OperationContext;
+void forEachCollectionFromDb(
+    OperationContext* opCtx,
+    StringData dbName,
+    LockMode collLockMode,
+    std::function<bool(Collection* collection, CollectionCatalogEntry* catalogEntry)> callback) {
 
-/**
- * See the documentation for yieldAllLocks(...).
- */
-class QueryYield {
-    QueryYield();
+    UUIDCatalog& uuidCatalog = UUIDCatalog::get(opCtx);
+    for (auto collectionIt = uuidCatalog.begin(dbName); collectionIt != uuidCatalog.end();
+         ++collectionIt) {
+        auto uuid = collectionIt.uuid().get();
+        auto nss = uuidCatalog.lookupNSSByUUID(uuid);
 
-public:
-    /**
-     * If not in a nested context, unlocks all locks, suggests to the operating system to
-     * switch to another thread, and then reacquires all locks.
-     *
-     * If in a nested context (eg DBDirectClient), does nothing.
-     *
-     * The whileYieldingFn will be executed after unlocking the locks and before re-acquiring them.
-     */
-    static void yieldAllLocks(OperationContext* opCtx,
-                              stdx::function<void()> whileYieldingFn,
-                              const NamespaceString& planExecNS);
-};
+        // If the NamespaceString we resolve by the 'uuid' is empty, the collection was dropped
+        // and we should move onto the next one.
+        if (nss.isEmpty()) {
+            continue;
+        }
 
+        Lock::CollectionLock clk(opCtx, nss, collLockMode);
+
+        auto collection = uuidCatalog.lookupCollectionByUUID(uuid);
+        auto catalogEntry = uuidCatalog.lookupCollectionCatalogEntryByUUID(uuid);
+        if (!collection || !catalogEntry || catalogEntry->ns() != nss)
+            continue;
+
+        if (!callback(collection, catalogEntry))
+            break;
+    }
+}
+
+}  // namespace catalog
 }  // namespace mongo

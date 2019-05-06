@@ -153,6 +153,11 @@ public:
     virtual MemberState getMemberState() const = 0;
 
     /**
+     * Returns whether this node can accept writes to databases other than local.
+     */
+    virtual bool canAcceptNonLocalWrites() const = 0;
+
+    /**
      * Waits for 'timeout' ms for member state to become 'state'.
      * Returns OK if member state is 'state'.
      * Returns ErrorCodes::ExceededTimeLimit if we timed out waiting for the state change.
@@ -820,6 +825,11 @@ public:
      * Gets the latest OpTime of the currentCommittedSnapshot.
      */
     virtual OpTime getCurrentCommittedSnapshotOpTime() const = 0;
+
+    /**
+     * Gets the latest OpTime of the currentCommittedSnapshot and its corresponding wall clock time.
+     */
+    virtual OpTimeAndWallTime getCurrentCommittedSnapshotOpTimeAndWallTime() const = 0;
 
     /**
      * Appends diagnostics about the replication subsystem.

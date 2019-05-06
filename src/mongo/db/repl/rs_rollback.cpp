@@ -218,7 +218,9 @@ Status FixUpInfo::recordDropTargetInfo(const BSONElement& dropTarget,
     return Status::OK();
 }
 
-Status rollback_internal::updateFixUpInfoFromLocalOplogEntry(FixUpInfo& fixUpInfo,
+Status rollback_internal::updateFixUpInfoFromLocalOplogEntry(OperationContext* opCtx,
+                                                             const OplogInterface& localOplog,
+                                                             FixUpInfo& fixUpInfo,
                                                              const BSONObj& ourObj,
                                                              bool isNestedApplyOpsCommand) {
 
@@ -290,6 +292,14 @@ Status rollback_internal::updateFixUpInfoFromLocalOplogEntry(FixUpInfo& fixUpInf
                 str::stream() << NamespaceString::kSessionTransactionsTableNamespace.ns()
                               << " does not have a UUID, but local op has a transaction number: "
                               << redact(oplogEntry.toBSON()));
+        }
+        if (oplogEntry.isPartialTransaction()) {
+            // If this is a transaction which did not commit, we need do nothing more than
+            // rollback the transaction table entry.  If it did commit, we will have rolled it
+            // back when we rolled back the commit.
+            //
+            // TODO(SERVER-39797): Roll back partial transactions when they commit.
+            return Status::OK();
         }
     }
 
@@ -531,33 +541,59 @@ Status rollback_internal::updateFixUpInfoFromLocalOplogEntry(FixUpInfo& fixUpInf
                 //                        }]
                 //         }
                 // }
-                if (first.type() != Array) {
-                    std::string message = str::stream()
-                        << "Expected applyOps argument to be an array; found " << redact(first);
-                    severe() << message;
-                    return Status(ErrorCodes::UnrecoverableRollbackError, message);
-                }
-                for (const auto& subopElement : first.Array()) {
-                    if (subopElement.type() != Object) {
+                // Additionally, for transactions, applyOps entries may be linked by their
+                // previousTransactionOpTimes.  For those, we need to walk the chain and get to
+                // all the entries.  We don't worry about the order that we walk the entries.
+                auto operations = first;
+                auto prevWriteOpTime = oplogEntry.getPrevWriteOpTimeInTransaction();
+                auto txnHistoryIter = prevWriteOpTime
+                    ? localOplog.makeTransactionHistoryIterator(*prevWriteOpTime)
+                    : nullptr;
+                do {
+                    if (operations.type() != Array) {
                         std::string message = str::stream()
-                            << "Expected applyOps operations to be of Object type, but found "
-                            << redact(subopElement);
+                            << "Expected applyOps argument to be an array; found "
+                            << redact(operations);
                         severe() << message;
                         return Status(ErrorCodes::UnrecoverableRollbackError, message);
                     }
-                    // In applyOps, the object contains an array of different oplog entries, we call
-                    // updateFixUpInfoFromLocalOplogEntry here in order to record the information
-                    // needed for rollback that is contained within the applyOps, creating a nested
-                    // call.
-                    auto subStatus =
-                        updateFixUpInfoFromLocalOplogEntry(fixUpInfo, subopElement.Obj(), true);
-                    if (!subStatus.isOK()) {
-                        return subStatus;
+                    for (const auto& subopElement : operations.Array()) {
+                        if (subopElement.type() != Object) {
+                            std::string message = str::stream()
+                                << "Expected applyOps operations to be of Object type, but found "
+                                << redact(subopElement);
+                            severe() << message;
+                            return Status(ErrorCodes::UnrecoverableRollbackError, message);
+                        }
+                        // In applyOps, the object contains an array of different oplog entries, we
+                        // call
+                        // updateFixUpInfoFromLocalOplogEntry here in order to record the
+                        // information
+                        // needed for rollback that is contained within the applyOps, creating a
+                        // nested
+                        // call.
+                        auto subStatus = updateFixUpInfoFromLocalOplogEntry(
+                            opCtx, localOplog, fixUpInfo, subopElement.Obj(), true);
+                        if (!subStatus.isOK()) {
+                            return subStatus;
+                        }
                     }
-                }
+                    if (!txnHistoryIter || !txnHistoryIter->hasNext())
+                        break;
+                    try {
+                        auto nextApplyOps = txnHistoryIter->next(opCtx);
+                        operations = nextApplyOps.getObject().firstElement();
+                    } catch (const DBException& ex) {
+                        // If we can't get the full transaction history, we can't roll back;
+                        return {ErrorCodes::UnrecoverableRollbackError, ex.reason()};
+                    }
+                } while (1);
                 return Status::OK();
             }
-            // TODO(SERVER-39797): Remove commitTransaction handling for unprepared transactions.
+            case OplogEntry::CommandType::kAbortTransaction: {
+                return Status::OK();
+            }
+            // TODO(SERVER-40728): Remove commitTransaction handling for unprepared transactions.
             case OplogEntry::CommandType::kCommitTransaction: {
                 IDLParserErrorContext ctx("commitTransaction");
                 auto commitCommand = CommitTransactionOplogObject::parse(ctx, obj);
@@ -915,8 +951,8 @@ Status _syncRollback(OperationContext* opCtx,
     log() << "Finding the Common Point";
     try {
 
-        auto processOperationForFixUp = [&how](const BSONObj& operation) {
-            return updateFixUpInfoFromLocalOplogEntry(how, operation, false);
+        auto processOperationForFixUp = [&how, &opCtx, &localOplog](const BSONObj& operation) {
+            return updateFixUpInfoFromLocalOplogEntry(opCtx, localOplog, how, operation, false);
         };
 
         // Calls syncRollBackLocalOperations to run updateFixUpInfoFromLocalOplogEntry

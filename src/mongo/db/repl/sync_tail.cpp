@@ -423,6 +423,11 @@ void scheduleWritesToOplog(OperationContext* opCtx,
             invariant(status);
 
             auto opCtx = cc().makeOperationContext();
+
+            // This code path is only executed on secondaries and initial syncing nodes, so it is
+            // safe to exclude any writes from Flow Control.
+            opCtx->setShouldParticipateInFlowControl(false);
+
             UnreplicatedWritesBlock uwb(opCtx.get());
             ShouldNotConflictWithSecondaryBatchApplicationBlock shouldNotConflictBlock(
                 opCtx->lockState());
@@ -488,23 +493,24 @@ public:
             return it->second;
         }
 
-        auto collProperties = getCollectionPropertiesImpl(opCtx, ns.key());
+        auto collProperties = getCollectionPropertiesImpl(opCtx, NamespaceString(ns.key()));
         _cache[ns] = collProperties;
         return collProperties;
     }
 
 private:
-    CollectionProperties getCollectionPropertiesImpl(OperationContext* opCtx, StringData ns) {
+    CollectionProperties getCollectionPropertiesImpl(OperationContext* opCtx,
+                                                     const NamespaceString& nss) {
         CollectionProperties collProperties;
 
-        Lock::DBLock dbLock(opCtx, nsToDatabaseSubstring(ns), MODE_IS);
+        Lock::DBLock dbLock(opCtx, nss.db(), MODE_IS);
         auto databaseHolder = DatabaseHolder::get(opCtx);
-        auto db = databaseHolder->getDb(opCtx, ns);
+        auto db = databaseHolder->getDb(opCtx, nss.db());
         if (!db) {
             return collProperties;
         }
 
-        auto collection = db->getCollection(opCtx, ns);
+        auto collection = db->getCollection(opCtx, nss);
         if (!collection) {
             return collProperties;
         }
@@ -727,6 +733,11 @@ void SyncTail::_oplogApplication(ReplicationCoordinator* replCoord,
         // collection name to refer to collections with different UUIDs.
         const ServiceContext::UniqueOperationContext opCtxPtr = cc().makeOperationContext();
         OperationContext& opCtx = *opCtxPtr;
+
+        // This code path gets used during elections, so it should not be subject to Flow Control.
+        // It is safe to exclude this operation context from Flow Control here because this code
+        // path only gets used on secondaries or on a node transitioning to primary.
+        opCtx.setShouldParticipateInFlowControl(false);
 
         // For pausing replication in tests.
         if (MONGO_FAIL_POINT(rsSyncApplyStop)) {
@@ -1190,6 +1201,26 @@ void SyncTail::_fillWriterVectors(OperationContext* opCtx,
         // function.
         if (isCommitApplyOps(op)) {
             try {
+                // On commit of unprepared transactions, get transactional operations from the oplog
+                // and fill writers with those operations.
+                // Flush partialTxnList operations for current transaction.
+                if (auto logicalSessionId = op.getSessionId()) {
+                    auto& partialTxnList = partialTxnOps[*logicalSessionId];
+                    {
+                        // We need to use a ReadSourceScope avoid the reads of the transaction
+                        // messing up the state of the opCtx.  In particular we do not want to
+                        // set the ReadSource to kLastApplied.
+                        ReadSourceScope readSourceScope(opCtx);
+                        derivedOps->emplace_back(
+                            readTransactionOperationsFromOplogChain(opCtx, op, partialTxnList));
+                        partialTxnList.clear();
+                    }
+                    // Transaction entries cannot have different session updates.
+                    _fillWriterVectors(
+                        opCtx, &derivedOps->back(), writerVectors, derivedOps, nullptr);
+                }
+
+                // After flushing partialTxnList ops, extract remaining ops from current operation.
                 derivedOps->emplace_back(ApplyOps::extractOperations(op));
 
                 // Nested entries cannot have different session updates.
@@ -1203,6 +1234,11 @@ void SyncTail::_fillWriterVectors(OperationContext* opCtx,
             }
             continue;
         } else if (isUnpreparedCommit(op)) {
+            // TODO(SERVER-40728): Remove this block after SERVER-40676 because we will no longer
+            // emit a commitTransaction oplog entry for an unprepared transaction. This code will
+            // no longer be reachable because we will commit the unprepared transaction on the last
+            // applyOps oplog entry, which will not contain a partialTxn field.
+
             // On commit of unprepared transactions, get transactional operations from the oplog and
             // fill writers with those operations.
             try {
@@ -1269,6 +1305,11 @@ void SyncTail::_applyOps(std::vector<MultiApplier::OperationPtrs>& writerVectors
             invariant(scheduleStatus);
 
             auto opCtx = cc().makeOperationContext();
+
+            // This code path is only executed on secondaries and initial syncing nodes, so it is
+            // safe to exclude any writes from Flow Control.
+            opCtx->setShouldParticipateInFlowControl(false);
+
             status = opCtx->runWithoutInterruptionExceptAtGlobalShutdown(
                 [&] { return _applyFunc(opCtx.get(), &writer, this, &workerMultikeyPathInfo); });
         });
