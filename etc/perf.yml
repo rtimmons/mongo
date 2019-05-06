@@ -231,6 +231,8 @@ functions:
           pwd; ls;
           find . -type f -name '*genny*'
 
+          export PATH="/opt/mongodbtoolchain/v3/bin:$PATH"
+
           python3 -m virtualenv ./venv
           source ./venv/bin/activate
           pip3 install .
