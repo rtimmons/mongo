@@ -277,7 +277,11 @@ functions:
 
 tasks:
 - name: genny
+  depends_on:
+  - variant: linux-wt-standalone
+    name: compile
   commands:
+  - func: "start server"
   - func: "run genny tests"
 
 - name: compile
