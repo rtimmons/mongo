@@ -237,7 +237,7 @@ functions:
           source ./venv/bin/activate
           pip3 install ./src/python
 
-          ./scripts/lamp --linux-distro rhel62 -DGENNY_INSTALL_DIR="$PWD"
+          ./scripts/lamp --linux-distro rhel62
           ./dist/bin/genny run -w ./dist/etc/genny/workloads/scale/InsertRemove.yml -u 'mongodb://localhost:27017' --metrics-output-file metrics.csv --metrics-format cedar-csv
           genny-metrics-legacy-report --report-file genny-perf.json genny-perf.csv
     - command: "json.send"
