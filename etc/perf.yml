@@ -243,7 +243,7 @@ functions:
     - command: "json.send"
       params:
         name: "perf"
-        file: "genny/genny/genny-perf.json"
+        file: "src/genny/genny/genny-perf.json"
 
 
   "run perf tests":
