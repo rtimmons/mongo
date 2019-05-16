@@ -77,7 +77,7 @@ std::size_t OplogApplier::calculateBatchLimitBytes(OperationContext* opCtx,
     auto oplogMaxSizeResult =
         storageInterface->getOplogMaxSize(opCtx, NamespaceString::kRsOplogNamespace);
     auto oplogMaxSize = fassert(40301, oplogMaxSizeResult);
-    return std::min(oplogMaxSize / 10, std::size_t(replBatchLimitBytes));
+    return std::min(oplogMaxSize / 10, std::size_t(replBatchLimitBytes.load()));
 }
 
 OplogApplier::OplogApplier(executor::TaskExecutor* executor,
@@ -164,6 +164,8 @@ bool isUnpreparedCommit(const OplogEntry& entry) {
  * as opposed to part of a prepared transaction.
  */
 bool isUnpreparedApplyOps(const OplogEntry& entry) {
+    // TODO (SERVER-39810): Remove the check of the prepare flag in the root oplog level once the
+    // multiple oplog format becomes the default.
     return entry.getCommandType() == OplogEntry::CommandType::kApplyOps && !entry.shouldPrepare();
 }
 

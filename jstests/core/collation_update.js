@@ -1,7 +1,6 @@
 // Cannot implicitly shard accessed collections because of collection existing when none
 // expected.
-// TODO SERVER-40402: Remove 'assumes_write_concern_unchanged' tag.
-// @tags: [assumes_no_implicit_collection_creation_after_drop, assumes_write_concern_unchanged]
+// @tags: [assumes_no_implicit_collection_creation_after_drop]
 
 // Integration tests for collation-aware updates.
 (function() {
@@ -264,10 +263,8 @@
 
         assert(coll.drop());
         assert.commandWorked(coll.insert({x: [1, 2, "a", "b", "c", "B"]}));
-        assert.commandWorked(
-            coll.update({},
-                        [{$replaceRoot: {newRoot: {newField: {$indexOfArray: ["$x", "B"]}}}}],
-                        caseSensitive));
+        assert.commandWorked(coll.update(
+            {}, [{$replaceWith: {newField: {$indexOfArray: ["$x", "B"]}}}], caseSensitive));
         assert.eq(coll.findOne().newField, 5, `actual=${coll.findOne()}`);
 
         // Case insensitive $indexOfArray on "B" matches "b".
@@ -285,10 +282,8 @@
 
         assert(coll.drop());
         assert.commandWorked(coll.insert({x: [1, 2, "a", "b", "c", "B"]}));
-        assert.commandWorked(
-            coll.update({},
-                        [{$replaceRoot: {newRoot: {newField: {$indexOfArray: ["$x", "B"]}}}}],
-                        caseInsensitive));
+        assert.commandWorked(coll.update(
+            {}, [{$replaceWith: {newField: {$indexOfArray: ["$x", "B"]}}}], caseInsensitive));
         assert.eq(coll.findOne().newField, 3, `actual=${coll.findOne()}`);
 
         // Collation is respected for pipeline-style bulk update.
@@ -319,7 +314,7 @@
         assert.commandWorked(coll.bulkWrite([{
             updateOne: {
                 filter: {},
-                update: [{$replaceRoot: {newRoot: {newField: {$indexOfArray: ["$x", "B"]}}}}],
+                update: [{$replaceWith: {newField: {$indexOfArray: ["$x", "B"]}}}],
                 collation: caseInsensitive.collation
             }
         }]));

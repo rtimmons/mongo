@@ -35,9 +35,9 @@
 
 #include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/catalog/collection.h"
+#include "mongo/db/catalog/collection_catalog.h"
 #include "mongo/db/catalog/database_holder.h"
 #include "mongo/db/catalog/document_validation.h"
-#include "mongo/db/catalog/uuid_catalog.h"
 #include "mongo/db/concurrency/d_concurrency.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/db_raii.h"
@@ -133,7 +133,7 @@ void MongoInterfaceShardServer::insert(const boost::intrusive_ptr<ExpressionCont
 void MongoInterfaceShardServer::update(const boost::intrusive_ptr<ExpressionContext>& expCtx,
                                        const NamespaceString& ns,
                                        std::vector<BSONObj>&& queries,
-                                       std::vector<BSONObj>&& updates,
+                                       std::vector<write_ops::UpdateModification>&& updates,
                                        const WriteConcernOptions& wc,
                                        bool upsert,
                                        bool multi,

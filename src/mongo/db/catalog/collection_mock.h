@@ -35,7 +35,7 @@
 namespace mongo {
 
 /**
- * This class comprises a mock Collection for use by UUIDCatalog unit tests.
+ * This class comprises a mock Collection for use by CollectionCatalog unit tests.
  */
 class CollectionMock : public Collection {
 public:
@@ -249,7 +249,7 @@ public:
         std::abort();
     }
 
-    uint64_t getIndexSize(OperationContext* opCtx, BSONObjBuilder* details, int scale) {
+    uint64_t getIndexSize(OperationContext* opCtx, BSONObjBuilder* details, int scale) const {
         std::abort();
     }
 

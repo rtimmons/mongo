@@ -37,7 +37,7 @@
 
 namespace mongo {
 class IndexConsistency;
-class UUIDCatalog;
+class CollectionCatalog;
 class CollectionImpl final : public Collection, public CappedCallback {
 private:
     static const int kMagicNumber = 1357924;
@@ -325,7 +325,7 @@ public:
 
     uint64_t getIndexSize(OperationContext* opCtx,
                           BSONObjBuilder* details = NULL,
-                          int scale = 1) final;
+                          int scale = 1) const final;
 
     /**
      * If return value is not boost::none, reads with majority read concern using an older snapshot

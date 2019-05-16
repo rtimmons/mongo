@@ -36,6 +36,7 @@
 
 #include "mongo/base/string_data.h"
 #include "mongo/db/auth/authorization_session.h"
+#include "mongo/db/background.h"
 #include "mongo/db/catalog/collection.h"
 #include "mongo/db/catalog/database.h"
 #include "mongo/db/catalog/database_holder.h"
@@ -213,7 +214,9 @@ std::vector<BSONObj> resolveDefaultsAndRemoveExistingIndexes(OperationContext* o
     uassertStatusOK(swDefaults.getStatus());
 
     auto indexCatalog = collection->getIndexCatalog();
-    return indexCatalog->removeExistingIndexes(opCtx, swDefaults.getValue());
+
+    return indexCatalog->removeExistingIndexes(
+        opCtx, swDefaults.getValue(), false /*removeIndexBuildsToo*/);
 }
 
 void checkUniqueIndexConstraints(OperationContext* opCtx,
@@ -266,30 +269,24 @@ bool runCreateIndexes(OperationContext* opCtx,
     };
 
     // Before potentially taking an exclusive database or collection lock, check if all indexes
-    // already exist while holding an intent lock. Only continue if new indexes need to be built
-    // and the collection or database should be re-locked in exclusive mode.
+    // already exist while holding an intent lock.
     {
-        boost::optional<AutoGetCollection> autoColl(boost::in_place_init, opCtx, ns, MODE_IX);
-        if (auto collection = autoColl->getCollection()) {
+        AutoGetCollection autoColl(opCtx, ns, MODE_IX);
+        if (auto collection = autoColl.getCollection()) {
             auto specsCopy = resolveDefaultsAndRemoveExistingIndexes(opCtx, collection, specs);
             if (specsCopy.size() == 0) {
                 return indexesAlreadyExist(collection->getIndexCatalog()->numIndexesTotal(opCtx));
             }
-        } else {
-            // We'll need to create a collection and maybe even a new database. Temporarily
-            // releases the Database lock while holding a Global IX lock. This prevents replication
-            // from changing, but requires abandoning the current snapshot in case indexes change
-            // during the period of time where no database lock is held.
-            autoColl.reset();
-            opCtx->recoveryUnit()->abandonSnapshot();
-            dbLock.relockWithMode(MODE_X);
         }
     }
 
     auto databaseHolder = DatabaseHolder::get(opCtx);
     auto db = databaseHolder->getDb(opCtx, ns.db());
     if (!db) {
-        invariant(opCtx->lockState()->isDbLockedForMode(ns.db(), MODE_X));
+        // Temporarily release the Database lock while holding a Global IX lock. This prevents
+        // replication state from changing. Abandon the current snapshot to see changed metadata.
+        opCtx->recoveryUnit()->abandonSnapshot();
+        dbLock.relockWithMode(MODE_X);
         db = databaseHolder->openDb(opCtx, ns.db());
     }
 
@@ -639,7 +636,6 @@ bool runCreateIndexesWithCoordinator(OperationContext* opCtx,
         throw;
     }
 
-
     result.append(kNumIndexesBeforeFieldName, stats.numIndexesBefore);
     result.append(kNumIndexesAfterFieldName, stats.numIndexesAfter);
     if (stats.numIndexesAfter == stats.numIndexesBefore) {
@@ -686,11 +682,44 @@ public:
                    const BSONObj& cmdObj,
                    std::string& errmsg,
                    BSONObjBuilder& result) override {
-        if (enableIndexBuildsCoordinatorForCreateIndexesCommand) {
-            return runCreateIndexesWithCoordinator(
-                opCtx, dbname, cmdObj, errmsg, result, false /*two phase build*/);
+        // If we encounter an IndexBuildAlreadyInProgress error for any of the requested index
+        // specs, then we will wait for the build(s) to finish before trying again.
+        const NamespaceString nss(CommandHelpers::parseNsCollectionRequired(dbname, cmdObj));
+        bool shouldLogMessageOnAlreadyBuildingError = true;
+        while (true) {
+            try {
+                if (enableIndexBuildsCoordinatorForCreateIndexesCommand) {
+                    return runCreateIndexesWithCoordinator(
+                        opCtx, dbname, cmdObj, errmsg, result, false /*two phase build*/);
+                }
+                return runCreateIndexes(
+                    opCtx, dbname, cmdObj, errmsg, result, false /*two phase build*/);
+            } catch (const DBException& ex) {
+                if (ex.toStatus() != ErrorCodes::IndexBuildAlreadyInProgress) {
+                    throw;
+                }
+                if (shouldLogMessageOnAlreadyBuildingError) {
+                    auto bsonElem = cmdObj.getField(kIndexesFieldName);
+                    log()
+                        << "Received a request to create indexes: '" << bsonElem
+                        << "', but found that at least one of the indexes is already being built, '"
+                        << ex.toStatus()
+                        << "'. This request will wait for the pre-existing index build to finish "
+                           "before proceeding.";
+                    shouldLogMessageOnAlreadyBuildingError = false;
+                }
+                // Unset the response fields so we do not write duplicate fields.
+                errmsg = "";
+                result.resetToEmpty();
+                // Reset the snapshot because we have released locks and may reacquire them again
+                // later.
+                opCtx->recoveryUnit()->abandonSnapshot();
+                // This is a bit racy since we are not holding a lock across discovering an
+                // in-progress build and starting to listen for completion. It is good enough,
+                // however: we can only wait longer than needed, not less.
+                BackgroundOperation::waitUntilAnIndexBuildFinishes(opCtx, nss.ns());
+            }
         }
-        return runCreateIndexes(opCtx, dbname, cmdObj, errmsg, result, false /*two phase build*/);
     }
 
 } cmdCreateIndex;

@@ -37,8 +37,10 @@
 #include "mongo/db/catalog_raii.h"
 #include "mongo/db/commands/txn_cmds_gen.h"
 #include "mongo/db/concurrency/write_conflict_exception.h"
+#include "mongo/db/dbdirectclient.h"
 #include "mongo/db/index_builds_coordinator.h"
 #include "mongo/db/repl/apply_ops.h"
+#include "mongo/db/repl/storage_interface_impl.h"
 #include "mongo/db/repl/timestamp_block.h"
 #include "mongo/db/session_catalog_mongod.h"
 #include "mongo/db/transaction_history_iterator.h"
@@ -49,7 +51,10 @@ namespace mongo {
 using repl::OplogEntry;
 namespace {
 // If enabled, causes _applyPrepareTransaction to hang before preparing the transaction participant.
-MONGO_FAIL_POINT_DEFINE(applyPrepareCommandHangBeforePreparingTransaction);
+MONGO_FAIL_POINT_DEFINE(applyOpsHangBeforePreparingTransaction);
+
+// Failpoint that will cause reconstructPreparedTransactions to return early.
+MONGO_FAIL_POINT_DEFINE(skipReconstructPreparedTransactions);
 
 
 // Apply the oplog entries for a prepare or a prepared commit during recovery/initial sync.
@@ -72,7 +77,7 @@ Status _applyOperationsForTransaction(OperationContext* opCtx,
  * Helper that will find the previous oplog entry for that transaction, then for old-style applyOps
  * entries, will transform it to be a normal applyOps command and applies the oplog entry.
  *
- * For new-style transactions, with prepare command entries, will then read the entire set of oplog
+ * For new-style transactions, with multiple oplog entries, will then read the entire set of oplog
  * entries for the transaction and apply each of them.
  *
  * Currently used for oplog application of a commitTransaction oplog entry during recovery, rollback
@@ -86,7 +91,6 @@ Status _applyTransactionFromOplogChain(OperationContext* opCtx,
     invariant(mode == repl::OplogApplication::Mode::kRecovering ||
               mode == repl::OplogApplication::Mode::kInitialSync);
 
-    BSONObj prepareCmd;
     repl::MultiApplier::Operations ops;
     {
         // Traverse the oplog chain with its own snapshot and read timestamp.
@@ -98,18 +102,7 @@ Status _applyTransactionFromOplogChain(OperationContext* opCtx,
         TransactionHistoryIterator iter(prepareOpTime.get());
         invariant(iter.hasNext());
         const auto prepareOplogEntry = iter.next(opCtx);
-
-        if (prepareOplogEntry.getCommandType() == OplogEntry::CommandType::kApplyOps) {
-            // Transform prepare command into a normal applyOps command.
-            prepareCmd = prepareOplogEntry.getOperationToApply().removeField("prepare");
-        } else {
-            invariant(prepareOplogEntry.getCommandType() ==
-                      OplogEntry::CommandType::kPrepareTransaction);
-            // The operations here are reconstructed at their prepare time.  However, that time will
-            // be ignored because there is an outer write unit of work during their application.
-            // Both the prepare time and the commit time are set explicitly below.
-            ops = readTransactionOperationsFromOplogChain(opCtx, prepareOplogEntry, {});
-        }
+        ops = readTransactionOperationsFromOplogChain(opCtx, prepareOplogEntry, {});
     }
 
     const auto dbName = entry.getNss().db().toString();
@@ -122,11 +115,8 @@ Status _applyTransactionFromOplogChain(OperationContext* opCtx,
         opCtx->recoveryUnit()->setRoundUpPreparedTimestamps(true);
 
         BSONObjBuilder resultWeDontCareAbout;
-        if (prepareCmd.isEmpty()) {
-            status = _applyOperationsForTransaction(opCtx, ops, mode);
-        } else {
-            status = applyOps(opCtx, dbName, prepareCmd, mode, &resultWeDontCareAbout);
-        }
+
+        status = _applyOperationsForTransaction(opCtx, ops, mode);
         if (status.isOK()) {
             opCtx->recoveryUnit()->setPrepareTimestamp(commitTimestamp);
             wunit.prepare();
@@ -176,6 +166,7 @@ Status applyCommitTransaction(OperationContext* opCtx,
     invariant(entry.getTxnNumber());
     opCtx->setLogicalSessionId(*entry.getSessionId());
     opCtx->setTxnNumber(*entry.getTxnNumber());
+
     // The write on transaction table may be applied concurrently, so refreshing state
     // from disk may read that write, causing starting a new transaction on an existing
     // txnNumber. Thus, we start a new transaction without refreshing state from disk.
@@ -197,13 +188,13 @@ Status applyAbortTransaction(OperationContext* opCtx,
             "abortTransaction is only used internally by secondaries.",
             mode != repl::OplogApplication::Mode::kApplyOpsCmd);
 
-    // We don't put transactions into the prepare state until the end of recovery, so there is
-    // no transaction to abort.
-    if (mode == repl::OplogApplication::Mode::kRecovering) {
+    // We don't put transactions into the prepare state until the end of recovery and initial sync,
+    // so there is no transaction to abort.
+    if (mode == repl::OplogApplication::Mode::kRecovering ||
+        mode == repl::OplogApplication::Mode::kInitialSync) {
         return Status::OK();
     }
 
-    // TODO: SERVER-36492 Only run on secondary until we support initial sync.
     invariant(mode == repl::OplogApplication::Mode::kSecondary);
 
     // Transaction operations are in its own batch, so we can modify their opCtx.
@@ -221,24 +212,6 @@ Status applyAbortTransaction(OperationContext* opCtx,
     transaction.abortActiveTransaction(opCtx);
     return Status::OK();
 }
-
-namespace {
-// Reconstruct the entry "as if" it were at the time given in topLevelObj, with the session
-// information also from "topLevelObj", and remove the "partialTxn" indicator.
-// TODO(SERVER-40763): Remove "inTxn" entirely.  We can replace this helper with a direct call to
-// repl::ApplyOps::extractOperationsTo.
-void _reconstructPartialTxnEntryAtGivenTime(const OplogEntry& operationEntry,
-                                            const BSONObj& topLevelObj,
-                                            repl::MultiApplier::Operations* operations) {
-    if (operationEntry.getInTxn()) {
-        BSONObjBuilder builder(operationEntry.getDurableReplOperation().toBSON());
-        builder.appendElementsUnique(topLevelObj);
-        operations->emplace_back(builder.obj());
-    } else {
-        repl::ApplyOps::extractOperationsTo(operationEntry, topLevelObj, operations);
-    }
-}
-}  // namespace
 
 repl::MultiApplier::Operations readTransactionOperationsFromOplogChain(
     OperationContext* opCtx,
@@ -272,7 +245,7 @@ repl::MultiApplier::Operations readTransactionOperationsFromOplogChain(
         const auto& operationEntry = iter.next(opCtx);
         invariant(operationEntry.isPartialTransaction());
         auto prevOpsEnd = ops.size();
-        _reconstructPartialTxnEntryAtGivenTime(operationEntry, commitOrPrepareObj, &ops);
+        repl::ApplyOps::extractOperationsTo(operationEntry, commitOrPrepareObj, &ops);
         // Because BSONArrays do not have fast way of determining size without iterating through
         // them, and we also have no way of knowing how many oplog entries are in a transaction
         // without iterating, reversing each applyOps and then reversing the whole array is
@@ -287,15 +260,20 @@ repl::MultiApplier::Operations readTransactionOperationsFromOplogChain(
     for (auto* cachedOp : cachedOps) {
         const auto& operationEntry = *cachedOp;
         invariant(operationEntry.isPartialTransaction());
-        _reconstructPartialTxnEntryAtGivenTime(operationEntry, commitOrPrepareObj, &ops);
+        repl::ApplyOps::extractOperationsTo(operationEntry, commitOrPrepareObj, &ops);
+    }
+
+    // Reconstruct the operations from the commit or prepare oplog entry.
+    if (commitOrPrepare.getCommandType() == OplogEntry::CommandType::kApplyOps) {
+        repl::ApplyOps::extractOperationsTo(commitOrPrepare, commitOrPrepareObj, &ops);
     }
     return ops;
 }
 
 namespace {
 /**
- * This is the part of applyPrepareTransaction which is common to steady state and recovery
- * oplog application.
+ * This is the part of applyPrepareTransaction which is common to steady state, initial sync and
+ * recovery oplog application.
  */
 Status _applyPrepareTransaction(OperationContext* opCtx,
                                 const OplogEntry& entry,
@@ -309,7 +287,8 @@ Status _applyPrepareTransaction(OperationContext* opCtx,
         return readTransactionOperationsFromOplogChain(opCtx, entry, {});
     }();
 
-    if (oplogApplicationMode == repl::OplogApplication::Mode::kRecovering) {
+    if (oplogApplicationMode == repl::OplogApplication::Mode::kRecovering ||
+        oplogApplicationMode == repl::OplogApplication::Mode::kInitialSync) {
         // We might replay a prepared transaction behind oldest timestamp.  Note that since this is
         // scoped to the storage transaction, and readTransactionOperationsFromOplogChain implicitly
         // abandons the storage transaction when it releases the global lock, this must be done
@@ -346,16 +325,29 @@ Status _applyPrepareTransaction(OperationContext* opCtx,
     if (!status.isOK())
         return status;
 
-    if (MONGO_FAIL_POINT(applyPrepareCommandHangBeforePreparingTransaction)) {
-        LOG(0) << "Hit applyPrepareCommandHangBeforePreparingTransaction failpoint";
-        MONGO_FAIL_POINT_PAUSE_WHILE_SET_OR_INTERRUPTED(
-            opCtx, applyPrepareCommandHangBeforePreparingTransaction);
+    if (MONGO_FAIL_POINT(applyOpsHangBeforePreparingTransaction)) {
+        LOG(0) << "Hit applyOpsHangBeforePreparingTransaction failpoint";
+        MONGO_FAIL_POINT_PAUSE_WHILE_SET_OR_INTERRUPTED(opCtx,
+                                                        applyOpsHangBeforePreparingTransaction);
     }
 
     transaction.prepareTransaction(opCtx, entry.getOpTime());
     transaction.stashTransactionResources(opCtx);
 
     return Status::OK();
+}
+
+/**
+ * Apply a prepared transaction during recovery.
+ */
+Status applyRecoveredPrepareTransaction(OperationContext* opCtx,
+                                        const OplogEntry& entry,
+                                        repl::OplogApplication::Mode mode) {
+    // Snapshot transactions never conflict with the PBWM lock.
+    invariant(!opCtx->lockState()->shouldConflictWithSecondaryBatchApplication());
+    // We might replay a prepared transaction behind oldest timestamp.
+    opCtx->recoveryUnit()->setRoundUpPreparedTimestamps(true);
+    return _applyPrepareTransaction(opCtx, entry, mode);
 }
 }  // namespace
 
@@ -396,15 +388,54 @@ Status applyPrepareTransaction(OperationContext* opCtx,
     return _applyPrepareTransaction(opCtx, entry, oplogApplicationMode);
 }
 
-Status applyRecoveredPrepareTransaction(OperationContext* opCtx, const OplogEntry& entry) {
-    // Snapshot transactions never conflict with the PBWM lock.
-    invariant(!opCtx->lockState()->shouldConflictWithSecondaryBatchApplication());
-    if (entry.getCommandType() == OplogEntry::CommandType::kPrepareTransaction) {
-        return _applyPrepareTransaction(opCtx, entry, repl::OplogApplication::Mode::kRecovering);
-    } else {
-        // This is an applyOps with prepare.
-        return applyRecoveredPrepareApplyOpsOplogEntry(opCtx, entry);
+void reconstructPreparedTransactions(OperationContext* opCtx, repl::OplogApplication::Mode mode) {
+    if (MONGO_FAIL_POINT(skipReconstructPreparedTransactions)) {
+        log() << "Hit skipReconstructPreparedTransactions failpoint";
+        return;
+    }
+    // Read the transactions table with its own snapshot and read timestamp.
+    ReadSourceScope readSourceScope(opCtx);
+
+    DBDirectClient client(opCtx);
+    const auto cursor = client.query(NamespaceString::kSessionTransactionsTableNamespace,
+                                     {BSON("state"
+                                           << "prepared")});
+
+    // Iterate over each entry in the transactions table that has a prepared transaction.
+    while (cursor->more()) {
+        const auto txnRecordObj = cursor->next();
+        const auto txnRecord = SessionTxnRecord::parse(
+            IDLParserErrorContext("recovering prepared transaction"), txnRecordObj);
+
+        invariant(txnRecord.getState() == DurableTxnStateEnum::kPrepared);
+
+        // Get the prepareTransaction oplog entry corresponding to this transactions table entry.
+        const auto prepareOpTime = txnRecord.getLastWriteOpTime();
+        invariant(!prepareOpTime.isNull());
+        TransactionHistoryIterator iter(prepareOpTime);
+        invariant(iter.hasNext());
+        auto prepareOplogEntry = iter.next(opCtx);
+
+        {
+            // Make a new opCtx so that we can set the lsid when applying the prepare transaction
+            // oplog entry.
+            auto newClient =
+                opCtx->getServiceContext()->makeClient("reconstruct-prepared-transactions");
+            AlternativeClientRegion acr(newClient);
+            const auto newOpCtx = cc().makeOperationContext();
+            repl::UnreplicatedWritesBlock uwb(newOpCtx.get());
+
+            // Snapshot transaction can never conflict with the PBWM lock.
+            newOpCtx->lockState()->setShouldConflictWithSecondaryBatchApplication(false);
+
+            // TODO: SERVER-40177 This should be removed once it is guaranteed operations applied on
+            // recovering nodes cannot encounter unnecessary prepare conflicts.
+            newOpCtx->recoveryUnit()->setIgnorePrepared(true);
+
+            // Checks out the session, applies the operations and prepares the transaction.
+            uassertStatusOK(
+                applyRecoveredPrepareTransaction(newOpCtx.get(), prepareOplogEntry, mode));
+        }
     }
 }
-
 }  // namespace mongo

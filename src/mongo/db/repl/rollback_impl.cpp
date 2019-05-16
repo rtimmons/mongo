@@ -37,8 +37,8 @@
 
 #include "mongo/bson/util/bson_extract.h"
 #include "mongo/db/background.h"
+#include "mongo/db/catalog/collection_catalog.h"
 #include "mongo/db/catalog/database_holder.h"
-#include "mongo/db/catalog/uuid_catalog.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/concurrency/d_concurrency.h"
 #include "mongo/db/concurrency/replication_state_transition_lock_guard.h"
@@ -53,6 +53,7 @@
 #include "mongo/db/repl/replication_process.h"
 #include "mongo/db/repl/roll_back_local_operations.h"
 #include "mongo/db/repl/storage_interface.h"
+#include "mongo/db/repl/transaction_oplog_application.h"
 #include "mongo/db/s/shard_identity_rollback_notifier.h"
 #include "mongo/db/s/type_shard_identity.h"
 #include "mongo/db/server_recovery.h"
@@ -225,110 +226,21 @@ Status RollbackImpl::runRollback(OperationContext* opCtx) {
         return status;
     }
     _rollbackStats.rollbackId = _replicationProcess->getRollbackID();
+    _listener->onRollbackIDIncremented();
 
-    // Before computing record store counts, abort all active transactions. This ensures that the
-    // count adjustments are based on correct values where no prepared transactions are active and
-    // all in-memory counts have been rolled-back.
-    // Before calling recoverToStableTimestamp, we must abort the storage transaction of any
-    // prepared transaction. This will require us to scan all sessions and call
-    // abortPreparedTransactionForRollback() on any txnParticipant with a prepared transaction.
-    killSessionsAbortAllPreparedTransactions(opCtx);
-
-    // Ask the record store for the pre-rollback counts of any collections whose counts will change
-    // and create a map with the adjusted counts for post-rollback. While finding the common
-    // point, we keep track of how much each collection's count will change during the rollback.
-    // Note: these numbers are relative to the common point, not the stable timestamp, and thus
-    // must be set after recovering from the oplog.
-    // TODO (SERVER-40614): This error should be fatal.
-    status = _findRecordStoreCounts(opCtx);
+    // Execute the critical section in rollback. It is illegal to exit rollback cleanly between
+    // aborting prepared transactions and reconstructing them. During this window, no interruptions
+    // are allowed and all errors should be made fatal.
+    status = _runRollbackCriticalSection(opCtx, commonPoint);
     if (!status.isOK()) {
-        return status;
+        fassertFailedWithStatus(31049, status.withContext("Error in rollback critical section"));
     }
+    _listener->onPreparedTransactionsReconstructed();
 
-    if (shouldCreateDataFiles()) {
-        // Write a rollback file for each namespace that has documents that would be deleted by
-        // rollback. We need to do this after aborting prepared transactions. Otherwise, we risk
-        // unecessary prepare conflicts when trying to read documents that were modified by those
-        // prepared transactions, which we know we will abort anyway.
-        // TODO (SERVER-40614): This error should be fatal.
-        status = _writeRollbackFiles(opCtx);
-        if (!status.isOK()) {
-            return status;
-        }
-    } else {
-        log() << "Not writing rollback files. 'createRollbackDataFiles' set to false.";
-    }
-
-    // If there were rolled back operations on any session, invalidate all sessions.
-    // We invalidate sessions before we recover so that we avoid invalidating sessions that had
-    // just recovered prepared transactions.
-    if (_observerInfo.rollbackSessionIds.size() > 0) {
-        MongoDSessionCatalog::invalidateSessions(opCtx, boost::none);
-    }
-
-    // Recover to the stable timestamp.
-    auto stableTimestampSW = _recoverToStableTimestamp(opCtx);
-    // TODO (SERVER-40614): This error should be fatal.
-    if (!stableTimestampSW.isOK()) {
-        return stableTimestampSW.getStatus();
-    }
-    _rollbackStats.stableTimestamp = stableTimestampSW.getValue();
-    _listener->onRecoverToStableTimestamp(stableTimestampSW.getValue());
-
-    // Log the total number of insert and update operations that have been rolled back as a result
-    // of recovering to the stable timestamp.
-    log() << "Rollback reverted " << _observerInfo.rollbackCommandCounts[kInsertCmdName]
-          << " insert operations, " << _observerInfo.rollbackCommandCounts[kUpdateCmdName]
-          << " update operations and " << _observerInfo.rollbackCommandCounts[kDeleteCmdName]
-          << " delete operations.";
-
-    // During replication recovery, we truncate all oplog entries with timestamps greater than or
-    // equal to the oplog truncate after point. As a result, we must find the oplog entry after
-    // the common point so we do not truncate the common point itself. If we entered rollback,
-    // we are guaranteed to have at least one oplog entry after the common point.
-    Timestamp truncatePoint = _findTruncateTimestamp(opCtx, commonPointSW.getValue());
-
-    // We cannot have an interrupt point between setting the oplog truncation point and fixing the
-    // record store counts or else a clean shutdown could produce incorrect counts. We explicitly
-    // check for shutdown here to safely maximize interruptibility.
-    // TODO (SERVER-40614): This interrupt point should be removed.
+    // We can now accept interruptions again.
     if (_isInShutdown()) {
         return Status(ErrorCodes::ShutdownInProgress, "rollback shutting down");
     }
-
-    // Persist the truncate point to the 'oplogTruncateAfterPoint' document. We save this value so
-    // that the replication recovery logic knows where to truncate the oplog. We save this value
-    // durably to match the behavior during startup recovery. This must occur after we successfully
-    // recover to a stable timestamp. If recovering to a stable timestamp fails and we still
-    // truncate the oplog then the oplog will not match the data files. If we crash at any earlier
-    // point, we will recover, find a new sync source, and restart roll back (if necessary on the
-    // new sync source). This is safe because a crash before this point would recover to a stable
-    // checkpoint anyways at or earlier than the stable timestamp.
-    //
-    // Note that storage engine timestamp recovery only restores the database *data* to a stable
-    // timestamp, but does not revert the oplog, which must be done as part of the rollback process.
-    _replicationProcess->getConsistencyMarkers()->setOplogTruncateAfterPoint(opCtx, truncatePoint);
-    _rollbackStats.truncateTimestamp = truncatePoint;
-    _listener->onSetOplogTruncateAfterPoint(truncatePoint);
-
-    // Align the drop pending reaper state with what's on disk. Oplog recovery depends on those
-    // being consistent.
-    _resetDropPendingState(opCtx);
-
-    // Run the recovery process.
-    _replicationProcess->getReplicationRecovery()->recoverFromOplog(opCtx,
-                                                                    stableTimestampSW.getValue());
-    _listener->onRecoverFromOplog();
-
-    // Sets the correct post-rollback counts on any collections whose counts changed during the
-    // rollback.
-    _correctRecordStoreCounts(opCtx);
-
-    // Reconstruct prepared transactions after counts have been adjusted. Since prepared
-    // transactions were aborted (i.e. the in-memory counts were rolled-back) before computing
-    // collection counts, reconstruct the prepared transactions now, adding on any additional counts
-    // to the now corrected record store.
-    _replicationProcess->getReplicationRecovery()->reconstructPreparedTransactions(opCtx);
 
     // At this point, the last applied and durable optimes on this node still point to ops on
     // the divergent branch of history. We therefore update the last optimes to the top of the
@@ -496,16 +408,120 @@ StatusWith<std::set<NamespaceString>> RollbackImpl::_namespacesForOp(const Oplog
     return namespaces;
 }
 
+Status RollbackImpl::_runRollbackCriticalSection(
+    OperationContext* opCtx,
+    RollBackLocalOperations::RollbackCommonPoint commonPoint) noexcept try {
+    // Before computing record store counts, abort all active transactions. This ensures that
+    // the count adjustments are based on correct values where no prepared transactions are
+    // active and all in-memory counts have been rolled-back.
+    // Before calling recoverToStableTimestamp, we must abort the storage transaction of any
+    // prepared transaction. This will require us to scan all sessions and call
+    // abortPreparedTransactionForRollback() on any txnParticipant with a prepared transaction.
+    killSessionsAbortAllPreparedTransactions(opCtx);
+
+    // Ask the record store for the pre-rollback counts of any collections whose counts will
+    // change and create a map with the adjusted counts for post-rollback. While finding the
+    // common point, we keep track of how much each collection's count will change during the
+    // rollback. Note: these numbers are relative to the common point, not the stable timestamp,
+    // and thus must be set after recovering from the oplog.
+    auto status = _findRecordStoreCounts(opCtx);
+    if (!status.isOK()) {
+        return status.withContext("Error while finding record store counts");
+    }
+
+    if (shouldCreateDataFiles()) {
+        // Write a rollback file for each namespace that has documents that would be deleted by
+        // rollback. We need to do this after aborting prepared transactions. Otherwise, we risk
+        // unecessary prepare conflicts when trying to read documents that were modified by
+        // those prepared transactions, which we know we will abort anyway.
+        status = _writeRollbackFiles(opCtx);
+        if (!status.isOK()) {
+            return status.withContext("Error while writing out rollback files");
+        }
+    } else {
+        log() << "Not writing rollback files. 'createRollbackDataFiles' set to false.";
+    }
+
+    // If there were rolled back operations on any session, invalidate all sessions.
+    // We invalidate sessions before we recover so that we avoid invalidating sessions that had
+    // just recovered prepared transactions.
+    if (!_observerInfo.rollbackSessionIds.empty()) {
+        MongoDSessionCatalog::invalidateAllSessions(opCtx);
+    }
+
+    // Recover to the stable timestamp.
+    auto stableTimestampSW = _recoverToStableTimestamp(opCtx);
+    if (!stableTimestampSW.isOK()) {
+        auto status = stableTimestampSW.getStatus();
+        return status.withContext("Error while recovering to stable timestamp");
+    }
+    _rollbackStats.stableTimestamp = stableTimestampSW.getValue();
+    _listener->onRecoverToStableTimestamp(stableTimestampSW.getValue());
+
+    // Log the total number of insert and update operations that have been rolled back as a
+    // result of recovering to the stable timestamp.
+    log() << "Rollback reverted " << _observerInfo.rollbackCommandCounts[kInsertCmdName]
+          << " insert operations, " << _observerInfo.rollbackCommandCounts[kUpdateCmdName]
+          << " update operations and " << _observerInfo.rollbackCommandCounts[kDeleteCmdName]
+          << " delete operations.";
+
+    // During replication recovery, we truncate all oplog entries with timestamps greater than
+    // or equal to the oplog truncate after point. As a result, we must find the oplog entry
+    // after the common point so we do not truncate the common point itself. If we entered
+    // rollback, we are guaranteed to have at least one oplog entry after the common point.
+    Timestamp truncatePoint = _findTruncateTimestamp(opCtx, commonPoint);
+
+    // Persist the truncate point to the 'oplogTruncateAfterPoint' document. We save this value so
+    // that the replication recovery logic knows where to truncate the oplog. We save this value
+    // durably to match the behavior during startup recovery. This must occur after we successfully
+    // recover to a stable timestamp. If recovering to a stable timestamp fails and we still
+    // truncate the oplog then the oplog will not match the data files. If we crash at any earlier
+    // point, we will recover, find a new sync source, and restart roll back (if necessary on the
+    // new sync source). This is safe because a crash before this point would recover to a stable
+    // checkpoint anyways at or earlier than the stable timestamp.
+    //
+    // Note that storage engine timestamp recovery only restores the database *data* to a stable
+    // timestamp, but does not revert the oplog, which must be done as part of the rollback process.
+    _replicationProcess->getConsistencyMarkers()->setOplogTruncateAfterPoint(opCtx, truncatePoint);
+    _rollbackStats.truncateTimestamp = truncatePoint;
+    _listener->onSetOplogTruncateAfterPoint(truncatePoint);
+
+    // Align the drop pending reaper state with what's on disk. Oplog recovery depends on those
+    // being consistent.
+    _resetDropPendingState(opCtx);
+
+    // Run the recovery process.
+    _replicationProcess->getReplicationRecovery()->recoverFromOplog(opCtx,
+                                                                    stableTimestampSW.getValue());
+    _listener->onRecoverFromOplog();
+
+    // Sets the correct post-rollback counts on any collections whose counts changed during the
+    // rollback.
+    _correctRecordStoreCounts(opCtx);
+
+    // Reconstruct prepared transactions after counts have been adjusted. Since prepared
+    // transactions were aborted (i.e. the in-memory counts were rolled-back) before computing
+    // collection counts, reconstruct the prepared transactions now, adding on any additional counts
+    // to the now corrected record store.
+    reconstructPreparedTransactions(opCtx, OplogApplication::Mode::kRecovering);
+
+    return Status::OK();
+} catch (...) {
+    // Any exceptions here should be made fatal.
+    severe() << "Caught exception during critical section in rollback: " << exceptionToStatus();
+    std::terminate();
+}
+
 void RollbackImpl::_correctRecordStoreCounts(OperationContext* opCtx) {
     // This function explicitly does not check for shutdown since a clean shutdown post oplog
     // truncation is not allowed to occur until the record store counts are corrected.
-    const auto& uuidCatalog = UUIDCatalog::get(opCtx);
+    const auto& catalog = CollectionCatalog::get(opCtx);
     for (const auto& uiCount : _newCounts) {
         const auto uuid = uiCount.first;
-        const auto coll = uuidCatalog.lookupCollectionByUUID(uuid);
+        const auto coll = catalog.lookupCollectionByUUID(uuid);
         invariant(coll,
                   str::stream() << "The collection with UUID " << uuid
-                                << " is unexpectedly missing in the UUIDCatalog");
+                                << " is unexpectedly missing in the CollectionCatalog");
         const auto nss = coll->ns();
         invariant(!nss.isEmpty(),
                   str::stream() << "The collection with UUID " << uuid << " has no namespace.");
@@ -571,11 +587,7 @@ void RollbackImpl::_correctRecordStoreCounts(OperationContext* opCtx) {
 }
 
 Status RollbackImpl::_findRecordStoreCounts(OperationContext* opCtx) {
-    // TODO (SERVER-40614): This interrupt point should be removed.
-    if (_isInShutdown()) {
-        return Status(ErrorCodes::ShutdownInProgress, "rollback shutting down");
-    }
-    const auto& uuidCatalog = UUIDCatalog::get(opCtx);
+    const auto& catalog = CollectionCatalog::get(opCtx);
     auto storageEngine = opCtx->getServiceContext()->getStorageEngine();
 
     log() << "finding record store counts";
@@ -586,15 +598,15 @@ Status RollbackImpl::_findRecordStoreCounts(OperationContext* opCtx) {
             continue;
         }
 
-        auto nss = uuidCatalog.lookupNSSByUUID(uuid);
+        auto nss = catalog.lookupNSSByUUID(uuid);
         StorageInterface::CollectionCount oldCount = 0;
 
         // Drop-pending collections are not visible to rollback via the catalog when they are
         // managed by the storage engine. See StorageEngine::supportsPendingDrops().
-        if (nss.isEmpty()) {
+        if (!nss) {
             invariant(storageEngine->supportsPendingDrops(),
                       str::stream() << "The collection with UUID " << uuid
-                                    << " is unexpectedly missing in the UUIDCatalog");
+                                    << " is unexpectedly missing in the CollectionCatalog");
             auto it = _pendingDrops.find(uuid);
             if (it == _pendingDrops.end()) {
                 _newCounts[uuid] = kCollectionScanRequired;
@@ -610,7 +622,7 @@ Status RollbackImpl::_findRecordStoreCounts(OperationContext* opCtx) {
                                        "collection count during rollback.");
             oldCount = static_cast<StorageInterface::CollectionCount>(dropPendingInfo.count);
         } else {
-            auto countSW = _storageInterface->getCollectionCount(opCtx, nss);
+            auto countSW = _storageInterface->getCollectionCount(opCtx, *nss);
             if (!countSW.isOK()) {
                 return countSW.getStatus();
             }
@@ -618,7 +630,8 @@ Status RollbackImpl::_findRecordStoreCounts(OperationContext* opCtx) {
         }
 
         if (oldCount > static_cast<uint64_t>(std::numeric_limits<long long>::max())) {
-            warning() << "Count for " << nss.ns() << " (" << uuid.toString() << ") was " << oldCount
+            warning() << "Count for " << nss->ns() << " (" << uuid.toString() << ") was "
+                      << oldCount
                       << " which is larger than the maximum int64_t value. Not attempting to fix "
                          "count during rollback.";
             continue;
@@ -628,7 +641,7 @@ Status RollbackImpl::_findRecordStoreCounts(OperationContext* opCtx) {
         auto newCount = oldCountSigned + countDiff;
 
         if (newCount < 0) {
-            warning() << "Attempted to set count for " << nss.ns() << " (" << uuid.toString()
+            warning() << "Attempted to set count for " << nss->ns() << " (" << uuid.toString()
                       << ") to " << newCount
                       << " but set it to 0 instead. This is likely due to the count previously "
                          "becoming inconsistent from an unclean shutdown or a rollback that could "
@@ -636,7 +649,7 @@ Status RollbackImpl::_findRecordStoreCounts(OperationContext* opCtx) {
                       << oldCount << ". Count change: " << countDiff;
             newCount = 0;
         }
-        LOG(2) << "Record count of " << nss.ns() << " (" << uuid.toString()
+        LOG(2) << "Record count of " << nss->ns() << " (" << uuid.toString()
                << ") before rollback is " << oldCount << ". Setting it to " << newCount
                << ", due to change of " << countDiff;
         _newCounts[uuid] = newCount;
@@ -1004,38 +1017,27 @@ boost::optional<BSONObj> RollbackImpl::_findDocumentById(OperationContext* opCtx
 }
 
 Status RollbackImpl::_writeRollbackFiles(OperationContext* opCtx) {
-    const auto& uuidCatalog = UUIDCatalog::get(opCtx);
+    const auto& catalog = CollectionCatalog::get(opCtx);
     auto storageEngine = opCtx->getServiceContext()->getStorageEngine();
     for (auto&& entry : _observerInfo.rollbackDeletedIdsMap) {
         const auto& uuid = entry.first;
-        const auto nss = uuidCatalog.lookupNSSByUUID(uuid);
+        const auto nss = catalog.lookupNSSByUUID(uuid);
 
         // Drop-pending collections are not visible to rollback via the catalog when they are
         // managed by the storage engine. See StorageEngine::supportsPendingDrops().
-        if (nss.isEmpty() && storageEngine->supportsPendingDrops()) {
+        if (!nss && storageEngine->supportsPendingDrops()) {
             log() << "The collection with UUID " << uuid
-                  << " is missing in the UUIDCatalog. This could be due to a dropped collection. "
-                     "Not writing rollback file for namespace "
-                  << nss.ns() << " with uuid " << uuid;
+                  << " is missing in the CollectionCatalog. This could be due to a dropped "
+                     " collection. Not writing rollback file for uuid "
+                  << uuid;
             continue;
         }
 
-        invariant(!nss.isEmpty(),
+        invariant(nss,
                   str::stream() << "The collection with UUID " << uuid
-                                << " is unexpectedly missing in the UUIDCatalog");
+                                << " is unexpectedly missing in the CollectionCatalog");
 
-        if (_isInShutdown()) {
-            log() << "Rollback shutting down; not writing rollback file for namespace " << nss.ns()
-                  << " with uuid " << uuid;
-            continue;
-        }
-
-        _writeRollbackFileForNamespace(opCtx, uuid, nss, entry.second);
-    }
-
-    // TODO (SERVER-40614): This interrupt point should be removed.
-    if (_isInShutdown()) {
-        return {ErrorCodes::ShutdownInProgress, "rollback shutting down"};
+        _writeRollbackFileForNamespace(opCtx, uuid, *nss, entry.second);
     }
 
     return Status::OK();
@@ -1086,27 +1088,10 @@ void RollbackImpl::_writeRollbackFileForNamespace(OperationContext* opCtx,
 }
 
 StatusWith<Timestamp> RollbackImpl::_recoverToStableTimestamp(OperationContext* opCtx) {
-    // TODO (SERVER-40614): This interrupt point should be removed.
-    if (_isInShutdown()) {
-        return Status(ErrorCodes::ShutdownInProgress, "rollback shutting down");
-    }
-    // Recover to the stable timestamp while holding the global exclusive lock.
-    {
-        Lock::GlobalWrite globalWrite(opCtx);
-        try {
-            auto stableTimestampSW = _storageInterface->recoverToStableTimestamp(opCtx);
-            if (!stableTimestampSW.isOK()) {
-                severe() << "RecoverToStableTimestamp failed. "
-                         << causedBy(stableTimestampSW.getStatus());
-                // TODO (SERVER-40614): fassert here instead of depending on the caller to do it
-                return {ErrorCodes::UnrecoverableRollbackError,
-                        "Recover to stable timestamp failed."};
-            }
-            return stableTimestampSW;
-        } catch (...) {
-            return exceptionToStatus();
-        }
-    }
+    // Recover to the stable timestamp while holding the global exclusive lock. This may throw,
+    // which the caller must handle.
+    Lock::GlobalWrite globalWrite(opCtx);
+    return _storageInterface->recoverToStableTimestamp(opCtx);
 }
 
 Status RollbackImpl::_triggerOpObserver(OperationContext* opCtx) {

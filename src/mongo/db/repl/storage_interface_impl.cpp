@@ -46,11 +46,11 @@
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/db/catalog/coll_mod.h"
 #include "mongo/db/catalog/collection.h"
+#include "mongo/db/catalog/collection_catalog.h"
 #include "mongo/db/catalog/collection_catalog_entry.h"
 #include "mongo/db/catalog/database_holder.h"
 #include "mongo/db/catalog/document_validation.h"
 #include "mongo/db/catalog/index_catalog.h"
-#include "mongo/db/catalog/uuid_catalog.h"
 #include "mongo/db/client.h"
 #include "mongo/db/concurrency/d_concurrency.h"
 #include "mongo/db/concurrency/write_conflict_exception.h"
@@ -537,7 +537,7 @@ Status StorageInterfaceImpl::setIndexIsMultikey(OperationContext* opCtx,
     }
 
     return writeConflictRetry(opCtx, "StorageInterfaceImpl::setIndexIsMultikey", nss.ns(), [&] {
-        AutoGetCollection autoColl(opCtx, nss, MODE_X);
+        AutoGetCollection autoColl(opCtx, nss, MODE_IX);
         auto collectionResult = getCollection(
             autoColl, nss, "The collection must exist before setting an index to multikey.");
         if (!collectionResult.isOK()) {

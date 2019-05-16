@@ -30,7 +30,6 @@
 #pragma once
 
 #include <boost/optional.hpp>
-#include <map>
 
 #include "mongo/db/commands/txn_cmds_gen.h"
 #include "mongo/db/logical_session_id.h"
@@ -90,7 +89,7 @@ public:
         ReadOnly readOnly{ReadOnly::kUnset};
 
         // The highest statement id of the request during which this participant was created.
-        const StmtId stmtIdCreatedAt{kUninitializedStmtId};
+        const StmtId stmtIdCreatedAt;
 
         // Returns the shared transaction options this participant was created with
         const SharedTransactionOptions sharedOptions;
@@ -127,11 +126,15 @@ public:
         bool canChange(StmtId currentStmtId) const;
 
     private:
-        StmtId _stmtIdSelectedAt = kUninitializedStmtId;
+        boost::optional<StmtId> _stmtIdSelectedAt;
         LogicalTime _atClusterTime;
     };
 
     TransactionRouter();
+    TransactionRouter(const TransactionRouter&) = delete;
+    TransactionRouter& operator=(const TransactionRouter&) = delete;
+    TransactionRouter(TransactionRouter&&) = delete;
+    TransactionRouter& operator=(TransactionRouter&&) = delete;
     ~TransactionRouter();
 
     /**
@@ -291,6 +294,13 @@ private:
     const LogicalSessionId& _sessionId() const;
 
     /**
+     * Resets the router's state. Used when the router sees a new transaction for the first time.
+     * This is required because we don't create a new router object for each transaction, but
+     * instead reuse the same object across different transactions.
+     */
+    void _resetRouterState(const TxnNumber& txnNumber);
+
+    /**
      * Retrieves the transaction's outcome from the shard specified in the recovery token.
      */
     BSONObj _commitWithRecoveryToken(OperationContext* opCtx,
@@ -375,11 +385,11 @@ private:
     // The statement id of the latest received command for this transaction. For batch writes, this
     // will be the highest stmtId contained in the batch. Incremented by one if new commands do not
     // contain statement ids.
-    StmtId _latestStmtId = kUninitializedStmtId;
+    StmtId _latestStmtId{kDefaultFirstStmtId};
 
     // The statement id of the command that began this transaction. Defaults to zero if no statement
     // id was included in the first command.
-    StmtId _firstStmtId = kUninitializedStmtId;
+    StmtId _firstStmtId{kDefaultFirstStmtId};
 };
 
 }  // namespace mongo

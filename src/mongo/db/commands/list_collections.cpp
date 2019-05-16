@@ -39,9 +39,9 @@
 #include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/catalog/collection.h"
 #include "mongo/db/catalog/collection_catalog_entry.h"
+#include "mongo/db/catalog/collection_catalog_helper.h"
 #include "mongo/db/catalog/database.h"
 #include "mongo/db/catalog/index_catalog.h"
-#include "mongo/db/catalog/uuid_catalog_helper.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/commands/list_collections_filter.h"
@@ -305,9 +305,8 @@ public:
                         // Only validate on a per-collection basis if the user requested
                         // a list of authorized collections
                         if (authorizedCollections &&
-                            (nss.coll().startsWith("system.") ||
-                             !as->isAuthorizedForAnyActionOnResource(
-                                 ResourcePattern::forExactNamespace(nss)))) {
+                            (!as->isAuthorizedForAnyActionOnResource(
+                                ResourcePattern::forExactNamespace(nss)))) {
                             continue;
                         }
 
@@ -325,11 +324,11 @@ public:
                         opCtx,
                         dbname,
                         MODE_IS,
-                        [&](Collection* collection, CollectionCatalogEntry* catalogEntry) {
+                        [&](const Collection* collection,
+                            const CollectionCatalogEntry* catalogEntry) {
                             if (authorizedCollections &&
-                                (collection->ns().coll().startsWith("system.") ||
-                                 !as->isAuthorizedForAnyActionOnResource(
-                                     ResourcePattern::forExactNamespace(collection->ns())))) {
+                                (!as->isAuthorizedForAnyActionOnResource(
+                                    ResourcePattern::forExactNamespace(collection->ns())))) {
                                 return true;
                             }
                             BSONObj collBson = buildCollectionBson(

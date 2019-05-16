@@ -36,6 +36,7 @@
 #include "mongo/base/counter.h"
 #include "mongo/db/commands/server_status_metric.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/db/matcher/matcher.h"
 #include "mongo/db/repl/replication_coordinator.h"
 #include "mongo/db/stats/timer_stats.h"
 #include "mongo/rpc/metadata/oplog_query_metadata.h"
@@ -252,7 +253,10 @@ StatusWith<boost::optional<rpc::OplogQueryMetadata>> parseOplogQueryMetadata(
 }  // namespace
 
 StatusWith<OplogFetcher::DocumentsInfo> OplogFetcher::validateDocuments(
-    const Fetcher::Documents& documents, bool first, Timestamp lastTS) {
+    const Fetcher::Documents& documents,
+    bool first,
+    Timestamp lastTS,
+    StartingPoint startingPoint) {
     if (first && documents.empty()) {
         return Status(ErrorCodes::OplogStartMissing,
                       str::stream() << "The first batch of oplog entries is empty, but expected at "
@@ -300,7 +304,7 @@ StatusWith<OplogFetcher::DocumentsInfo> OplogFetcher::validateDocuments(
     // These numbers are for the documents we will apply.
     info.toApplyDocumentCount = documents.size();
     info.toApplyDocumentBytes = info.networkDocumentBytes;
-    if (first) {
+    if (first && startingPoint == StartingPoint::kSkipFirstDoc) {
         // The count is one less since the first document found was already applied ($gte $ts query)
         // and we will not apply it again.
         --info.toApplyDocumentCount;
@@ -403,9 +407,13 @@ StatusWith<BSONObj> OplogFetcher::_onSuccessfulBatch(const Fetcher::QueryRespons
     // with the setParameter bgSyncOplogFetcherBatchSize=1, so that documents are fetched one at a
     // time.
     MONGO_FAIL_POINT_BLOCK(stopReplProducerOnDocument, fp) {
+        auto opCtx = cc().makeOperationContext();
+        boost::intrusive_ptr<ExpressionContext> expCtx(new ExpressionContext(opCtx.get(), nullptr));
+        auto query = fp.getData()["document"].Obj();
+        Matcher m(query, expCtx);
         if (!queryResponse.documents.empty() &&
-            SimpleBSONObjComparator::kInstance.evaluate(
-                fp.getData()["document"].Obj() == queryResponse.documents.front()["o"].Obj())) {
+            m.matches(queryResponse.documents.front()["o"].Obj())) {
+            log() << "stopReplProducerOnDocument fail point is enabled.";
             return Status(ErrorCodes::FailPointEnabled,
                           "stopReplProducerOnDocument fail point is enabled");
         }
@@ -466,8 +474,8 @@ StatusWith<BSONObj> OplogFetcher::_onSuccessfulBatch(const Fetcher::QueryRespons
         }
     }
 
-    auto validateResult =
-        OplogFetcher::validateDocuments(documents, queryResponse.first, lastFetched.getTimestamp());
+    auto validateResult = OplogFetcher::validateDocuments(
+        documents, queryResponse.first, lastFetched.getTimestamp(), _startingPoint);
     if (!validateResult.isOK()) {
         return validateResult.getStatus();
     }

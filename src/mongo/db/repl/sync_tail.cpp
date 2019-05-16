@@ -41,10 +41,10 @@
 #include "mongo/bson/bsonelement_comparator.h"
 #include "mongo/bson/timestamp.h"
 #include "mongo/db/catalog/collection.h"
+#include "mongo/db/catalog/collection_catalog.h"
 #include "mongo/db/catalog/database.h"
 #include "mongo/db/catalog/database_holder.h"
 #include "mongo/db/catalog/document_validation.h"
-#include "mongo/db/catalog/uuid_catalog.h"
 #include "mongo/db/catalog_raii.h"
 #include "mongo/db/client.h"
 #include "mongo/db/commands/fsync.h"
@@ -219,12 +219,12 @@ NamespaceString parseUUIDOrNs(OperationContext* opCtx, const OplogEntry& oplogEn
     }
 
     const auto& uuid = optionalUuid.get();
-    auto& catalog = UUIDCatalog::get(opCtx);
+    auto& catalog = CollectionCatalog::get(opCtx);
     auto nss = catalog.lookupNSSByUUID(uuid);
     uassert(ErrorCodes::NamespaceNotFound,
             str::stream() << "No namespace with UUID " << uuid.toString(),
-            !nss.isEmpty());
-    return nss;
+            nss);
+    return *nss;
 }
 
 NamespaceStringOrUUID getNsOrUUID(const NamespaceString& nss, const BSONObj& op) {
@@ -326,13 +326,8 @@ Status SyncTail::syncApply(OperationContext* opCtx,
     };
 
     if (opType == OpTypeEnum::kNoop) {
-        if (nss.db() == "") {
-            incrementOpsAppliedStats();
-            return Status::OK();
-        }
-        Lock::DBLock dbLock(opCtx, nss.db(), MODE_X);
-        OldClientContext ctx(opCtx, nss.ns());
-        return finishApply(applyOp(ctx.db()));
+        incrementOpsAppliedStats();
+        return Status::OK();
     } else if (OplogEntry::isCrudOpType(opType)) {
         return finishApply(writeConflictRetry(opCtx, "syncApply_CRUD", nss.ns(), [&] {
             // Need to throw instead of returning a status for it to be properly ignored.
@@ -633,16 +628,16 @@ private:
         Client::initThread("ReplBatcher");
 
         BatchLimits batchLimits;
-        batchLimits.bytes = OplogApplier::calculateBatchLimitBytes(
-            cc().makeOperationContext().get(), _storageInterface);
 
         while (true) {
             MONGO_FAIL_POINT_PAUSE_WHILE_SET(rsSyncApplyStop);
 
             batchLimits.slaveDelayLatestTimestamp = _calculateSlaveDelayLatestTimestamp();
 
-            // Check this once per batch since users can change it at runtime.
+            // Check the limits once per batch since users can change them at runtime.
             batchLimits.ops = OplogApplier::getBatchLimitOperations();
+            batchLimits.bytes = OplogApplier::calculateBatchLimitBytes(
+                cc().makeOperationContext().get(), _storageInterface);
 
             OpQueue ops(batchLimits.ops);
             {
@@ -844,21 +839,12 @@ void SyncTail::_oplogApplication(ReplicationCoordinator* replCoord,
     }
 }
 
-// Returns whether an oplog entry represents a commitTransaction for a transaction which has not
-// been prepared.  An entry is an unprepared commit if it has a boolean "prepared" field set to
-// false.
-inline bool isUnpreparedCommit(const OplogEntry& entry) {
-    return entry.getCommandType() == OplogEntry::CommandType::kCommitTransaction &&
-        entry.getObject()[CommitTransactionOplogObject::kPreparedFieldName].isBoolean() &&
-        !entry.getObject()[CommitTransactionOplogObject::kPreparedFieldName].boolean();
-}
-
 // Returns whether an oplog entry represents an applyOps which is a self-contained atomic operation,
 // or the last applyOps of an unprepared transaction, as opposed to part of a prepared transaction
 // or a non-final applyOps in an transaction.
 inline bool isCommitApplyOps(const OplogEntry& entry) {
     return entry.getCommandType() == OplogEntry::CommandType::kApplyOps && !entry.shouldPrepare() &&
-        !entry.isPartialTransaction();
+        !entry.isPartialTransaction() && !entry.getObject().getBoolField("prepare");
 }
 
 void SyncTail::shutdown() {
@@ -992,7 +978,7 @@ void SyncTail::fetchAndInsertMissingDocument(OperationContext* opCtx,
         } else {
             // If the oplog entry has a UUID, use it to find the collection in which to insert the
             // missing document.
-            auto& catalog = UUIDCatalog::get(opCtx);
+            auto& catalog = CollectionCatalog::get(opCtx);
             coll = catalog.lookupCollectionByUUID(*uuid);
             if (!coll) {
                 // TODO(SERVER-30819) insert this UUID into the missing UUIDs set.
@@ -1164,14 +1150,17 @@ void SyncTail::_fillWriterVectors(OperationContext* opCtx,
         // yet.
         if (op.isPartialTransaction()) {
             auto& partialTxnList = partialTxnOps[*op.getSessionId()];
-            if (!partialTxnList.empty() &&
-                partialTxnList.front()->getTxnNumber() != op.getTxnNumber()) {
-                // TODO: When abortTransaction is implemented, this should invariant and
-                // the list should be cleared on abort.
-                partialTxnList.clear();
-            }
+            // If this operation belongs to an existing partial transaction, partialTxnList
+            // must contain the previous operations of the transaction.
+            invariant(partialTxnList.empty() ||
+                      partialTxnList.front()->getTxnNumber() == op.getTxnNumber());
             partialTxnList.push_back(&op);
             continue;
+        }
+
+        if (op.getCommandType() == OplogEntry::CommandType::kAbortTransaction) {
+            auto& partialTxnList = partialTxnOps[*op.getSessionId()];
+            partialTxnList.clear();
         }
 
         if (op.isCrudOpType()) {
@@ -1201,10 +1190,13 @@ void SyncTail::_fillWriterVectors(OperationContext* opCtx,
         // function.
         if (isCommitApplyOps(op)) {
             try {
-                // On commit of unprepared transactions, get transactional operations from the oplog
-                // and fill writers with those operations.
-                // Flush partialTxnList operations for current transaction.
-                if (auto logicalSessionId = op.getSessionId()) {
+                auto logicalSessionId = op.getSessionId();
+                // applyOps entries generated by a transaction must have a sessionId and a
+                // transaction number.
+                if (logicalSessionId && op.getTxnNumber()) {
+                    // On commit of unprepared transactions, get transactional operations from the
+                    // oplog and fill writers with those operations.
+                    // Flush partialTxnList operations for current transaction.
                     auto& partialTxnList = partialTxnOps[*logicalSessionId];
                     {
                         // We need to use a ReadSourceScope avoid the reads of the transaction
@@ -1218,49 +1210,20 @@ void SyncTail::_fillWriterVectors(OperationContext* opCtx,
                     // Transaction entries cannot have different session updates.
                     _fillWriterVectors(
                         opCtx, &derivedOps->back(), writerVectors, derivedOps, nullptr);
+                } else {
+                    // The applyOps entry was not generated as part of a transaction.
+                    invariant(!op.getPrevWriteOpTimeInTransaction());
+                    derivedOps->emplace_back(ApplyOps::extractOperations(op));
+
+                    // Nested entries cannot have different session updates.
+                    _fillWriterVectors(
+                        opCtx, &derivedOps->back(), writerVectors, derivedOps, nullptr);
                 }
-
-                // After flushing partialTxnList ops, extract remaining ops from current operation.
-                derivedOps->emplace_back(ApplyOps::extractOperations(op));
-
-                // Nested entries cannot have different session updates.
-                _fillWriterVectors(opCtx, &derivedOps->back(), writerVectors, derivedOps, nullptr);
             } catch (...) {
                 fassertFailedWithStatusNoTrace(
                     50711,
                     exceptionToStatus().withContext(str::stream()
                                                     << "Unable to extract operations from applyOps "
-                                                    << redact(op.toBSON())));
-            }
-            continue;
-        } else if (isUnpreparedCommit(op)) {
-            // TODO(SERVER-40728): Remove this block after SERVER-40676 because we will no longer
-            // emit a commitTransaction oplog entry for an unprepared transaction. This code will
-            // no longer be reachable because we will commit the unprepared transaction on the last
-            // applyOps oplog entry, which will not contain a partialTxn field.
-
-            // On commit of unprepared transactions, get transactional operations from the oplog and
-            // fill writers with those operations.
-            try {
-                invariant(derivedOps);
-                auto& partialTxnList = partialTxnOps[*op.getSessionId()];
-                {
-                    // We need to use a ReadSourceScope avoid the reads of the transaction messing
-                    // up the state of the opCtx.  In particular we do not want to set the
-                    // ReadSource to kLastApplied.
-                    ReadSourceScope readSourceScope(opCtx);
-                    derivedOps->emplace_back(
-                        readTransactionOperationsFromOplogChain(opCtx, op, partialTxnList));
-                    partialTxnList.clear();
-                }
-                // Transaction entries cannot have different session updates.
-                _fillWriterVectors(opCtx, &derivedOps->back(), writerVectors, derivedOps, nullptr);
-            } catch (...) {
-                fassertFailedWithStatusNoTrace(
-                    51116,
-                    exceptionToStatus().withContext(str::stream()
-                                                    << "Unable to read operations for transaction "
-                                                    << "commit "
                                                     << redact(op.toBSON())));
             }
             continue;

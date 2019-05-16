@@ -42,6 +42,7 @@
 #include "mongo/bson/simple_bsonelement_comparator.h"
 #include "mongo/bson/simple_bsonobj_comparator.h"
 #include "mongo/db/background.h"
+#include "mongo/db/catalog/collection_catalog.h"
 #include "mongo/db/catalog/collection_catalog_entry.h"
 #include "mongo/db/catalog/collection_info_cache_impl.h"
 #include "mongo/db/catalog/collection_options.h"
@@ -49,7 +50,6 @@
 #include "mongo/db/catalog/index_catalog_impl.h"
 #include "mongo/db/catalog/index_consistency.h"
 #include "mongo/db/catalog/index_key_validate.h"
-#include "mongo/db/catalog/uuid_catalog.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/commands/server_status_metric.h"
 #include "mongo/db/concurrency/d_concurrency.h"
@@ -747,8 +747,10 @@ uint64_t CollectionImpl::dataSize(OperationContext* opCtx) const {
     return _recordStore->dataSize(opCtx);
 }
 
-uint64_t CollectionImpl::getIndexSize(OperationContext* opCtx, BSONObjBuilder* details, int scale) {
-    IndexCatalog* idxCatalog = getIndexCatalog();
+uint64_t CollectionImpl::getIndexSize(OperationContext* opCtx,
+                                      BSONObjBuilder* details,
+                                      int scale) const {
+    const IndexCatalog* idxCatalog = getIndexCatalog();
 
     std::unique_ptr<IndexCatalog::IndexIterator> ii = idxCatalog->getIndexIterator(opCtx, true);
 

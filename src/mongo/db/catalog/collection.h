@@ -183,8 +183,8 @@ public:
      * Sets a new namespace on this Collection, in the case that the Collection is being renamed.
      * In general, reads and writes to Collection objects are synchronized using locks from the lock
      * manager. However, there is special synchronization for ns() and setNs() so that the
-     * UUIDCatalog can perform UUID to namespace lookup without holding a Collection lock. See
-     * UUIDCatalog::setCollectionNamespace().
+     * CollectionCatalog can perform UUID to namespace lookup without holding a Collection lock. See
+     * CollectionCatalog::setCollectionNamespace().
      */
     virtual void setNs(NamespaceString nss) = 0;
 
@@ -421,7 +421,7 @@ public:
 
     virtual uint64_t getIndexSize(OperationContext* const opCtx,
                                   BSONObjBuilder* const details = nullptr,
-                                  const int scale = 1) = 0;
+                                  const int scale = 1) const = 0;
 
     /**
      * If return value is not boost::none, reads with majority read concern using an older snapshot

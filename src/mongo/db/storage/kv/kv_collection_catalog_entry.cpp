@@ -35,7 +35,7 @@
 
 #include <memory>
 
-#include "mongo/db/catalog/uuid_catalog.h"
+#include "mongo/db/catalog/collection_catalog.h"
 #include "mongo/db/index/index_descriptor.h"
 #include "mongo/db/storage/kv/kv_catalog.h"
 #include "mongo/db/storage/kv/kv_catalog_feature_tracker.h"
@@ -189,16 +189,6 @@ void KVCollectionCatalogEntry::setIndexKeyStringWithLongTypeBitsExistsOnDisk(
     }
 }
 
-void KVCollectionCatalogEntry::setIndexHead(OperationContext* opCtx,
-                                            StringData indexName,
-                                            const RecordId& newHead) {
-    MetaData md = _getMetaData(opCtx);
-    int offset = md.findIndexOffset(indexName);
-    invariant(offset >= 0);
-    md.indexes[offset].head = newHead;
-    _catalog->putMetaData(opCtx, ns(), md);
-}
-
 Status KVCollectionCatalogEntry::removeIndex(OperationContext* opCtx, StringData indexName) {
     MetaData md = _getMetaData(opCtx);
 
@@ -226,7 +216,6 @@ Status KVCollectionCatalogEntry::prepareForIndexBuild(OperationContext* opCtx,
     IndexMetaData imd;
     imd.spec = spec->infoObj();
     imd.ready = false;
-    imd.head = RecordId();
     imd.multikey = false;
     imd.prefix = prefix;
     imd.isBackgroundSecondaryBuild = isBackgroundSecondaryBuild;

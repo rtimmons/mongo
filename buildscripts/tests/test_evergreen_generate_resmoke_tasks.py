@@ -8,11 +8,11 @@ import unittest
 import requests
 import yaml
 
-from mock import patch, mock_open, call, Mock
+from mock import patch, mock_open, call, Mock, MagicMock
 
 from buildscripts import evergreen_generate_resmoke_tasks as grt
 from buildscripts.evergreen_generate_resmoke_tasks import render_suite, render_misc_suite, \
-    prepare_directory_for_suite
+    prepare_directory_for_suite, remove_gen_suffix
 
 # pylint: disable=missing-docstring,invalid-name,unused-argument,no-self-use,protected-access
 
@@ -24,6 +24,17 @@ NS = "buildscripts.evergreen_generate_resmoke_tasks"
 def ns(relative_name):  # pylint: disable-invalid-name
     """Return a full name from a name relative to the test module"s name space."""
     return NS + "." + relative_name
+
+
+class TestHelperMethods(unittest.TestCase):
+    def test_removes_gen_suffix(self):
+        input_task_name = "sharding_auth_auditg_gen"
+        self.assertEqual("sharding_auth_auditg", remove_gen_suffix(input_task_name))
+
+    def test_doesnt_remove_non_gen_suffix(self):
+        input_task_name = "sharded_multi_stmt_txn_jscore_passthroug"
+        self.assertEqual("sharded_multi_stmt_txn_jscore_passthroug",
+                         remove_gen_suffix(input_task_name))
 
 
 class TestTestStats(unittest.TestCase):
@@ -674,3 +685,53 @@ class MainTest(unittest.TestCase):
             self.assertIn(tests_runtimes[2], filtered_list)
             self.assertIn(tests_runtimes[0], filtered_list)
             self.assertEqual(2, len(filtered_list))
+
+
+class TestShouldTasksBeGenerated(unittest.TestCase):
+    def test_during_first_execution(self):
+        evg_api = MagicMock()
+        task_id = "task_id"
+        evg_api.task_by_id.return_value.execution = 0
+
+        self.assertTrue(grt.should_tasks_be_generated(evg_api, task_id))
+        evg_api.task_by_id.assert_called_with(task_id, fetch_all_executions=True)
+
+    def test_after_successful_execution(self):
+        evg_api = MagicMock()
+        task_id = "task_id"
+        task = evg_api.task_by_id.return_value
+        task.execution = 1
+        task.get_execution.return_value.is_success.return_value = True
+
+        self.assertFalse(grt.should_tasks_be_generated(evg_api, task_id))
+        evg_api.task_by_id.assert_called_with(task_id, fetch_all_executions=True)
+
+    def test_after_multiple_successful_execution(self):
+        evg_api = MagicMock()
+        task_id = "task_id"
+        task = evg_api.task_by_id.return_value
+        task.execution = 5
+        task.get_execution.return_value.is_success.return_value = True
+
+        self.assertFalse(grt.should_tasks_be_generated(evg_api, task_id))
+        evg_api.task_by_id.assert_called_with(task_id, fetch_all_executions=True)
+
+    def test_after_failed_execution(self):
+        evg_api = MagicMock()
+        task_id = "task_id"
+        task = evg_api.task_by_id.return_value
+        task.execution = 1
+        task.get_execution.return_value.is_success.return_value = False
+
+        self.assertTrue(grt.should_tasks_be_generated(evg_api, task_id))
+        evg_api.task_by_id.assert_called_with(task_id, fetch_all_executions=True)
+
+    def test_after_multiple_failed_execution(self):
+        evg_api = MagicMock()
+        task_id = "task_id"
+        task = evg_api.task_by_id.return_value
+        task.execution = 5
+        task.get_execution.return_value.is_success.return_value = False
+
+        self.assertTrue(grt.should_tasks_be_generated(evg_api, task_id))
+        evg_api.task_by_id.assert_called_with(task_id, fetch_all_executions=True)

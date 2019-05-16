@@ -2517,6 +2517,8 @@ intrusive_ptr<Expression> ExpressionMeta::parse(
         return new ExpressionMeta(expCtx, MetaType::TEXT_SCORE);
     } else if (expr.valueStringData() == "randVal") {
         return new ExpressionMeta(expCtx, MetaType::RAND_VAL);
+    } else if (expr.valueStringData() == "searchScore") {
+        return new ExpressionMeta(expCtx, MetaType::SEARCH_SCORE);
     } else {
         uasserted(17308, "Unsupported argument to $meta: " + expr.String());
     }
@@ -2534,6 +2536,9 @@ Value ExpressionMeta::serialize(bool explain) const {
         case MetaType::RAND_VAL:
             return Value(DOC("$meta"
                              << "randVal"_sd));
+        case MetaType::SEARCH_SCORE:
+            return Value(DOC("$meta"
+                             << "searchScore"_sd));
     }
     MONGO_UNREACHABLE;
 }
@@ -2544,6 +2549,8 @@ Value ExpressionMeta::evaluate(const Document& root) const {
             return root.hasTextScore() ? Value(root.getTextScore()) : Value();
         case MetaType::RAND_VAL:
             return root.hasRandMetaField() ? Value(root.getRandMetaField()) : Value();
+        case MetaType::SEARCH_SCORE:
+            return root.hasSearchScore() ? Value(root.getSearchScore()) : Value();
     }
     MONGO_UNREACHABLE;
 }
@@ -4843,32 +4850,24 @@ static Value evaluateRoundOrTrunc(const Document& root,
             str::stream() << opName << " only supports numeric types, not "
                           << typeName(numericArg.getType()),
             numericArg.numeric());
-    if (children.size() == 1) {
-        switch (numericArg.getType()) {
-            case BSONType::NumberDecimal:
-                return Value(
-                    numericArg.getDecimal().quantize(Decimal128::kNormalizedZero, roundingMode));
-            case BSONType::NumberDouble:
-                return Value(doubleOp(numericArg.getDouble()));
-            // There's no point to round/trunc integers or longs without precision argument, it will
-            // have no effect.
-            default:
-                return numericArg;
+
+    long long precisionValue = 0;
+    if (children.size() > 1) {
+        auto precisionArg = Value(children[1]->evaluate(root));
+        if (precisionArg.nullish()) {
+            return Value(BSONNULL);
         }
+        precisionValue = precisionArg.coerceToLong();
+        uassert(51082,
+                str::stream() << "precision argument to  " << opName << " must be a integral value",
+                precisionArg.integral());
+        uassert(51083,
+                str::stream() << "cannot apply " << opName << " with precision value "
+                              << precisionValue
+                              << " value must be in [-20, 100]",
+                minPrecision <= precisionValue && precisionValue <= maxPrecision);
     }
-    // Else, if precision is specified, round to the specified precision.
-    auto precisionArg = Value(children[1]->evaluate(root));
-    if (precisionArg.nullish()) {
-        return Value(BSONNULL);
-    }
-    uassert(51082,
-            str::stream() << "precision argument to  " << opName << " must be a integral value",
-            precisionArg.integral());
-    auto precisionValue = precisionArg.coerceToLong();
-    uassert(51083,
-            str::stream() << "cannot apply " << opName << " with precision value " << precisionValue
-                          << " value must be in [-20, 100]",
-            minPrecision <= precisionValue && precisionValue <= maxPrecision);
+
     // Construct 10^-precisionValue, which will be used as the quantize reference.
     auto quantum = Decimal128(0LL, Decimal128::kExponentBias - precisionValue, 0LL, 1LL);
     switch (numericArg.getType()) {

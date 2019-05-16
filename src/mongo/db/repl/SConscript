@@ -46,6 +46,7 @@ env.Library(
         '$BUILD_DIR/mongo/base',
         '$BUILD_DIR/mongo/db/background',
         '$BUILD_DIR/mongo/db/catalog/catalog_helpers',
+        '$BUILD_DIR/mongo/db/catalog/database_holder',
         '$BUILD_DIR/mongo/db/commands/feature_compatibility_parsers',
         '$BUILD_DIR/mongo/db/db_raii',
         '$BUILD_DIR/mongo/db/dbdirectclient',
@@ -289,6 +290,7 @@ env.Library(
         '$BUILD_DIR/mongo/db/query_exec',
     ],
     LIBDEPS_PRIVATE=[
+        '$BUILD_DIR/mongo/db/catalog/database_holder',
         '$BUILD_DIR/mongo/db/logical_clock',
     ],
 )
@@ -815,6 +817,16 @@ env.CppUnitTest(
 )
 
 env.CppUnitTest(
+    target='oplog_entry_test',
+    source=[
+        'oplog_entry_test.cpp',
+    ],
+    LIBDEPS=[
+        'idempotency_test_fixture',
+    ],
+)
+
+env.CppUnitTest(
     target='idempotency_document_structure_test',
     source=[
         'idempotency_document_structure_test.cpp',
@@ -1219,6 +1231,7 @@ env.Library(
         '$BUILD_DIR/mongo/db/stats/timer_stats',
     ],
     LIBDEPS_PRIVATE=[
+        '$BUILD_DIR/mongo/db/matcher/expressions',
         '$BUILD_DIR/mongo/db/commands/server_status_core',
     ],
 )
@@ -1559,6 +1572,7 @@ env.Library(
         'database_cloner',
         'databases_cloner',
         'multiapplier',
+        'oplog',
         'oplog_application_interface',
         'oplog_buffer_blocking_queue',
         'oplog_entry',

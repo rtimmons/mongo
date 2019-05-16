@@ -33,6 +33,8 @@
 
 #include "mongo/db/commands/server_status.h"
 #include "mongo/db/operation_context.h"
+#include "mongo/db/repl/member_data.h"
+#include "mongo/db/repl/replication_coordinator_fwd.h"
 #include "mongo/db/service_context.h"
 #include "mongo/platform/atomic_word.h"
 #include "mongo/stdx/mutex.h"
@@ -81,6 +83,7 @@ public:
                             const BSONElement& configElement) const override;
 
 private:
+    const int _kMaxTickets = 1000 * 1000 * 1000;
     std::int64_t _getLocksUsedLastPeriod();
     double _getLocksPerOp();
 
@@ -99,7 +102,7 @@ private:
 
     // These values are updated with each flow control computation and are also surfaced in server
     // status.
-    AtomicWord<int> _lastTargetTicketsPermitted{0};
+    AtomicWord<int> _lastTargetTicketsPermitted{_kMaxTickets};
     AtomicWord<double> _lastLocksPerOp{0.0};
     AtomicWord<int> _lastSustainerAppliedCount{0};
 
