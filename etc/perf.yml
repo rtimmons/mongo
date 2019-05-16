@@ -221,7 +221,7 @@ functions:
       params:
         working_dir: src
         script: |
-          set -eou pipefail
+          set -ev
           cd genny/genny
           ls ../../../
           export PATH="/opt/mongodbtoolchain/v3/bin:$PATH"
