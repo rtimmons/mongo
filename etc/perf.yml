@@ -232,7 +232,7 @@ functions:
     - command: "json.send"
       params:
         name: "perf"
-        file: "${workdir}/src/perf.json"
+        file: "src/perf.json"
 
   "run perf tests":
     - command: shell.exec
