@@ -223,6 +223,7 @@ functions:
         script: |
           set -ev
           cd genny/genny
+          pwd
           ls ../../../
           export PATH="/opt/mongodbtoolchain/v3/bin:$PATH"
 
@@ -232,7 +233,8 @@ functions:
 
           ./scripts/lamp --linux-distro rhel62
           ./dist/bin/genny run -w ./dist/etc/genny/workloads/scale/InsertRemove.yml -u 'mongodb://admin:password@localhost:27017' --metrics-output-file genny-perf.csv --metrics-format cedar-csv
-          genny-metrics-legacy-report --report-file ../../../src/perf.json genny-perf.csv
+          genny-metrics-legacy-report --report-file ../../../src/report.json genny-perf.csv
+          echo "Wrote json stats to $PWD/../../../src/report.json genny-perf.csv"
 
   "run perf tests":
     - command: shell.exec
