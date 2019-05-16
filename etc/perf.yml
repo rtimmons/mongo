@@ -221,16 +221,9 @@ functions:
       params:
         working_dir: src
         script: |
-          set -o errexit
-          set -o verbose
-          echo "pwd = $(pwd)"
-          pwd; ls;
-          find . -type f -name '*genny*'
+          set -eou pipefail
           cd genny/genny
-          echo "pwd = $(pwd)"
-          pwd; ls;
-          find . -type f -name '*genny*'
-
+          ls ../../../
           export PATH="/opt/mongodbtoolchain/v3/bin:$PATH"
 
           python3 -m virtualenv ./venv
@@ -239,12 +232,7 @@ functions:
 
           ./scripts/lamp --linux-distro rhel62
           ./dist/bin/genny run -w ./dist/etc/genny/workloads/scale/InsertRemove.yml -u 'mongodb://admin:password@localhost:27017' --metrics-output-file genny-perf.csv --metrics-format cedar-csv
-          genny-metrics-legacy-report --report-file genny-perf.json genny-perf.csv
-    - command: "json.send"
-      params:
-        name: "perf"
-        file: "genny/genny/genny-perf.json"
-
+          genny-metrics-legacy-report --report-file ../../../src/genny-perf.json genny-perf.csv
 
   "run perf tests":
     - command: shell.exec
@@ -631,7 +619,6 @@ buildvariants:
   display_name: 1-Node ReplSet Linux inMemory
   batchtime: 90  # 1.5 hours
   modules:
-    # - enterprise  TODO: should this be here???
     - genny
   expansions:
     mongod_exec_wrapper: *exec_wrapper
