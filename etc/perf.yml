@@ -50,7 +50,6 @@ modules:
   branch: master
 - name: genny
   repo: git@github.com:mongodb/genny.git
-  prefix: genny
   branch: master
 
 functions:
@@ -211,7 +210,6 @@ functions:
           python ../dsi/analysis/perf_regression_check.py $cmd_flags -f history.json --rev ${revision} -t tags.json --refTag $REFTAG --overrideFile $OVERRIDE --variant ${build_variant} --task ${task_name} --threshold 0.075 --threadThreshold 0.12
 
   "run genny tests":
-    - command: manifest.load
     - command: git.get_project
       params:
         directory: src
@@ -219,23 +217,22 @@ functions:
           genny: ${genny_rev}
     - command: shell.exec
       params:
-        working_dir: src
+        working_dir: src/genny
         script: |
-          set -ev
-          cd genny/genny
+          set -eo pipefail
 
           export PATH="/opt/mongodbtoolchain/v3/bin:$PATH"
           python3 -m virtualenv ./venv
           source ./venv/bin/activate
-          pip3 install ./src/python
+          python -m pip install ./src/python
 
           ./scripts/lamp --linux-distro rhel62
           ./dist/bin/genny run -w ./dist/etc/genny/workloads/scale/InsertRemove.yml -u 'mongodb://admin:password@localhost:27017' --metrics-output-file genny-perf.csv --metrics-format cedar-csv
-          genny-metrics-legacy-report --report-file ../../../src/perf.json genny-perf.csv
+          genny-metrics-legacy-report --report-file "${workdir}/src/perf.json" genny-perf.csv
     - command: "json.send"
       params:
         name: "perf"
-        file: "src/perf.json"
+        file: "${workdir}/src/perf.json"
 
   "run perf tests":
     - command: shell.exec
