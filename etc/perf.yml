@@ -231,7 +231,11 @@ functions:
 
           ./scripts/lamp --linux-distro rhel62
           ./dist/bin/genny run -w ./dist/etc/genny/workloads/scale/InsertRemove.yml -u 'mongodb://admin:password@localhost:27017' --metrics-output-file genny-perf.csv --metrics-format cedar-csv
-          genny-metrics-legacy-report --report-file ../../../src/report.json genny-perf.csv
+          genny-metrics-legacy-report --report-file ../../../src/perf.json genny-perf.csv
+    - command: "json.send"
+      params:
+        name: "perf"
+        file: "src/perf.json"
 
   "run perf tests":
     - command: shell.exec
