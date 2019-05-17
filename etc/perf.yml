@@ -209,7 +209,10 @@ functions:
           OVERRIDE="../dsi/analysis/${branch_name}/perf_override.json"
           python ../dsi/analysis/perf_regression_check.py $cmd_flags -f history.json --rev ${revision} -t tags.json --refTag $REFTAG --overrideFile $OVERRIDE --variant ${build_variant} --task ${task_name} --threshold 0.075 --threadThreshold 0.12
 
-  "run genny tests":
+  # Params:
+  #   workload: the path relative to genny/src/workloads to run e.g.
+  #             scale/InsertRemove.yml
+  "run genny workload":
     - command: git.get_project
       params:
         directory: src
@@ -227,7 +230,7 @@ functions:
           python -m pip install ./src/python
 
           ./scripts/lamp --linux-distro rhel62
-          ./dist/bin/genny run -w ./dist/etc/genny/workloads/scale/InsertRemove.yml -u 'mongodb://admin:password@localhost:27017' --metrics-output-file genny-perf.csv --metrics-format cedar-csv
+          ./dist/bin/genny run -w "./dist/etc/genny/workloads/${workload}" -u 'mongodb://admin:password@localhost:27017' --metrics-output-file genny-perf.csv --metrics-format cedar-csv
           genny-metrics-legacy-report --report-file "${workdir}/src/perf.json" genny-perf.csv
     - command: "json.send"
       params:
@@ -264,13 +267,16 @@ functions:
         file: "src/perf/perf.json"
 
 tasks:
-- name: genny
+
+- name: genny_scale_InsertRemove
   depends_on:
   - variant: linux-wt-standalone
     name: compile
   commands:
   - func: "start server"
-  - func: "run genny tests"
+  - func: "run genny workload"
+    params:
+      workload: scale/InsertRemove.yml
 
 - name: compile
   commands:
@@ -600,7 +606,7 @@ buildvariants:
   - name: compile
     distros:
     - rhel62-large
-  - name: genny
+  - name: genny_scale_InsertRemove
   - name: aggregation
   - name: agg-query-comparison
   - name: query
@@ -641,7 +647,7 @@ buildvariants:
   run_on:
   - "centos6-perf"
   tasks:
-  - name: genny
+  - name: genny_scale_InsertRemove
   - name: update
   - name: insert
   - name: misc
