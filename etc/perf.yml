@@ -275,7 +275,7 @@ tasks:
   commands:
   - func: "start server"
   - func: "run genny workload"
-    params:
+    vars:
       workload: scale/InsertRemove.yml
 
 - name: compile
