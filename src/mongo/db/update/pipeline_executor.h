@@ -61,21 +61,7 @@ public:
      */
     ApplyResult applyUpdate(ApplyParams applyParams) const final;
 
-    Value serialize() const final {
-        std::vector<Value> valueArray;
-        for (const auto& stage : _pipeline->getSources()) {
-            // TODO SERVER-40539: Consider subclassing DocumentSourceQueue with a class that is
-            // explicitly skipped when serializing. With that change call Pipeline::serialize()
-            // directly.
-            if (stage->getSourceName() == "mock"_sd) {
-                continue;
-            }
-
-            stage->serializeToArray(valueArray);
-        }
-
-        return Value(valueArray);
-    }
+    Value serialize() const final;
 
 private:
     boost::intrusive_ptr<ExpressionContext> _expCtx;

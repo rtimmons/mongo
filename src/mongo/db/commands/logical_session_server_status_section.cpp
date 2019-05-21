@@ -27,31 +27,32 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kControl
-
 #include "mongo/platform/basic.h"
 
-#include "mongo/embedded/logical_session_cache_factory_embedded.h"
-
-#include "mongo/db/logical_session_cache_impl.h"
-#include "mongo/db/service_liaison_mongod.h"
-#include "mongo/db/sessions_collection_standalone.h"
-#include "mongo/stdx/memory.h"
-#include "mongo/util/log.h"
+#include "mongo/db/commands/server_status.h"
+#include "mongo/db/jsobj.h"
+#include "mongo/db/logical_session_cache.h"
+#include "mongo/db/operation_context.h"
 
 namespace mongo {
+namespace {
 
-std::unique_ptr<LogicalSessionCache> makeLogicalSessionCacheEmbedded() {
-    auto liaison = std::make_unique<ServiceLiaisonMongod>();
+class LogicalSessionServerStatusSection : public ServerStatusSection {
+public:
+    LogicalSessionServerStatusSection() : ServerStatusSection("logicalSessionRecordCache") {}
 
-    auto sessionsColl = std::make_shared<SessionsCollectionStandalone>();
+    bool includeByDefault() const override {
+        return true;
+    }
 
-    return stdx::make_unique<LogicalSessionCacheImpl>(
-        std::move(liaison),
-        std::move(sessionsColl),
-        [](OperationContext*, SessionsCollection&, Date_t) {
-            return 0; /* No op*/
-        });
-}
+    BSONObj generateSection(OperationContext* opCtx,
+                            const BSONElement& configElement) const override {
+        const auto logicalSessionCache = LogicalSessionCache::get(opCtx);
 
+        return logicalSessionCache ? logicalSessionCache->getStats().toBSON() : BSONObj();
+    }
+
+} logicalSessionsServerStatusSection;
+
+}  // namespace
 }  // namespace mongo

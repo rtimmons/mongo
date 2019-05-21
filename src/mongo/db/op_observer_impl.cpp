@@ -1351,53 +1351,6 @@ void logCommitOrAbortForTransaction(OperationContext* opCtx,
         });
 }
 
-// This is used only for multi-oplog-entry unprepared transactions
-// TODO (SERVER-40728) Remove this unused function.
-repl::OpTime logCommitForUnpreparedTransaction(OperationContext* opCtx,
-                                               StmtId stmtId,
-                                               const repl::OpTime& prevOpTime,
-                                               const OplogSlot oplogSlot,
-                                               const unsigned long long numInTxnOps) {
-    const NamespaceString cmdNss{"admin", "$cmd"};
-
-    const auto wallClockTime = getWallClockTimeForOpLog(opCtx);
-
-    OperationSessionInfo sessionInfo;
-    repl::OplogLink oplogLink;
-    CommitTransactionOplogObject cmdObj;
-    sessionInfo.setSessionId(*opCtx->getLogicalSessionId());
-    sessionInfo.setTxnNumber(*opCtx->getTxnNumber());
-    oplogLink.prevOpTime = prevOpTime;
-    cmdObj.setPrepared(false);
-    cmdObj.setCount(numInTxnOps);
-
-    const auto oplogOpTime = logOperation(opCtx,
-                                          "c",
-                                          cmdNss,
-                                          {} /* uuid */,
-                                          cmdObj.toBSON(),
-                                          nullptr /* o2 */,
-                                          false /* fromMigrate */,
-                                          wallClockTime,
-                                          sessionInfo,
-                                          stmtId,
-                                          oplogLink,
-                                          false /* prepare */,
-                                          oplogSlot);
-    // In the present implementation, a reserved oplog slot is always provided.  However that
-    // is not enforced at this level.
-    invariant(oplogSlot.isNull() || oplogSlot == oplogOpTime);
-
-    onWriteOpCompleted(opCtx,
-                       cmdNss,
-                       {stmtId},
-                       oplogOpTime,
-                       wallClockTime,
-                       DurableTxnStateEnum::kCommitted,
-                       boost::none /* startOpTime */);
-
-    return oplogSlot;
-}
 }  //  namespace
 
 void OpObserverImpl::onUnpreparedTransactionCommit(
@@ -1465,55 +1418,8 @@ void OpObserverImpl::onPreparedTransactionCommit(
 
     CommitTransactionOplogObject cmdObj;
     cmdObj.setCommitTimestamp(commitTimestamp);
-    if (gUseMultipleOplogEntryFormatForTransactions &&
-        serverGlobalParams.featureCompatibility.getVersion() ==
-            ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo42) {
-        cmdObj.setPrepared(true);
-    }
     logCommitOrAbortForTransaction(
         opCtx, commitOplogEntryOpTime, cmdObj.toBSON(), DurableTxnStateEnum::kCommitted);
-}
-
-repl::OpTime logPrepareTransaction(OperationContext* opCtx,
-                                   StmtId stmtId,
-                                   const repl::OpTime& prevOpTime,
-                                   const OplogSlot oplogSlot,
-                                   const repl::OpTime& startOpTime) {
-    const NamespaceString cmdNss{"admin", "$cmd"};
-
-    const auto wallClockTime = getWallClockTimeForOpLog(opCtx);
-
-    OperationSessionInfo sessionInfo;
-    repl::OplogLink oplogLink;
-    PrepareTransactionOplogObject cmdObj;
-    sessionInfo.setSessionId(*opCtx->getLogicalSessionId());
-    sessionInfo.setTxnNumber(*opCtx->getTxnNumber());
-    oplogLink.prevOpTime = prevOpTime;
-
-    const auto oplogOpTime = logOperation(opCtx,
-                                          "c",
-                                          cmdNss,
-                                          {} /* uuid */,
-                                          cmdObj.toBSON(),
-                                          nullptr /* o2 */,
-                                          false /* fromMigrate */,
-                                          wallClockTime,
-                                          sessionInfo,
-                                          stmtId,
-                                          oplogLink,
-                                          false /* prepare */,
-                                          oplogSlot);
-    invariant(oplogSlot == oplogOpTime);
-
-    onWriteOpCompleted(opCtx,
-                       cmdNss,
-                       {stmtId},
-                       oplogOpTime,
-                       wallClockTime,
-                       DurableTxnStateEnum::kPrepared,
-                       startOpTime /* startOpTime */);
-
-    return oplogSlot;
 }
 
 void OpObserverImpl::onTransactionPrepare(OperationContext* opCtx,

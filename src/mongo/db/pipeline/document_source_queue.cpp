@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2018-present MongoDB, Inc.
+ *    Copyright (C) 2019-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -29,32 +29,30 @@
 
 #include "mongo/platform/basic.h"
 
-#include "mongo/db/commands/server_status.h"
-#include "mongo/db/jsobj.h"
-#include "mongo/db/logical_session_cache.h"
-#include "mongo/db/operation_context.h"
+#include "mongo/db/pipeline/document_source_queue.h"
 
 namespace mongo {
 
-namespace {
+boost::intrusive_ptr<DocumentSourceQueue> DocumentSourceQueue::create(
+    const boost::intrusive_ptr<ExpressionContext>& expCtx) {
+    return new DocumentSourceQueue({}, expCtx);
+}
 
-class LogicalSessionSSS : public ServerStatusSection {
-public:
-    LogicalSessionSSS() : ServerStatusSection("logicalSessionRecordCache") {}
+DocumentSourceQueue::DocumentSourceQueue(std::deque<GetNextResult> results,
+                                         const boost::intrusive_ptr<ExpressionContext>& expCtx)
+    : DocumentSource(expCtx), _queue(std::move(results)) {}
 
-    ~LogicalSessionSSS() override = default;
+const char* DocumentSourceQueue::getSourceName() const {
+    return kStageName.rawData();
+}
 
-    bool includeByDefault() const override {
-        return true;
+DocumentSource::GetNextResult DocumentSourceQueue::getNext() {
+    if (_queue.empty()) {
+        return GetNextResult::makeEOF();
     }
 
-    BSONObj generateSection(OperationContext* opCtx,
-                            const BSONElement& configElement) const override {
-        auto lsCache = LogicalSessionCache::get(opCtx);
-        return lsCache ? lsCache->getStats().toBSON() : BSONObj();
-    }
-
-} LogicalSessionSSS;
-
-}  // namespace
-}  // namespace mongo
+    auto next = std::move(_queue.front());
+    _queue.pop_front();
+    return next;
+}
+}

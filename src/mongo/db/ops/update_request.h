@@ -34,6 +34,7 @@
 #include "mongo/db/logical_session_id.h"
 #include "mongo/db/namespace_string.h"
 #include "mongo/db/ops/write_ops_parsers.h"
+#include "mongo/db/pipeline/runtime_constants_gen.h"
 #include "mongo/db/query/explain.h"
 #include "mongo/util/str.h"
 
@@ -108,6 +109,14 @@ public:
 
     inline const write_ops::UpdateModification& getUpdateModification() const {
         return _updateMod;
+    }
+
+    inline void setRuntimeConstants(const RuntimeConstants& runtimeConstants) {
+        _runtimeConstants = runtimeConstants;
+    }
+
+    inline const boost::optional<RuntimeConstants>& getRuntimeConstants() const {
+        return _runtimeConstants;
     }
 
     inline void setArrayFilters(const std::vector<BSONObj>& arrayFilters) {
@@ -221,6 +230,10 @@ public:
         }
         builder << "]";
 
+        if (_runtimeConstants) {
+            builder << " runtimeConstants: " << _runtimeConstants->toBSON().toString();
+        }
+
         builder << " god: " << _god;
         builder << " upsert: " << _upsert;
         builder << " multi: " << _multi;
@@ -247,6 +260,9 @@ private:
 
     // Contains the modifiers to apply to matched objects, or a replacement document.
     write_ops::UpdateModification _updateMod;
+
+    // Contains any constant values which may be required by the query or update operation.
+    boost::optional<RuntimeConstants> _runtimeConstants;
 
     // Filters to specify which array elements should be updated.
     std::vector<BSONObj> _arrayFilters;

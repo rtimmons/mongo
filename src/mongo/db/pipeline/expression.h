@@ -244,6 +244,9 @@ public:
     const auto& getChildren() const {
         return _children;
     }
+    auto& getChildren() {
+        return _children;
+    }
 
 protected:
     using ExpressionVector = std::vector<boost::intrusive_ptr<Expression>>;
@@ -1632,6 +1635,7 @@ private:
         TEXT_SCORE,
         RAND_VAL,
         SEARCH_SCORE,
+        SEARCH_HIGHLIGHTS,
     };
 
     ExpressionMeta(const boost::intrusive_ptr<ExpressionContext>& expCtx, MetaType metaType);

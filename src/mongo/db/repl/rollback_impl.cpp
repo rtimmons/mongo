@@ -35,6 +35,8 @@
 #include "mongo/db/repl/rollback_impl.h"
 #include "mongo/db/repl/rollback_impl_gen.h"
 
+#include <fmt/format.h>
+
 #include "mongo/bson/util/bson_extract.h"
 #include "mongo/db/background.h"
 #include "mongo/db/catalog/collection_catalog.h"
@@ -67,6 +69,8 @@
 
 namespace mongo {
 namespace repl {
+
+using namespace fmt::literals;
 
 MONGO_FAIL_POINT_DEFINE(rollbackHangAfterTransitionToRollback);
 
@@ -268,6 +272,38 @@ bool RollbackImpl::_isInShutdown() const {
     return _inShutdown;
 }
 
+namespace {
+void killAllUserOperations(OperationContext* opCtx) {
+    invariant(opCtx);
+    ServiceContext* serviceCtx = opCtx->getServiceContext();
+    invariant(serviceCtx);
+
+    int numOpsKilled = 0;
+
+    for (ServiceContext::LockedClientsCursor cursor(serviceCtx); Client* client = cursor.next();) {
+        stdx::lock_guard<Client> lk(*client);
+        if (client->isFromSystemConnection() && !client->shouldKillSystemOperation(lk)) {
+            // TODO SERVER-40594: kill RangeDeleter if needed.
+            continue;
+        }
+
+        OperationContext* toKill = client->getOperationContext();
+
+        if (toKill && toKill->getOpID() == opCtx->getOpID()) {
+            // Don't kill the rollback thread.
+            continue;
+        }
+
+        if (toKill && !toKill->isKillPending()) {
+            serviceCtx->killOperation(lk, toKill, ErrorCodes::InterruptedDueToReplStateChange);
+            numOpsKilled++;
+        }
+    }
+
+    log() << "Killed {} operation(s) while transitioning to ROLLBACK"_format(numOpsKilled);
+}
+}  // namespace
+
 Status RollbackImpl::_transitionToRollback(OperationContext* opCtx) {
     invariant(opCtx);
     if (_isInShutdown()) {
@@ -276,7 +312,15 @@ Status RollbackImpl::_transitionToRollback(OperationContext* opCtx) {
 
     log() << "transition to ROLLBACK";
     {
-        ReplicationStateTransitionLockGuard transitionGuard(opCtx, MODE_X);
+        ReplicationStateTransitionLockGuard rstlLock(
+            opCtx, MODE_X, ReplicationStateTransitionLockGuard::EnqueueOnly());
+
+        // Kill all user operations to ensure we can successfully acquire the RSTL. Since the node
+        // must be a secondary, this is only killing readers, whose connections will be closed
+        // shortly regardless.
+        killAllUserOperations(opCtx);
+
+        rstlLock.waitForLockUntil(Date_t::max());
 
         auto status =
             _replicationCoordinator->setFollowerModeStrict(opCtx, MemberState::RS_ROLLBACK);
@@ -679,18 +723,20 @@ Status RollbackImpl::_processRollbackOp(OperationContext* opCtx, const OplogEntr
             // prepare oplog entry is rolled-back, it is guaranteed that it has never committed.
             return Status::OK();
         }
-        try {
-            auto subOps = ApplyOps::extractOperations(oplogEntry);
-            for (auto& subOp : subOps) {
-                auto subStatus = _processRollbackOp(opCtx, subOp);
-                if (!subStatus.isOK()) {
-                    return subStatus;
-                }
-            }
+        if (oplogEntry.isPartialTransaction()) {
+            // This oplog entry will be processed when we rollback the implicit commit for the
+            // unprepared transaction (applyOps without partialTxn field).
             return Status::OK();
-        } catch (DBException& e) {
-            return e.toStatus();
         }
+        // Follow chain on applyOps oplog entries to process entire unprepared transaction.
+        // The beginning of the applyOps chain may precede the common point.
+        auto status = _processRollbackOpForApplyOps(opCtx, oplogEntry);
+        if (const auto prevOpTime = oplogEntry.getPrevWriteOpTimeInTransaction()) {
+            for (TransactionHistoryIterator iter(*prevOpTime); status.isOK() && iter.hasNext();) {
+                status = _processRollbackOpForApplyOps(opCtx, iter.next(opCtx));
+            }
+        }
+        return status;
     }
 
     // No information to record for a no-op.
@@ -817,29 +863,19 @@ Status RollbackImpl::_processRollbackOp(OperationContext* opCtx, const OplogEntr
             // entry to compute size adjustments. After recovering to the stable timestamp, prepared
             // transactions are reconstituted and any count adjustments will be replayed and
             // committed again.
-            // TODO (SERVER-40566): Handle new oplog format for transactions larger than 16 MB
-
-            if (const auto prepareOpTime = oplogEntry.getPrevWriteOpTimeInTransaction()) {
-                TransactionHistoryIterator iter(*prepareOpTime);
-                invariant(iter.hasNext());
-
-                const auto prepareOplogEntry = iter.next(opCtx);
-                if (prepareOplogEntry.getCommandType() == OplogEntry::CommandType::kApplyOps &&
-                    prepareOplogEntry.shouldPrepare()) {
-                    // Transform the prepare command into a normal applyOps command. If the
-                    // "prepare" field were not removed, the operation would be ignored.
-                    const auto swApplyOpsEntry =
-                        OplogEntry::parse(prepareOplogEntry.toBSON().removeField("prepare"));
-                    if (!swApplyOpsEntry.isOK()) {
-                        return swApplyOpsEntry.getStatus();
+            if (const auto prevOpTime = oplogEntry.getPrevWriteOpTimeInTransaction()) {
+                for (TransactionHistoryIterator iter(*prevOpTime); iter.hasNext();) {
+                    auto nextOplogEntry = iter.next(opCtx);
+                    if (nextOplogEntry.getCommandType() != OplogEntry::CommandType::kApplyOps) {
+                        continue;
                     }
-
-                    auto subStatus = _processRollbackOp(opCtx, swApplyOpsEntry.getValue());
-                    if (!subStatus.isOK()) {
-                        return subStatus;
+                    auto status = _processRollbackOpForApplyOps(opCtx, nextOplogEntry);
+                    if (!status.isOK()) {
+                        return status;
                     }
                 }
             }
+            return Status::OK();
         }
     }
 
@@ -849,6 +885,26 @@ Status RollbackImpl::_processRollbackOp(OperationContext* opCtx, const OplogEntr
     }
     if (opType == OpTypeEnum::kDelete) {
         ++_observerInfo.rollbackCommandCounts[kDeleteCmdName];
+    }
+
+    return Status::OK();
+}
+
+Status RollbackImpl::_processRollbackOpForApplyOps(OperationContext* opCtx,
+                                                   const OplogEntry& oplogEntry) {
+    invariant(oplogEntry.getCommandType() == OplogEntry::CommandType::kApplyOps);
+
+    try {
+        auto subOps = ApplyOps::extractOperations(oplogEntry);
+        for (auto& subOp : subOps) {
+            auto subStatus = _processRollbackOp(opCtx, subOp);
+            if (!subStatus.isOK()) {
+                return subStatus;
+            }
+        }
+        return Status::OK();
+    } catch (DBException& e) {
+        return e.toStatus();
     }
 
     return Status::OK();

@@ -291,7 +291,9 @@ const BSONObj TransactionParticipant::kDeadEndSentinel(BSON("$incompleteOplogHis
 
 TransactionParticipant::TransactionParticipant() = default;
 
-TransactionParticipant::~TransactionParticipant() = default;
+TransactionParticipant::~TransactionParticipant() {
+    // invariant(!_o.txnState.isInProgress());
+}
 
 TransactionParticipant::Observer::Observer(const ObservableSession& osession)
     : Observer(&getTransactionParticipant(osession.get())) {}
@@ -347,6 +349,9 @@ TransactionParticipant::getOldestActiveTimestamp(Timestamp stableTimestamp) {
         auto opCtx = cc().makeOperationContext();
         auto nss = NamespaceString::kSessionTransactionsTableNamespace;
         auto deadline = Date_t::now() + Milliseconds(100);
+
+        ShouldNotConflictWithSecondaryBatchApplicationBlock shouldNotConflictBlock(
+            opCtx->lockState());
         Lock::DBLock dbLock(opCtx.get(), nss.db(), MODE_IS, deadline);
         Lock::CollectionLock collLock(opCtx.get(), nss, MODE_IS, deadline);
 
@@ -1098,6 +1103,13 @@ Timestamp TransactionParticipant::Participant::prepareTransaction(
         const auto ticks = opCtx->getServiceContext()->getTickSource()->getTicks();
         stdx::lock_guard<Client> lk(*opCtx->getClient());
         o(lk).transactionMetricsObserver.onPrepare(ServerTransactionsMetrics::get(opCtx), ticks);
+
+        // Ensure the lastWriteOpTime is set. This is needed so that we can correctly assign the
+        // prevOpTime for commit and abort oplog entries if a failover happens after the prepare.
+        // This value is updated in _registerCacheUpdateOnCommit, but only on primaries. We
+        // update the lastWriteOpTime here so that it is also available to secondaries. We can
+        // count on it to persist since we never invalidate prepared transactions.
+        o(lk).lastWriteOpTime = prepareOplogSlot;
     }
 
     if (MONGO_FAIL_POINT(hangAfterSettingPrepareStartTime)) {
@@ -1291,6 +1303,10 @@ void TransactionParticipant::Participant::commitPreparedTransaction(
             // in order to set the finishOpTime.
             invariant(commitOplogEntryOpTime);
         }
+
+        // We must have a lastWriteOpTime set, as that will be used for the prevOpTime on the oplog
+        // entry.
+        invariant(!o().lastWriteOpTime.isNull());
 
         // If commitOplogEntryOpTime is a nullopt, then we grab the OpTime from the commitOplogSlot
         // which will only be set if we are primary. Otherwise, the commitOplogEntryOpTime must have
@@ -2027,20 +2043,18 @@ void TransactionParticipant::Participant::invalidate(OperationContext* opCtx) {
 
 void TransactionParticipant::Participant::abortPreparedTransactionForRollback(
     OperationContext* opCtx) {
-    stdx::lock_guard<Client> lg(*opCtx->getClient());
-
-    // Invalidate the session.
-    _invalidate(lg);
-
     uassert(51030,
             str::stream() << "Cannot call abortPreparedTransactionForRollback on unprepared "
                           << "transaction.",
             o().txnState.isPrepared());
 
+    stdx::lock_guard<Client> lg(*opCtx->getClient());
+
     // It should be safe to clear transactionOperationBytes and transactionOperations because
     // we only modify these variables when adding an operation to a transaction. Since this
     // transaction is already prepared, we cannot add more operations to it. We will have this
     // in the prepare oplog entry.
+    _invalidate(lg);
     _resetTransactionState(lg, TransactionState::kNone);
 }
 

@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2018-present MongoDB, Inc.
+ *    Copyright (C) 2019-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -27,15 +27,28 @@
  *    it in the license file.
  */
 
-#pragma once
+#include "mongo/platform/basic.h"
 
-#include <memory>
+#include <boost/intrusive_ptr.hpp>
+#include <string>
+#include <vector>
 
-#include "mongo/db/logical_session_cache.h"
-#include "mongo/db/service_liaison.h"
+#include "mongo/db/operation_context_noop.h"
+#include "mongo/db/pipeline/aggregation_context_fixture.h"
+#include "mongo/db/pipeline/document_source_internal_split_pipeline.h"
+#include "mongo/db/pipeline/stage_constraints.h"
 
 namespace mongo {
+namespace {
+using DocumentSourceInternalSplitPipelineTest = AggregationContextFixture;
 
-std::unique_ptr<LogicalSessionCache> makeLogicalSessionCacheEmbedded();
+TEST_F(DocumentSourceInternalSplitPipelineTest, NotAllowedInLookupIfMustRunOnMongos) {
+    auto expCtx = getExpCtx();
+    auto split = DocumentSourceInternalSplitPipeline::create(
+        expCtx, StageConstraints::HostTypeRequirement::kMongoS);
+    ASSERT_FALSE(split->constraints().isAllowedInLookupPipeline());
+    ASSERT(split->constraints().hostRequirement == StageConstraints::HostTypeRequirement::kMongoS);
+}
 
+}  // namespace
 }  // namespace mongo
