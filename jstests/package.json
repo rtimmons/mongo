@@ -1,0 +1,16 @@
+{
+  "name": "jstests",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "compile": "tsc --build"
+  },
+  "author": "",
+  "license": "SEE LICENSE IN mongodb/mongo",
+  "devDependencies": {
+    "gts": "^1.0.0",
+    "typescript": "^3.5.3"
+  }
+}

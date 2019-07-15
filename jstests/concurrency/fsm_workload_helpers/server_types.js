@@ -1,8 +1,14 @@
 'use strict';
 
+/// <reference path="../../types/assert.d.ts">
+let assert;
+/// <reference path="../../types/Mongo.d.ts">
+let Mongo;
+
 /**
  * Returns true if the process is a mongos, and false otherwise.
- *
+ * @param {Mongo.Database} db - Mongo.Database
+ * @return boolean
  */
 function isMongos(db) {
     // Run isMaster directly on the database's session's client to bypass any session machinery.
