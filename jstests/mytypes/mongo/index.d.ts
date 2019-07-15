@@ -1,6 +1,6 @@
 declare namespace Mongo {
     export interface Client {
-        adminCommand(command: string);
+        adminCommand(command: string | object);
     }
     export interface Session {
         getClient(): Client;
@@ -9,6 +9,10 @@ declare namespace Mongo {
         getSession(): Session;
         adminCommand(command: string);
         serverStatus(): ServerStatus;
+    }
+
+    export interface Connection {
+        adminCommand(command: string | object);
     }
 
     type StorageEngine = {
