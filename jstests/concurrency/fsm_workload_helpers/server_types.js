@@ -7,7 +7,7 @@ var Mongo;
 
 /**
  * Returns true if the process is a mongos, and false otherwise.
- * @param {Mongo.Database} db - Mongo.Database
+ * @param {Mongo.Database} db
  * @return boolean
  */
 function isMongos(db) {
@@ -18,7 +18,7 @@ function isMongos(db) {
 
 /**
  * Returns true if the process is a mongod, and false otherwise.
- *
+ * @param {Mongo.Database} db
  */
 function isMongod(db) {
     return !isMongos(db);
@@ -26,7 +26,8 @@ function isMongod(db) {
 
 /**
  * Returns true if the process is a mongod configsvr, and false otherwise.
- *
+ * @param {Mongo.Database} db
+ * @return boolean
  */
 function isMongodConfigsvr(db) {
     if (!isMongod(db)) {
@@ -42,6 +43,9 @@ function isMongodConfigsvr(db) {
  * Returns the name of the current storage engine.
  *
  * Throws an error if db is connected to a mongos, or if there is no reported storage engine.
+ *
+ * @param {Mongo.Database} db
+ * @return boolean
  */
 function getStorageEngineName(db) {
     var status = db.serverStatus();
@@ -56,6 +60,8 @@ function getStorageEngineName(db) {
 
 /**
  * Returns true if the current storage engine is wiredTiger, and false otherwise.
+ * @param {Mongo.Database} db
+ * @return boolean
  */
 function isWiredTiger(db) {
     return getStorageEngineName(db) === 'wiredTiger';
@@ -63,6 +69,8 @@ function isWiredTiger(db) {
 
 /**
  * Returns true if the current storage engine is ephemeralForTest, and false otherwise.
+ * @param {Mongo.Database} db
+ * @return boolean
  */
 function isEphemeralForTest(db) {
     return getStorageEngineName(db) === 'ephemeralForTest';
@@ -70,6 +78,8 @@ function isEphemeralForTest(db) {
 
 /**
  * Returns true if the current storage engine is ephemeral, and false otherwise.
+ * @param {Mongo.Database} db
+ * @return boolean
  */
 function isEphemeral(db) {
     var engine = getStorageEngineName(db);
@@ -79,6 +89,8 @@ function isEphemeral(db) {
 /**
  * Returns true if the current storage engine supports document-level concurrency, and false
  * otherwise.
+ * @param {Mongo.Database} db
+ * @return boolean
  */
 function supportsDocumentLevelConcurrency(db) {
     var engine = getStorageEngineName(db);
@@ -89,6 +101,9 @@ function supportsDocumentLevelConcurrency(db) {
  * Returns true if the current storage engine supports committed reads.
  *
  * Throws an error if db is connected to a mongos, or if there is no reported storage engine.
+ *
+ * @param {Mongo.Database} db
+ * @return boolean
  */
 function supportsCommittedReads(db) {
     var status = db.serverStatus();
