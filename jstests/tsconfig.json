@@ -10,7 +10,11 @@
     "rootDir": ".",
     "outDir": "tsbuild",
     "target": "es2017",
-    "typeRoots": ["./types"]
+    "moduleResolution": "node",
+    "typeRoots": [
+      "./mytypes"
+    ],
+    "traceResolution": true
   },
   "include": [
       "concurrency/fsm_workload_helpers/server_types.js"

@@ -1,5 +1,6 @@
-export declare module Mongo {
+declare namespace Mongo {
     export interface Database {
 
     }
 }
+

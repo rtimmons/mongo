@@ -1,9 +1,9 @@
 'use strict';
 
-/// <reference path="../../types/assert.d.ts">
-let assert;
-/// <reference path="../../types/Mongo.d.ts">
-let Mongo;
+/// <reference path="../../types/assert">
+var assert;
+/// <reference path="../../types/mongo">
+var Mongo;
 
 /**
  * Returns true if the process is a mongos, and false otherwise.
