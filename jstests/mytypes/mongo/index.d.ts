@@ -12,12 +12,18 @@ declare namespace Mongo {
         serverStatus(): ServerStatus;
     }
 
+    interface Bulk {
+        insert(doc: object);
+        execute();
+    }
+
     export interface Collection {
         getDB(): Database;
         ensureIndex(index: object, options?: object);
         getName(): string;
         insert(document: object);
         count(): number;
+        initializeUnorderedBulkOp(): Bulk;
     }
     export interface Connection {
         adminCommand(command: string | object);

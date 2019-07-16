@@ -19,6 +19,7 @@
   "include": [
       "concurrency/fsm_workload_helpers/server_types.js",
       "libs/check_log.js",
-      "libs/write_concern_util.js"
+      "libs/write_concern_util.js",
+      "replsets/apply_batches_totalMillis.js"
   ]
 }

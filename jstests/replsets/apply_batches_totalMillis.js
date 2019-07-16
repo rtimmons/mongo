@@ -4,6 +4,9 @@
  * batches to finish, by comparing the time recorded after replicating a small and a large load.
  */
 
+/// <reference path="../../types/mongo">
+var Mongo;
+
 (function() {
     "use strict";
 
@@ -13,7 +16,12 @@
             .metrics.repl.apply.batches.totalMillis;
     }
 
-    // Do a bulk insert of documents as: {{key: 0}, {key: 1}, {key: 2}, ... , {key: num-1}}
+    /**
+     * Do a bulk insert of documents as: {{key: 0}, {key: 1}, {key: 2}, ... , {key: num-1}}
+     * @param {Mongo.Collection} coll
+     * @param {string} key
+     * @param {number} num
+     */
     function performBulkInsert(coll, key, num) {
         let bulk = coll.initializeUnorderedBulkOp();
         for (let i = 0; i < num; i++) {
