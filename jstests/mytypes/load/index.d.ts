@@ -2,6 +2,8 @@ declare function load(path: string);
 declare function jsTestLog(msg: string);
 declare function tojson(x: any, indent?:number, nolint?:boolean, depth?:number);
 declare function print(...args:any[]);
+declare function arrayEq(a:any[], b:any[]): boolean;
+declare function doassert(op: any, msg?:string);
 
 declare var db: Mongo.Database;
 
@@ -24,3 +26,13 @@ declare function startParallelShell(jsCode: string, port?:number, noConnect?:boo
 declare class ObjectIdImpl {
 }
 declare function ObjectId(): ObjectIdImpl;
+
+// src/shell/utils.js
+declare var jsTest: {
+    name(): string;
+};
+declare function jsTestName(): string;
+
+interface Object {
+    merge(a,b): Object;
+}

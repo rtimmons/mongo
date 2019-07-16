@@ -23,7 +23,12 @@
       "replsets/apply_batches_totalMillis.js",
       "slow1/conc_update.js",
       "aggregation/bugs/cond.js",
+    "libs/profiler.js",
     "aggregation/data/articles.js",
-    "aggregation/expressions/arrayToObject.js"
+    "aggregation/expressions/arrayToObject.js",
+    "aggregation/extras/merge_helpers.js",
+    "aggregation/sources/addFields/use_cases.js",
+    "aggregation/explain.js",
+    "aggregation/pipeline_pass_through_from_mongos.js"
   ]
 }

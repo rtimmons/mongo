@@ -14,6 +14,7 @@ declare namespace Mongo {
         getClient(): Client;
     }
     export interface DatabaseImpl {
+        getMongo(): Connection;
         getSiblingDB(name:string): Database;
         getSession(): Session;
         adminCommand(command: string);
@@ -29,6 +30,10 @@ declare namespace Mongo {
     }
 
     export interface Collection {
+        createIndex(desc: Document);
+        // TODO: extract to ExplainableCollection
+        //       and limit what methods can be called
+        explain(): Collection;
         aggregate(query:Document);
         getDB(): Database;
         ensureIndex(index: object, options?: object);

@@ -53,6 +53,7 @@ function getLatestProfilerEntry(profileDB, filter) {
 
 // Returns a string representing the wire protocol used for commands run on the given connection.
 // This string matches the system.profile "protocol" field when commands are profiled.
+// @ts-ignore
 function getProfilerProtocolStringForCommand(conn) {
     const protocols = conn.getClientRPCProtocols();
     if ("all" === protocols || /Msg/.test(protocols))

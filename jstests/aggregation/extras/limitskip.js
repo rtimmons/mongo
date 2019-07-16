@@ -18,6 +18,7 @@ assert.eq(doc.result.length, 100, tojson(doc));
 
 print("limit on sort");
 doc = db.runCommand({aggregate: coll, pipeline: [{$sort: {_id: -1}}, {$limit: 3}]});
+// TODO: should this be `var r`? this prevents from adding ts checking
 r = doc.result;
 assert.eq(doc.result.length, 3);
 for (var i = 0; i < r; i++) {

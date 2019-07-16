@@ -32,10 +32,12 @@
         cursor: {},
         comment: testName
     }));
+    // @ts-ignore
     profilerHasSingleMatchingEntryOrThrow({
         profileDB: primaryShard,
-        filter: {"command.aggregate": mongosColl.getName(), "command.comment": testName}
+        filter: {"command.aggregate": mongosColl.getName(), "command.comment": testName},
     });
+    // @ts-ignore
     profilerHasZeroMatchingEntriesOrThrow({
         profileDB: shard1DB,
         filter: {"command.aggregate": mongosColl.getName(), "command.comment": testName}
@@ -64,10 +66,12 @@
         comment: testName
     }),
                                  51047);
+    // @ts-ignore
     profilerHasZeroMatchingEntriesOrThrow({
         profileDB: primaryShard,
         filter: {"command.aggregate": mongosColl.getName(), "command.comment": testName}
     });
+    // @ts-ignore
     profilerHasZeroMatchingEntriesOrThrow({
         profileDB: shard1DB,
         filter: {"command.aggregate": mongosColl.getName(), "command.comment": testName}
@@ -95,10 +99,12 @@
         comment: testName
     }),
                                  51047);
+    // @ts-ignore
     profilerHasZeroMatchingEntriesOrThrow({
         profileDB: primaryShard,
         filter: {"command.aggregate": mongosColl.getName(), "command.comment": testName}
     });
+    // @ts-ignore
     profilerHasZeroMatchingEntriesOrThrow({
         profileDB: shard1DB,
         filter: {"command.aggregate": mongosColl.getName(), "command.comment": testName}
@@ -126,10 +132,12 @@
         comment: testName
     }),
                                  40600);
+    // @ts-ignore
     profilerHasZeroMatchingEntriesOrThrow({
         profileDB: primaryShard,
         filter: {"command.aggregate": mongosColl.getName(), "command.comment": testName}
     });
+    // @ts-ignore
     profilerHasZeroMatchingEntriesOrThrow({
         profileDB: shard1DB,
         filter: {"command.aggregate": mongosColl.getName(), "command.comment": testName}
@@ -154,10 +162,12 @@
         comment: testName
     }),
                                  40600);
+    // @ts-ignore
     profilerHasZeroMatchingEntriesOrThrow({
         profileDB: primaryShard,
         filter: {"command.aggregate": mongosColl.getName(), "command.comment": testName}
     });
+    // @ts-ignore
     profilerHasZeroMatchingEntriesOrThrow({
         profileDB: shard1DB,
         filter: {"command.aggregate": mongosColl.getName(), "command.comment": testName}

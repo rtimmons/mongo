@@ -1,3 +1,5 @@
+var getAggPlanStage;
+
 // Tests the behavior of explain() when used with the aggregation
 // pipeline.  Explain() should not read or modify the plan cache.
 (function() {
@@ -12,10 +14,12 @@
     assert.commandWorked(coll.createIndex({y: 1}));
 
     let result = coll.explain().aggregate([{$match: {x: 1, y: 1}}]);
+    // @ts-ignore
     assert.eq(null, getAggPlanStage(result, "CACHED_PLAN"));
 
     // At this point, there should be no entries in the plan cache.
     result = coll.explain().aggregate([{$match: {x: 1, y: 1}}]);
+    // @ts-ignore
     assert.eq(null, getAggPlanStage(result, "CACHED_PLAN"));
 
     // Now add entry in the cache without explain().
@@ -23,6 +27,7 @@
 
     // Now there's an entry in the cache, make sure explain() doesn't use it.
     result = coll.explain().aggregate([{$match: {x: 1, y: 1}}]);
+    // @ts-ignore
     assert.eq(null, getAggPlanStage(result, "CACHED_PLAN"));
 
 })();

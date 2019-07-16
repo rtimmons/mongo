@@ -1,3 +1,5 @@
+var ShardingTest;
+
 /**
  * $addFields can be used to add fixed and computed fields to documents while preserving the
  * original document. Verify that using $addFields and adding computed fields in a $project yield
@@ -7,7 +9,6 @@
  *   requires_spawning_own_processes,
  * ]
  */
-
 (function() {
     "use strict";
 
@@ -60,7 +61,8 @@
     print("Success! Standalone execution use case test for $addFields passed.");
 
     // Test against a sharded cluster.
-    let st = new ShardingTest({shards: 2});
+    // @ts-ignore
+    const st = new ShardingTest({shards: 2});
     doExecutionTest(st.s0);
     st.stop();
     print("Success! Sharding use case test for $addFields passed.");

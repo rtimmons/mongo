@@ -15,4 +15,3 @@ export declare module assert {
     function neq(a: any, b: any, message?: string);
     function soon(f: () => {}, message, ts: number, n: number);
 }
-
