@@ -29,6 +29,9 @@
     "aggregation/extras/merge_helpers.js",
     "aggregation/sources/addFields/use_cases.js",
     "aggregation/explain.js",
-    "aggregation/pipeline_pass_through_from_mongos.js"
+    "aggregation/pipeline_pass_through_from_mongos.js",
+    "aggregation/variables/**/*",
+    "auth/arbiter.js",
+    "auth/lib/commands_lib.js"
   ]
 }

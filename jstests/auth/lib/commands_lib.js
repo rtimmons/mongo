@@ -1,3 +1,5 @@
+load('jstests/compat.js');
+
 /*
 
 Declaratively defined tests for the authorization properties
@@ -90,6 +92,9 @@ Add "skipTest: <function>" to not run the test for more complex reasons. The fun
 one argument, the connection object.
 
 */
+var getUUIDFromListCollections;
+var emit;
+var FixtureHelpers;
 
 // constants
 
@@ -186,6 +191,8 @@ var roles_all = {
 load("jstests/libs/uuid_util.js");
 // For isReplSet
 load("jstests/libs/fixture_helpers.js");
+
+var res;
 
 var authCommandsLib = {
 
@@ -4381,9 +4388,11 @@ var authCommandsLib = {
           command: {
               mapreduce: "x",
               map: function() {
+                  // @ts-ignore
                   emit(this.groupby, this.n);
               },
               reduce: function(id, emits) {
+                  // @ts-ignore
                   return Array.sum(emits);
               },
               out: {inline: 1}
@@ -4416,6 +4425,7 @@ var authCommandsLib = {
                   emit(this.groupby, this.n);
               },
               reduce: function(id, emits) {
+                  // @ts-ignore
                   return Array.sum(emits);
               },
               out: "mr_out"
@@ -5537,7 +5547,7 @@ var authCommandsLib = {
               privileges: [
                   {resource: {cluster: true}, actions: ["fsync"]},
               ],
-              expectFail: TestData.storageEngine == "inMemory",
+              expectFail: TestData.storageEngine === "inMemory",
           }],
           teardown: (db, response) => {
               if (response.ok) {
