@@ -76,7 +76,7 @@ function stopServerReplication(conn) {
 /**
  * Stops replication at all replicaset secondaries.
  *
- * @param {testlib.ReplSetTest} rs
+ * @param {ReplSetTest} rs
  */
 function stopReplicationOnSecondaries(rs) {
     stopServerReplication(rs.getSecondaries());
@@ -113,7 +113,7 @@ function restartServerReplication(conn) {
 /**
  * Restarts replication at all nodes in a replicaset.
  *
- * @param {testlib.ReplSetTest} rs
+ * @param {ReplSetTest} rs
  */
 function restartReplSetReplication(rs) {
     restartServerReplication(rs.nodes);
@@ -122,7 +122,7 @@ function restartReplSetReplication(rs) {
 /**
  * Restarts replication at all replicaset secondaries.
  *
- * @param {testlib.ReplSetTest} rs
+ * @param {ReplSetTest} rs
  */
 function restartReplicationOnSecondaries(rs) {
     restartServerReplication(rs.getSecondaries());

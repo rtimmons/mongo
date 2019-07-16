@@ -7,9 +7,8 @@ declare namespace testlib {
         shard0: Shard;
         // TODO
         shardColl(name: string, opts1: object, opts2: object, opts3: object, db: string, other: boolean);
-    }
-
-    export interface ReplSetTest {
-
+        _rsObjects: ReplSetTest[];
+        // TODO
+        configRS: any;
     }
 }
