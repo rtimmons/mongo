@@ -3,6 +3,8 @@ declare function jsTestLog(msg: string);
 declare function tojson(x: any, indent?:number, nolint?:boolean, depth?:number);
 declare function print(...args:any[]);
 
+declare var db: Mongo.Database;
+
 // TODO: do we need more than just this file?
 // comes from src/shell/replsettest.js
 declare interface ReplSetTest {

@@ -1,5 +1,4 @@
 /// <reference types="../../types">
-var db;
 
 (function() {
     "use strict";

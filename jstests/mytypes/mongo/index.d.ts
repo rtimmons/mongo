@@ -1,16 +1,25 @@
+type HasConnection = {
+    [k: string]: Mongo.Collection
+}
+type ActualDb = Mongo.DatabaseImpl & HasConnection;
 declare namespace Mongo {
+    export type Document = {
+        [k: string]: any,
+    }
     export interface Client {
         adminCommand(command: string | object);
     }
     export interface Session {
         getClient(): Client;
     }
-    export interface Database {
+    export interface DatabaseImpl {
         getSession(): Session;
         adminCommand(command: string);
         runCommand(command: string | object);
         serverStatus(): ServerStatus;
+        dropDatabase();
     }
+    export type Database = ActualDb;
 
     interface Bulk {
         insert(doc: object);
@@ -22,7 +31,8 @@ declare namespace Mongo {
         ensureIndex(index: object, options?: object);
         getName(): string;
         insert(document: object);
-        count(): number;
+        count(filter?:object): number;
+        findOne(filter?:object): Document;
         initializeUnorderedBulkOp(): Bulk;
     }
     export interface Connection {
