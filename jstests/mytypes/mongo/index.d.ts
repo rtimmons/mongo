@@ -2,6 +2,7 @@ type HasConnection = {
     [k: string]: Mongo.Collection
 }
 type ActualDb = Mongo.DatabaseImpl & HasConnection;
+
 declare namespace Mongo {
     export type Document = {
         [k: string]: any,
@@ -13,6 +14,7 @@ declare namespace Mongo {
         getClient(): Client;
     }
     export interface DatabaseImpl {
+        getSiblingDB(name:string): Database;
         getSession(): Session;
         adminCommand(command: string);
         runCommand(command: string | object);
@@ -27,6 +29,7 @@ declare namespace Mongo {
     }
 
     export interface Collection {
+        aggregate(query:Document);
         getDB(): Database;
         ensureIndex(index: object, options?: object);
         getName(): string;
@@ -34,6 +37,8 @@ declare namespace Mongo {
         count(filter?:object): number;
         findOne(filter?:object): Document;
         initializeUnorderedBulkOp(): Bulk;
+        drop();
+        save(obj?:any);
     }
     export interface Connection {
         adminCommand(command: string | object);

@@ -1,7 +1,11 @@
 // $cond returns the evaluated second argument if the first evaluates to true but the evaluated
 // third argument if the first evaluates to false.
+
+var assertErrorCode;
+
 (function() {
     "use strict";
+    // assertErrorCode
     load('jstests/aggregation/extras/utils.js');
 
     const coll = db.jstests_aggregation_cond;

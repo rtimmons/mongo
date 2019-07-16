@@ -20,3 +20,7 @@ declare class MongoRunner {
 
 // src/shell/startParallelShell
 declare function startParallelShell(jsCode: string, port?:number, noConnect?:boolean);
+
+declare class ObjectIdImpl {
+}
+declare function ObjectId(): ObjectIdImpl;

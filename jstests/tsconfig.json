@@ -21,6 +21,9 @@
       "libs/check_log.js",
       "libs/write_concern_util.js",
       "replsets/apply_batches_totalMillis.js",
-      "slow1/conc_update.js"
+      "slow1/conc_update.js",
+      "aggregation/bugs/cond.js",
+    "aggregation/data/articles.js",
+    "aggregation/expressions/arrayToObject.js"
   ]
 }
