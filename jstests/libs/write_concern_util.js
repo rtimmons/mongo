@@ -2,9 +2,35 @@
  * Utilities for testing writeConcern.
  */
 
+/// <reference types="../../types">
+
+/// <reference path="../../types/check_log">
+var checkLog;
+
+/// <reference path="../../types/load">
 load("jstests/libs/check_log.js");
 
-// Shards a collection with 'numDocs' documents and creates 2 chunks, one on each of two shards.
+/// <reference path="../../types/assert">
+var assert;
+/// <reference path="../../types/mongo">
+var Mongo;
+/// <reference path="../../types/mongo">
+// TODO: this isn't right but it kinda works at least for now and at least for this file
+var NumberLong;
+/// <reference path="../../types/mongo">
+var print;
+/// <reference path="../../types/testlib">
+var testlib;
+/// <reference path="../../types/testlib">
+var ReplSetTest;
+
+/**
+ * Shards a collection with 'numDocs' documents and creates 2 chunks, one on each of two shards.
+ *
+ * @param {testlib.ShardingTest} st
+ * @param {Mongo.Collection} coll
+ * @param {number} numDocs
+ */
 function shardCollectionWithChunks(st, coll, numDocs) {
     var _db = coll.getDB();
     var numberDoc = numDocs || 20;
@@ -19,9 +45,13 @@ function shardCollectionWithChunks(st, coll, numDocs) {
     assert.eq(coll.count(), numberDoc);
 }
 
-// Stops replication on the given server(s).
+/**
+ * Stops replication on the given server(s).
+ *
+ * @param {Mongo.Connection | Mongo.Connection[]} conn
+ */
 function stopServerReplication(conn) {
-    if (conn.length) {
+    if (Array.isArray(conn)) {
         conn.forEach(function(n) {
             stopServerReplication(n);
         });
@@ -43,19 +73,31 @@ function stopServerReplication(conn) {
     }
 }
 
-// Stops replication at all replicaset secondaries.
+/**
+ * Stops replication at all replicaset secondaries.
+ *
+ * @param {testlib.ReplSetTest} rs
+ */
 function stopReplicationOnSecondaries(rs) {
     stopServerReplication(rs.getSecondaries());
 }
 
-// Stops replication at all shard secondaries.
+/**
+ * Stops replication at all shard secondaries.
+ *
+ * @param {testlib.ShardingTest} st
+ */
 function stopReplicationOnSecondariesOfAllShards(st) {
     st._rsObjects.forEach(stopReplicationOnSecondaries);
 }
 
-// Restarts replication on the given server(s).
+/**
+ * Restarts replication on the given server(s).
+ *
+ * @param {Mongo.Connection | Mongo.Connection[]} conn
+ */
 function restartServerReplication(conn) {
-    if (conn.length) {
+    if (Array.isArray(conn)) {
         conn.forEach(function(n) {
             restartServerReplication(n);
         });
@@ -68,22 +110,35 @@ function restartServerReplication(conn) {
         errMsg);
 }
 
-// Restarts replication at all nodes in a replicaset.
+/**
+ * Restarts replication at all nodes in a replicaset.
+ *
+ * @param {testlib.ReplSetTest} rs
+ */
 function restartReplSetReplication(rs) {
     restartServerReplication(rs.nodes);
 }
 
-// Restarts replication at all replicaset secondaries.
+/**
+ * Restarts replication at all replicaset secondaries.
+ *
+ * @param {testlib.ReplSetTest} rs
+ */
 function restartReplicationOnSecondaries(rs) {
     restartServerReplication(rs.getSecondaries());
 }
 
-// Restarts replication at all nodes in a sharded cluster.
+/**
+ * Restarts replication at all nodes in a sharded cluster.
+ *
+ * @param {testlib.ShardingTest} st
+ */
 function restartReplicationOnAllShards(st) {
     st._rsObjects.forEach(restartReplSetReplication);
     restartReplSetReplication(st.configRS);
 }
 
+// TODO
 // Asserts that a writeConcernError was received.
 function assertWriteConcernError(res) {
     assert(res.writeConcernError, "No writeConcernError received, got: " + tojson(res));
@@ -91,6 +146,7 @@ function assertWriteConcernError(res) {
     assert(res.writeConcernError.errmsg, "No writeConcernError errmsg, got: " + tojson(res));
 }
 
+// TODO
 // Run the specified command, on the admin database if specified.
 function runCommandCheckAdmin(db, cmd) {
     if (cmd.admin) {
@@ -100,6 +156,7 @@ function runCommandCheckAdmin(db, cmd) {
     }
 }
 
+// TODO
 // Asserts that writeConcern timed out.
 function checkWriteConcernTimedOut(res) {
     assertWriteConcernError(res);
@@ -113,6 +170,7 @@ function checkWriteConcernTimedOut(res) {
  * 'setupFunc' that sets up the database state. 'setupFunc' accepts a connection to the
  * primary.
  */
+// TODO
 function runWriteConcernRetryabilityTest(priConn, secConn, cmd, kNodes, dbName, setupFunc) {
     dbName = dbName || "test";
     jsTestLog(`Testing ${tojson(cmd)} on ${dbName}.`);

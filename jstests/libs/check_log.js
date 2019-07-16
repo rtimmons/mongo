@@ -1,6 +1,7 @@
 /*
  * Helper functions which connect to a server, and check its logs for particular strings.
  */
+/// <reference path="../../types/check_log">
 var checkLog;
 
 /// <reference path="../../types/assert">
@@ -106,6 +107,7 @@ var print;
             } else if (typeof value === "number") {
                 return (Number.isInteger(value) && toDecimal ? value.toFixed(1) : value);
             } else if (value instanceof NumberLong) {
+                // @ts-ignore
                 return `${value}`.match(/NumberLong..(.*)../m)[1];
             } else if (typeof value !== "object") {
                 return value;

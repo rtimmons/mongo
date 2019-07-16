@@ -10,7 +10,7 @@
 // */
 //
 export declare module assert {
-    function commandWorked(command: any);
+    function commandWorked(command: any, message?: string);
     function neq(a: any, b: any, message?: string);
 }
 
