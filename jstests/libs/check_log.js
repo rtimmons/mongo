@@ -11,8 +11,6 @@ var Mongo;
 /// <reference path="../../types/mongo">
 // TODO: this isn't right but it kinda works at least for now and at least for this file
 var NumberLong;
-/// <reference path="../../types/mongo">
-var print;
 
 (function() {
     "use strict";
