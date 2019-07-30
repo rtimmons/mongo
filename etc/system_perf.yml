@@ -1077,12 +1077,11 @@ buildvariants:
     project_dir: *project_dir
     authentication: enabled
     storageEngine: wiredTiger
-    compile-variant: -enterprise
   run_on:
       - "rhel70-perf-single"
   depends_on:
       - name: compile
-        variant: compile-amazon2
+        variant: compile-linux-64-amzn
   tasks:
     - name: industry_benchmarks
     - name: smoke_test
