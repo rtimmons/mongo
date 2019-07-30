@@ -1072,7 +1072,7 @@ buildvariants:
   modules: *modules
   expansions:
     setup: single-replica-15gbwtcache
-    cluster: single
+    cluster: replica
     platform: linux
     project_dir: *project_dir
     authentication: enabled
