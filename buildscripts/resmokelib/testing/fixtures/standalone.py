@@ -72,6 +72,9 @@ class MongoDFixture(interface.Fixture):
 
         self.mongod = mongod
 
+    def pids(self):
+        return [x.pid for x in [self.mongod] if x is not None]
+
     def await_ready(self):
         """Block until the fixture can be used for testing."""
         deadline = time.time() + MongoDFixture.AWAIT_READY_TIMEOUT_SECS

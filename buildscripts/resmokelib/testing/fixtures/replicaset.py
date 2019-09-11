@@ -207,6 +207,14 @@ class ReplicaSetFixture(interface.ReplFixture):  # pylint: disable=too-many-inst
             self._configure_repl_set(client, {"replSetReconfig": repl_config})
             self._await_secondaries()
 
+    def pids(self):
+        pids = []
+        # itertools probably provides a convenience flatlist or something.
+        for node in self.nodes:
+            for pid in node.pids():
+                pids.append(pid)
+        return pids
+
     def _configure_repl_set(self, client, cmd_obj):
         # replSetInitiate and replSetReconfig commands can fail with a NodeNotFound error
         # if a heartbeat times out during the quorum check. We retry three times to reduce
