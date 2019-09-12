@@ -51,7 +51,7 @@ class Fixture(object, metaclass=registry.make_registry_metaclass(_FIXTURES)):
     def pids(self):
         """Return any pids owned by this fixture."""
         raise NotImplementedError(
-            "pids must be implemented by Fixture subclasses")
+            "pids must be implemented by Fixture subclasses %s" % self)
 
     def setup(self):
         """Create the fixture."""

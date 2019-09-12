@@ -57,6 +57,15 @@ class ShardedClusterFixture(interface.Fixture):  # pylint: disable=too-many-inst
         self.mongos = []
         self.shards = []
 
+    def pids(self):
+        out = []
+        if self.configsvr is not None:
+            out.extend(self.configsvr.pids())
+        if self.shards is not None:
+            for shard in self.shards:
+                out.extend(shard.pids())
+        return out
+
     def setup(self):
         """Set up the sharded cluster."""
         if self.configsvr is None:
