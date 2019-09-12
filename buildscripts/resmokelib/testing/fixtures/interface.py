@@ -50,8 +50,7 @@ class Fixture(object, metaclass=registry.make_registry_metaclass(_FIXTURES)):
 
     def pids(self):
         """Return any pids owned by this fixture."""
-        raise NotImplementedError(
-            "pids must be implemented by Fixture subclasses %s" % self)
+        raise NotImplementedError("pids must be implemented by Fixture subclasses %s" % self)
 
     def setup(self):
         """Create the fixture."""
@@ -199,6 +198,7 @@ class NoOpFixture(Fixture):
     REGISTERED_NAME = "NoOpFixture"
 
     def pids(self):
+        """:return: any pids owned by this fixture (none for NopFixture)."""
         return []
 
     def mongo_client(self, read_preference=None, timeout_millis=None):

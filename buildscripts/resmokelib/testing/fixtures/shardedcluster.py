@@ -58,6 +58,7 @@ class ShardedClusterFixture(interface.Fixture):  # pylint: disable=too-many-inst
         self.shards = []
 
     def pids(self):
+        """:return: pids owned by this fixture if any."""
         out = []
         if self.configsvr is not None:
             out.extend(self.configsvr.pids())
@@ -353,6 +354,12 @@ class _MongoSFixture(interface.Fixture):
             raise errors.ServerFailure(msg)
 
         self.mongos = mongos
+
+    def pids(self):
+        """:return: pids owned by this fixture if any."""
+        if self.mongos is not None:
+            return [self.mongos.pid]
+        return []
 
     def await_ready(self):
         """Block until the fixture can be used for testing."""

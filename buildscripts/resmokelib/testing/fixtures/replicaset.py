@@ -208,6 +208,7 @@ class ReplicaSetFixture(interface.ReplFixture):  # pylint: disable=too-many-inst
             self._await_secondaries()
 
     def pids(self):
+        """:return: all pids owned by this fixture if any."""
         pids = []
         # itertools probably provides a convenience flatlist or something.
         for node in self.nodes:

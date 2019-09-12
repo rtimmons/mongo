@@ -73,6 +73,7 @@ class MongoDFixture(interface.Fixture):
         self.mongod = mongod
 
     def pids(self):
+        """:return: pids owned by this fixture if any."""
         return [x.pid for x in [self.mongod] if x is not None]
 
     def await_ready(self):
