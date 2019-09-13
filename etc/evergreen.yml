@@ -9262,7 +9262,6 @@ buildvariants:
   - name: .jscore .common !.compat
   - name: .jstestfuzz .common
   - name: .logical_session_cache .one_sec
-  - name: unittest_peer_pids_gen
   - name: noPassthrough_gen
   - name: noPassthroughWithMongod_gen
   - name: .replica_sets .common
@@ -9385,6 +9384,7 @@ buildvariants:
         - windows-64-vs2017-compile
     - name: burn_in_tests_gen
     - name: buildscripts_test
+    - name: unittest_peer_pids_gen
     - name: dbtest_TG
       distros:
         - windows-64-vs2017-compile
@@ -10351,6 +10351,7 @@ buildvariants:
     distros:
     - centos6-perf
   - name: buildscripts_test
+  - name: unittest_peer_pids_gen
   - name: .causally_consistent !.sharding
   - name: .change_streams
   - name: .misc_js
