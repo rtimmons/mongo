@@ -62,9 +62,13 @@ class ShardedClusterFixture(interface.Fixture):  # pylint: disable=too-many-inst
         out = []
         if self.configsvr is not None:
             out.extend(self.configsvr.pids())
+        else:
+            self.logger.debug('Config server not running when gathering sharded cluster fixture pids.')
         if self.shards is not None:
             for shard in self.shards:
                 out.extend(shard.pids())
+        else:
+            self.logger.debug('No shards when gathering sharded cluster fixture pids.')
         return out
 
     def setup(self):

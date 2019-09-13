@@ -210,10 +210,8 @@ class ReplicaSetFixture(interface.ReplFixture):  # pylint: disable=too-many-inst
     def pids(self):
         """:return: all pids owned by this fixture if any."""
         pids = []
-        # itertools probably provides a convenience flatlist or something.
         for node in self.nodes:
-            for pid in node.pids():
-                pids.append(pid)
+            pids.extend(node.pids())
         return pids
 
     def _configure_repl_set(self, client, cmd_obj):
