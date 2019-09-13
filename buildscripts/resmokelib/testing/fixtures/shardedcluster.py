@@ -363,6 +363,8 @@ class _MongoSFixture(interface.Fixture):
         """:return: pids owned by this fixture if any."""
         if self.mongos is not None:
             return [self.mongos.pid]
+        else:
+            self.logger.debug('Mongos not running when gathering mongos fixture pids.')
         return []
 
     def await_ready(self):

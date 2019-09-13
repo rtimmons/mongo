@@ -74,7 +74,10 @@ class MongoDFixture(interface.Fixture):
 
     def pids(self):
         """:return: pids owned by this fixture if any."""
-        return [x.pid for x in [self.mongod] if x is not None]
+        out = [x.pid for x in [self.mongod] if x is not None]
+        if not out:
+            self.logger.debug('Mongod not running when gathering standalone fixture pid.')
+        return out
 
     def await_ready(self):
         """Block until the fixture can be used for testing."""
