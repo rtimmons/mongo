@@ -6537,6 +6537,15 @@ tasks:
       task_path_suffix: /data/multiversion
       resmoke_args: --suites=multiversion --storageEngine=wiredTiger
 
+- name: unittest_peer_pids_gen
+  tags: ["misc_js"]
+  commands:
+  - func: "generate resmoke tasks"
+    vars:
+      suite: unittest_peer_pids
+      resmoke_args: --storageEngine=wiredTiger
+      fallback_num_sub_suites: 1
+
 - name: noPassthrough_gen
   tags: ["misc_js"]
   commands:
@@ -9253,6 +9262,7 @@ buildvariants:
   - name: .jscore .common !.compat
   - name: .jstestfuzz .common
   - name: .logical_session_cache .one_sec
+  - name: unittest_peer_pids_gen
   - name: noPassthrough_gen
   - name: noPassthroughWithMongod_gen
   - name: .replica_sets .common
