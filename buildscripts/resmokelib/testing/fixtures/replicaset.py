@@ -212,6 +212,8 @@ class ReplicaSetFixture(interface.ReplFixture):  # pylint: disable=too-many-inst
         pids = []
         for node in self.nodes:
             pids.extend(node.pids())
+        if not pids:
+            self.logger.debug('No members running when gathering replicaset fixture pids.')
         return pids
 
     def _configure_repl_set(self, client, cmd_obj):
