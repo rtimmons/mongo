@@ -84,6 +84,35 @@ MongoRunner.VersionSub = function(pattern, version) {
     this.version = version;
 };
 
+(function(){
+// Hang Analyzer integration.
+
+function getPids() {
+    let pids = [];
+    if (typeof TestData !== 'undefined' && typeof TestData.peerPids !== 'undefined') {
+        pids = pids.concat(TestData.peerPids);
+    }
+    pids = pids.concat(MongoRunner.runningChildPids());
+    return pids;
+}
+
+function runHangAnalzer(pids) {
+    if (pids.length <= 0) {
+        print("No running child or peer mongo processes.");
+        return;
+    }
+    // convert to Number
+    pids = pids.map(p => p + 0);
+    runProgram('./buildscripts/hang_analyzer.py', '-d', pids.join(','));
+}
+
+function main() {
+    runHangAnalzer(getPids());
+}
+
+MongoRunner.runHangAnalyzer = main;
+})();
+
 /**
  * Returns an array of version elements from a version string.
  *
