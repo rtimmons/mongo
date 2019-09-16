@@ -102,8 +102,9 @@ function runHangAnalzer(pids) {
         return;
     }
     // convert to Number
-    pids = pids.map(p => p + 0);
-    runProgram('./buildscripts/hang_analyzer.py', '-d', pids.join(','));
+    pids = pids.map(p => p + 0).join(',');
+    print(`Running hang_analyzer.py for pids [${pids}]`);
+    runProgram('./buildscripts/hang_analyzer.py', '-c', '-d', pids);
 }
 
 function main() {
