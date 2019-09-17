@@ -156,6 +156,13 @@ void BSONComparatorInterfaceBase<T>::hashCombineBSONElement(
                                stringComparator);
             break;
 
+        case mongo::FastArray:
+            hashCombineBSONObj(hash,
+                               elemToHash.embeddedObject(),
+                               rules,
+                               stringComparator);
+            break;
+
         case mongo::DBRef:
         case mongo::BinData:
             // All bytes of the value are required to be identical.

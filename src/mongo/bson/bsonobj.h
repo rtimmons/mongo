@@ -67,7 +67,7 @@ class BSONObjStlIterator;
 
  BSON object format:
 
- code
+ \code
  <unsigned totalSize> {<byte BSONType><cstring FieldName><Data>}* EOO
 
  totalSize includes itself.

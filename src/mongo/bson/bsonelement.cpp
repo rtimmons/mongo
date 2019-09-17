@@ -463,6 +463,7 @@ int BSONElement::compareElements(const BSONElement& l,
             }
         }
         case BSONType::Object:
+        case BSONType::FastArray:
         case BSONType::Array: {
             return l.embeddedObject().woCompare(
                 r.embeddedObject(),

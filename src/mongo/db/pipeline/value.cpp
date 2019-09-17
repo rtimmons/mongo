@@ -179,6 +179,7 @@ Value::Value(const BSONElement& elem) : _storage(elem.type()) {
             break;
         }
 
+        case FastArray:
         case Array: {
             auto vec = make_intrusive<RCVector>();
             BSONForEach(sub, elem.embeddedObject()) {
@@ -373,6 +374,7 @@ BSONObjBuilder& operator<<(BSONObjBuilderValueStream& builder, const Value& val)
             return builder << BSONCodeWScope(val._storage.getCodeWScope()->code,
                                              val._storage.getCodeWScope()->scope);
 
+        case FastArray:
         case Array: {
             BSONArrayBuilder arrayBuilder(builder.subarrayStart());
             for (auto&& value : val.getArray()) {
@@ -445,6 +447,7 @@ bool Value::coerceToBool() const {
         case String:
         case Object:
         case Array:
+        case FastArray:
         case BinData:
         case jstOID:
         case Date:
@@ -787,6 +790,7 @@ int Value::compare(const Value& rL,
         case Object:
             return Document::compare(rL.getDocument(), rR.getDocument(), stringComparator);
 
+        case FastArray:
         case Array: {
             const vector<Value>& lArr = rL.getArray();
             const vector<Value>& rArr = rR.getArray();
@@ -933,6 +937,7 @@ void Value::hash_combine(size_t& seed,
             getDocument().hash_combine(seed, stringComparator);
             break;
 
+        case FastArray:
         case Array: {
             const vector<Value>& vec = getArray();
             for (size_t i = 0; i < vec.size(); i++)
@@ -1084,6 +1089,7 @@ size_t Value::getApproximateSize() const {
         case Object:
             return sizeof(Value) + getDocument().getApproximateSize();
 
+        case FastArray:
         case Array: {
             size_t size = sizeof(Value);
             size += sizeof(RCVector);
@@ -1168,6 +1174,7 @@ ostream& operator<<(ostream& out, const Value& val) {
             return out << val.getTimestamp().toString();
         case Object:
             return out << val.getDocument().toString();
+        case FastArray:
         case Array: {
             out << "[";
             const size_t n = val.getArray().size();
@@ -1275,6 +1282,7 @@ void Value::serializeForSorter(BufBuilder& buf) const {
             break;
         }
 
+        case FastArray:
         case Array: {
             const vector<Value>& array = getArray();
             const int numElems = array.size();
@@ -1354,6 +1362,7 @@ Value Value::deserializeForSorter(BufReader& buf, const SorterDeserializeSetting
             return Value(BSONCodeWScope(StringData(str, size), bson));
         }
 
+        case FastArray:
         case Array: {
             const int numElems = buf.read<LittleEndian<int>>();
             vector<Value> array;
