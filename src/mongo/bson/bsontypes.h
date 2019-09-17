@@ -107,6 +107,8 @@ enum BSONType {
     NumberLong = 18,
     /** 128 bit decimal */
     NumberDecimal = 19,
+    /** Single type array */
+    FastArray = 20,
     /** max type that is not MaxKey */
     JSTypeMax = 19,
     /** larger than all other types */
