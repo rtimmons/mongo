@@ -145,6 +145,7 @@ uint8_t bsonTypeToGenericKeyStringType(BSONType type) {
 
         case Object:
             return CType::kObject;
+        case FastArray:
         case Array:
             return CType::kArray;
         case BinData:
@@ -901,6 +902,7 @@ void BuilderBase<BufferT>::_appendBsonValue(const BSONElement& elem,
         case Object:
             _appendObject(elem.Obj(), invert, f);
             break;
+        case FastArray:
         case Array:
             _appendArray(BSONArray(elem.Obj()), invert, f);
             break;
