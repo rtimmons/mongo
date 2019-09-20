@@ -87,6 +87,8 @@ MongoRunner.VersionSub = function(pattern, version) {
 (function(){
 // Hang Analyzer integration.
 
+MongoRunner.runProgram = runProgram;
+
 function getPids() {
     let pids = [];
     if (typeof TestData !== 'undefined' && typeof TestData.peerPids !== 'undefined') {
@@ -106,7 +108,7 @@ function getPids() {
  *     plus `MongoRunner.runningChildPids()` which includes all
  *     child processes started by `MongoRunner.runMongo*()` etc.
  */
-function runHangAnalzer(pids) {
+function runHangAnalyzer(pids) {
     if (typeof pids === 'undefined') {
         pids = getPids();
     }
@@ -121,7 +123,7 @@ function runHangAnalzer(pids) {
     runProgram('./buildscripts/hang_analyzer.py', '-c', '-d', pids);
 }
 
-MongoRunner.runHangAnalyzer = runHangAnalzer;
+MongoRunner.runHangAnalyzer = runHangAnalyzer;
 })();
 
 /**
