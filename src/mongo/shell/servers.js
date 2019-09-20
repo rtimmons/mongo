@@ -96,22 +96,32 @@ function getPids() {
     return pids;
 }
 
+/**
+ * Run `./buildscripts/hang_analyzer.py`
+ *
+ * @param {Number[]} pids
+ *     optional pids of processes to pass to hang_analyzer.py.
+ *     If not specified will use `TestData.peerPids` (pids of
+ *     "fixture" processes started and passed in by resmoke)
+ *     plus `MongoRunner.runningChildPids()` which includes all
+ *     child processes started by `MongoRunner.runMongo*()` etc.
+ */
 function runHangAnalzer(pids) {
+    if (typeof pids === 'undefined') {
+        pids = getPids();
+    }
     if (pids.length <= 0) {
         print("No running child or peer mongo processes.");
         return;
     }
-    // convert to Number
+    // Result of runningChildPids may be NumberLong(), so
+    // add 0 to convert to Number.
     pids = pids.map(p => p + 0).join(',');
     print(`Running hang_analyzer.py for pids [${pids}]`);
     runProgram('./buildscripts/hang_analyzer.py', '-c', '-d', pids);
 }
 
-function main() {
-    runHangAnalzer(getPids());
-}
-
-MongoRunner.runHangAnalyzer = main;
+MongoRunner.runHangAnalyzer = runHangAnalzer;
 })();
 
 /**
