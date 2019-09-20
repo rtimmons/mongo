@@ -1,20 +1,11 @@
 'use strict';
 
-/**
- * This tests the resmoke functionality of passing peer pids to TestData.
+
+(function() {
+
+/*
+ * This tests that calling runHangAnalyzer() actually runs the hang analyzer.
  */
-
-(function() {
-
-assert(typeof TestData.peerPids !== 'undefined');
-
-// ShardedClusterFixture 2 shards with 3 rs members per shard, 2 mongos's => 7 peers
-assert.eq(7, TestData.peerPids.length);
-
-})();
-
-
-(function() {
 
 const child = _startMongoProgram('sleep', '5');
 MongoRunner.runHangAnalyzer([child]);
@@ -29,8 +20,22 @@ const anyLineMatches = function(lines, rex) {
 };
 
 assert.soon(() => {
-    const lines = rawMongoProgramOutput();
+    const lines = rawMongoProgramOutput().split('\n');
     anyLineMatches(lines, /Dumping core/);
 });
+
+})();
+
+
+(function() {
+
+/*
+ * This tests the resmoke functionality of passing peer pids to TestData.
+ */
+
+assert(typeof TestData.peerPids !== 'undefined');
+
+// ShardedClusterFixture 2 shards with 3 rs members per shard, 2 mongos's => 7 peers
+assert.eq(7, TestData.peerPids.length);
 
 })();
