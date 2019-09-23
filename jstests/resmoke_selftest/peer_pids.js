@@ -7,7 +7,7 @@
  * This tests that calling runHangAnalyzer() actually runs the hang analyzer.
  */
 
-const child = _startMongoProgram('sleep', '20');
+const child = Mongod.runMongod();
 MongoRunner.runHangAnalyzer([child]);
 
 const anyLineMatches = function(lines, rex) {
