@@ -21,7 +21,7 @@ const anyLineMatches = function(lines, rex) {
 
 assert.soon(() => {
     const lines = rawMongoProgramOutput().split('\n');
-    anyLineMatches(lines, /Dumping core/);
+    return anyLineMatches(lines, /Dumping core/);
 });
 
 })();
