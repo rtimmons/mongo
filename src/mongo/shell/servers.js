@@ -98,6 +98,17 @@ function getPids() {
     return pids;
 }
 
+// A path.join-like thing for paths that must work
+// on Windows (\-separated) and *nix (/-separated).
+//
+// Because this relies on running db.hostInfo(),
+// this is only intended to be used when connecting
+// to localhost as is done by resmoke.py.
+function pathJoin(...parts) {
+    const separator = db.hostInfo().os.type === 'Windows' ? '\\' : '/';
+    return parts.join(separator);
+}
+
 /**
  * Run `./buildscripts/hang_analyzer.py`
  *
@@ -120,7 +131,8 @@ function runHangAnalyzer(pids) {
     // add 0 to convert to Number.
     pids = pids.map(p => p + 0).join(',');
     print(`Running hang_analyzer.py for pids [${pids}]`);
-    runProgram('./buildscripts/hang_analyzer.py', '-c', '-d', pids);
+    const program = pathJoin('.', 'buildscripts', 'hang_analyzer.py');
+    runProgram(program, '-c', '-d', pids);
 }
 
 MongoRunner.runHangAnalyzer = runHangAnalyzer;
