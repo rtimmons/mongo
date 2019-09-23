@@ -8,7 +8,7 @@
  */
 
 const child = MongoRunner.runMongod();
-MongoRunner.runHangAnalyzer([child]);
+MongoRunner.runHangAnalyzer([child.pid])
 
 const anyLineMatches = function(lines, rex) {
     for (const line of lines) {
