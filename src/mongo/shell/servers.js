@@ -131,8 +131,8 @@ function runHangAnalyzer(pids) {
     // add 0 to convert to Number.
     pids = pids.map(p => p + 0).join(',');
     print(`Running hang_analyzer.py for pids [${pids}]`);
-    const program = pathJoin('.', 'buildscripts', 'hang_analyzer.py');
-    runProgram(program, '-c', '-d', pids);
+    const scriptPath = pathJoin('.', 'buildscripts', 'hang_analyzer.py');
+    runProgram('python3', scriptPath, '-c', '-d', pids);
 }
 
 MongoRunner.runHangAnalyzer = runHangAnalyzer;
