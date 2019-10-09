@@ -110,7 +110,7 @@ function pathJoin(...parts) {
 }
 
 /**
- * Run `./buildscripts/hang_analyzer.py`
+ * Run `/usr/bin/env ./buildscripts/hang_analyzer.py`
  *
  * @param {Number[]} pids
  *     optional pids of processes to pass to hang_analyzer.py.
@@ -132,7 +132,7 @@ function runHangAnalyzer(pids) {
     pids = pids.map(p => p + 0).join(',');
     print(`Running hang_analyzer.py for pids [${pids}]`);
     const scriptPath = pathJoin('.', 'buildscripts', 'hang_analyzer.py');
-    runProgram('python3', scriptPath, '-c', '-d', pids);
+    runProgram('/usr/bin/env', 'python3', scriptPath, '-c', '-d', pids);
 }
 
 MongoRunner.runHangAnalyzer = runHangAnalyzer;
