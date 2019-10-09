@@ -84,7 +84,7 @@ MongoRunner.VersionSub = function(pattern, version) {
     this.version = version;
 };
 
-(function(){
+(function() {
 // Hang Analyzer integration.
 
 MongoRunner.runProgram = runProgram;

@@ -1,6 +1,5 @@
 'use strict';
 
-
 (function() {
 
 /*
@@ -27,9 +26,7 @@ try {
 } finally {
     MongoRunner.stopMongod(child);
 }
-
 })();
-
 
 (function() {
 
@@ -41,5 +38,4 @@ assert(typeof TestData.peerPids !== 'undefined');
 
 // ShardedClusterFixture 2 shards with 3 rs members per shard, 2 mongos's => 7 peers
 assert.eq(7, TestData.peerPids.length);
-
 })();
