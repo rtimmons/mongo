@@ -9,15 +9,9 @@
 "use strict";
 
 load("jstests/aggregation/extras/utils.js");  // For resultsEq.
-load("jstests/libs/fixture_helpers.js");      // For FixtureHelpers.
 
 const t = db.mr5;
 t.drop();
-
-// Do not execute new path on the passthrough suites.
-if (!FixtureHelpers.isMongos(db)) {
-    assert.commandWorked(db.adminCommand({setParameter: 1, internalQueryUseAggMapReduce: true}));
-}
 
 assert.commandWorked(t.insert({"partner": 1, "visits": 9}));
 assert.commandWorked(t.insert({"partner": 2, "visits": 9}));
@@ -42,9 +36,9 @@ const reducer = function(k, v) {
     return {stats: stats, total: total};
 };
 
-let res = t.mapReduce(mapper, reducer, {out: "mr5_out", scope: {xx: 1}});
+assert.commandWorked(t.mapReduce(mapper, reducer, {out: "mr5_out", scope: {xx: 1}}));
 
-let resultAsObj = res.convertToSingleObject();
+let resultAsObj = db.mr5_out.convertToSingleObject("value");
 assert.eq(2,
           Object.keySet(resultAsObj).length,
           `Expected 2 keys ("1" and "2") in object ${tojson(resultAsObj)}`);
@@ -52,7 +46,7 @@ assert.eq(2,
 assert(resultsEq([9, 11, 30], resultAsObj["1"].stats));
 assert(resultsEq([9, 41, 41], resultAsObj["2"].stats));
 
-res.drop();
+db.mr5_out.drop();
 
 mapper = function() {
     var x = "partner";
@@ -60,9 +54,9 @@ mapper = function() {
     emit(this[x], {stats: [this[y]]});
 };
 
-res = t.mapReduce(mapper, reducer, {out: "mr5_out", scope: {xx: 1}});
+assert.commandWorked(t.mapReduce(mapper, reducer, {out: "mr5_out", scope: {xx: 1}}));
 
-resultAsObj = res.convertToSingleObject();
+resultAsObj = db.mr5_out.convertToSingleObject("value");
 assert.eq(2,
           Object.keySet(resultAsObj).length,
           `Expected 2 keys ("1" and "2") in object ${tojson(resultAsObj)}`);
@@ -70,7 +64,5 @@ assert.eq(2,
 assert(resultsEq([9, 11, 30], resultAsObj["1"].stats));
 assert(resultsEq([9, 41, 41], resultAsObj["2"].stats));
 
-res.drop();
-
-assert.commandWorked(db.adminCommand({setParameter: 1, internalQueryUseAggMapReduce: false}));
+db.mr5_out.drop();
 }());

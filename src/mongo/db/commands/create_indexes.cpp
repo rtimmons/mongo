@@ -370,7 +370,7 @@ Collection* getOrCreateCollection(OperationContext* opCtx,
                                   const BSONObj& cmdObj,
                                   std::string* errmsg,
                                   BSONObjBuilder* result) {
-    if (auto collection = db->getCollection(opCtx, ns)) {
+    if (auto collection = CollectionCatalog::get(opCtx).lookupCollectionByNamespace(ns)) {
         result->appendBool(kCreateCollectionAutomaticallyFieldName, false);
         return collection;
     }
@@ -499,7 +499,7 @@ bool runCreateIndexesForMobile(OperationContext* opCtx,
             // commit() clears the state.
             indexer.abortWithoutCleanup(opCtx);
         }
-        indexer.cleanUpAfterBuild(opCtx, collection);
+        indexer.cleanUpAfterBuild(opCtx, collection, MultiIndexBlock::kNoopOnCleanUpFn);
     });
 
     std::vector<BSONObj> indexInfoObjs =
@@ -600,7 +600,7 @@ bool runCreateIndexesForMobile(OperationContext* opCtx,
 
     auto databaseHolder = DatabaseHolder::get(opCtx);
     db = databaseHolder->getDb(opCtx, ns.db());
-    invariant(db->getCollection(opCtx, ns));
+    invariant(CollectionCatalog::get(opCtx).lookupCollectionByNamespace(ns));
 
     // Perform the third and final drain while holding the exclusive collection lock.
     uassertStatusOK(indexer.drainBackgroundWrites(opCtx));
@@ -717,22 +717,22 @@ bool runCreateIndexesWithCoordinator(OperationContext* opCtx,
             // with the assumption that if the index build was already in the midst of tearing down,
             // this be a no-op.
             log() << "Index build interrupted: " << buildUUID << ": aborting index build.";
-            auto abortIndexFuture = indexBuildsCoord->abortIndexBuildByBuildUUID(
+            indexBuildsCoord->abortIndexBuildByBuildUUID(
+                opCtx,
                 buildUUID,
                 str::stream() << "Index build interrupted: " << buildUUID << ": "
                               << interruptionEx.toString());
-            log() << "Index build aborted: " << buildUUID << ": "
-                  << abortIndexFuture.getNoThrow(opCtx);
+            log() << "Index build aborted: " << buildUUID;
             throw;
         } catch (const ExceptionForCat<ErrorCategory::NotMasterError>& ex) {
             log() << "Index build interrupted: " << buildUUID
                   << ": aborting index build due to change in replication state.";
-            auto abortIndexFuture = indexBuildsCoord->abortIndexBuildByBuildUUID(
+            indexBuildsCoord->abortIndexBuildByBuildUUID(
+                opCtx,
                 buildUUID,
                 str::stream() << "Index build interrupted due to change in replication state: "
                               << buildUUID << ": " << ex.toString());
-            log() << "Index build aborted due to NotMaster error: " << buildUUID << ": "
-                  << abortIndexFuture.getNoThrow(opCtx);
+            log() << "Index build aborted due to NotMaster error: " << buildUUID;
             throw;
         }
 

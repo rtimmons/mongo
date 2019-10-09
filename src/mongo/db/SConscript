@@ -59,6 +59,7 @@ env.Library(
         '$BUILD_DIR/mongo/base',
         '$BUILD_DIR/mongo/db/index_names',
         '$BUILD_DIR/mongo/db/write_concern_options',
+        '$BUILD_DIR/mongo/db/read_write_concern_defaults',
     ]
 )
 
@@ -366,6 +367,21 @@ env.Library(
     ],
     LIBDEPS=[
         '$BUILD_DIR/mongo/bson/util/bson_extract',
+    ],
+)
+
+env.Library(
+    target="read_write_concern_defaults",
+    source=[
+        "read_write_concern_defaults.cpp",
+        env.Idlc('rw_concern_default.idl')[0],
+    ],
+    LIBDEPS=[
+        'write_concern_options',
+        'repl/read_concern_args',
+    ],
+    LIBDEPS_PRIVATE=[
+        "logical_clock",
     ],
 )
 
@@ -776,6 +792,7 @@ env.Library(
         '$BUILD_DIR/mongo/db/catalog/collection_catalog',
         '$BUILD_DIR/mongo/db/concurrency/lock_manager',
         '$BUILD_DIR/mongo/db/repl/repl_coordinator_interface',
+        '$BUILD_DIR/mongo/db/repl/timestamp_block',
         '$BUILD_DIR/mongo/db/s/sharding_api_d',
         '$BUILD_DIR/mongo/idl/server_parameter',
         '$BUILD_DIR/mongo/util/fail_point',
@@ -823,6 +840,7 @@ env.Library(
         '$BUILD_DIR/mongo/client/authentication',
         'catalog/database_holder',
         'commands/list_collections_filter',
+        'index_builds_coordinator_interface',
     ],
 )
 
@@ -1000,6 +1018,7 @@ env.Library(
         'exec/plan_stage.cpp',
         'exec/projection.cpp',
         'exec/projection_exec.cpp',
+        'exec/projection_executor.cpp',
         'exec/queued_data_stage.cpp',
         'exec/record_store_fast_count.cpp',
         'exec/requires_all_indices_stage.cpp',

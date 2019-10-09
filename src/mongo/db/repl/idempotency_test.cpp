@@ -60,7 +60,7 @@ protected:
 
     std::string getStatesString(const std::vector<CollectionState>& state1,
                                 const std::vector<CollectionState>& state2,
-                                const MultiApplier::OperationPtrs& opPtrs) override;
+                                const std::vector<OplogEntry>& ops) override;
 
     Status resetState() override;
 
@@ -113,28 +113,28 @@ std::vector<OplogEntry> RandomizedIdempotencyTest::createUpdateSequence(
 
 std::string RandomizedIdempotencyTest::getStatesString(const std::vector<CollectionState>& state1,
                                                        const std::vector<CollectionState>& state2,
-                                                       const MultiApplier::OperationPtrs& opPtrs) {
-    unittest::log() << IdempotencyTest::getStatesString(state1, state2, opPtrs);
+                                                       const std::vector<OplogEntry>& ops) {
+    unittest::log() << IdempotencyTest::getStatesString(state1, state2, ops);
     StringBuilder sb;
     sb << "Ran update ops: ";
     sb << "[ ";
     bool firstIter = true;
-    for (auto op : opPtrs) {
+    for (const auto& op : ops) {
         if (!firstIter) {
             sb << ", ";
         } else {
             firstIter = false;
         }
-        sb << op->toString();
+        sb << op.toString();
     }
     sb << " ]\n";
 
     ASSERT_OK(resetState());
 
     sb << "Start: " << getDoc() << "\n";
-    for (auto op : opPtrs) {
-        ASSERT_OK(runOpInitialSync(*op));
-        sb << "Apply: " << op->getObject() << "\n  ==> " << getDoc() << "\n";
+    for (const auto& op : ops) {
+        ASSERT_OK(runOpInitialSync(op));
+        sb << "Apply: " << op.getObject() << "\n  ==> " << getDoc() << "\n";
     }
 
     sb << "Found from the seed: " << this->seed;
@@ -165,7 +165,7 @@ void RandomizedIdempotencyTest::runIdempotencyTestCase() {
     const double kDocProbability = 0.375;
     const double kArrProbability = 0.0;
 
-    this->seed = SecureRandom::create()->nextInt64();
+    this->seed = SecureRandom().nextInt64();
     PseudoRandom seedGenerator(this->seed);
     RandomizedScalarGenerator scalarGenerator{PseudoRandom(seedGenerator.nextInt64())};
     UpdateSequenceGenerator updateGenerator(

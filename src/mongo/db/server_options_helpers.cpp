@@ -51,7 +51,7 @@
 #include "mongo/logger/message_event_utf8_encoder.h"
 #include "mongo/transport/message_compressor_registry.h"
 #include "mongo/util/cmdline_utils/censor_cmdline.h"
-#include "mongo/util/fail_point_service.h"
+#include "mongo/util/fail_point.h"
 #include "mongo/util/log.h"
 #include "mongo/util/map_util.h"
 #include "mongo/util/net/sock.h"
@@ -321,6 +321,9 @@ Status storeBaseOptions(const moe::Environment& params) {
             return Status(ErrorCodes::BadValue, sb.str());
         }
     }
+    if (params.count("logv2")) {
+        serverGlobalParams.logV2 = true;
+    }
     if (params.count("systemLog.destination")) {
         std::string systemLogDestination = params["systemLog.destination"].as<std::string>();
         if (systemLogDestination == "file") {
@@ -374,6 +377,24 @@ Status storeBaseOptions(const moe::Environment& params) {
         serverGlobalParams.syslogFacility = LOG_USER;
     }
 #endif  // _WIN32
+
+    if (params.count("systemLog.logFormat")) {
+        std::string formatStr = params["systemLog.logFormat"].as<string>();
+        if (!serverGlobalParams.logV2 && formatStr != "default")
+            return Status(ErrorCodes::BadValue,
+                          "Can only use systemLog.logFormat if logv2 is enabled.");
+        if (formatStr == "default") {
+            serverGlobalParams.logFormat = logv2::LogFormat::kDefault;
+        } else if (formatStr == "text") {
+            serverGlobalParams.logFormat = logv2::LogFormat::kText;
+        } else if (formatStr == "json") {
+            serverGlobalParams.logFormat = logv2::LogFormat::kJson;
+        } else {
+            return Status(ErrorCodes::BadValue,
+                          "Unsupported value for logFormat: " + formatStr +
+                              ". Valid values are: default, text or json");
+        }
+    }
 
     if (params.count("systemLog.logAppend") && params["systemLog.logAppend"].as<bool>() == true) {
         serverGlobalParams.logAppend = true;
