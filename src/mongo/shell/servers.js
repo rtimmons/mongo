@@ -110,7 +110,8 @@ function pathJoin(...parts) {
 }
 
 /**
- * Run `/usr/bin/env ./buildscripts/hang_analyzer.py`
+ * Run `/usr/bin/env ./buildscripts/hang_analyzer.py`.
+ * This is a nop on windows.
  *
  * @param {Number[]} pids
  *     optional pids of processes to pass to hang_analyzer.py.
@@ -120,6 +121,10 @@ function pathJoin(...parts) {
  *     child processes started by `MongoRunner.runMongo*()` etc.
  */
 function runHangAnalyzer(pids) {
+    // Need to use toolchain python, which is unsupported on Windows
+    if (_isWindows()) {
+        return;
+    }
     if (typeof pids === 'undefined') {
         pids = getPids();
     }
