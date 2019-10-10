@@ -2,11 +2,6 @@
 
 (function() {
 
-// Need to use toolchain python, which is unsupported on Windows
-if (_isWindows()) {
-    return;
-}
-
 /*
  * This tests that calling runHangAnalyzer() actually runs the hang analyzer.
  */
