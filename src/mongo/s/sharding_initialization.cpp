@@ -100,16 +100,15 @@ std::unique_ptr<ShardingCatalogClient> makeCatalogClient(ServiceContext* service
 
 std::shared_ptr<executor::TaskExecutor> makeShardingFixedTaskExecutor(
     std::unique_ptr<NetworkInterface> net) {
-    auto executor = std::make_unique<ThreadPoolTaskExecutor>(
-        std::make_unique<ThreadPool>([] {
-            ThreadPool::Options opts;
-            opts.poolName = "Sharding-Fixed";
-
-            const auto maxThreads = stdx::thread::hardware_concurrency();
-            opts.maxThreads = maxThreads == 0 ? 16 : 2 * maxThreads;
-            return opts;
-        }()),
-        std::move(net));
+    auto executor =
+        std::make_unique<ThreadPoolTaskExecutor>(std::make_unique<ThreadPool>([] {
+                                                     ThreadPool::Options opts;
+                                                     opts.poolName = "Sharding-Fixed";
+                                                     opts.maxThreads =
+                                                         ThreadPool::Options::kUnlimited;
+                                                     return opts;
+                                                 }()),
+                                                 std::move(net));
 
     return std::make_shared<executor::ShardingTaskExecutor>(std::move(executor));
 }
@@ -153,13 +152,11 @@ std::unique_ptr<executor::TaskExecutor> makeShardingTaskExecutor(
 }
 
 std::string generateDistLockProcessId(OperationContext* opCtx) {
-    std::unique_ptr<SecureRandom> rng(SecureRandom::create());
-
     return str::stream()
         << HostAndPort(getHostName(), serverGlobalParams.port).toString() << ':'
         << durationCount<Seconds>(
                opCtx->getServiceContext()->getPreciseClockSource()->now().toDurationSinceEpoch())
-        << ':' << rng->nextInt64();
+        << ':' << SecureRandom().nextInt64();
 }
 
 Status initializeGlobalShardingState(OperationContext* opCtx,

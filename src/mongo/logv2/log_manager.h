@@ -29,7 +29,10 @@
 
 #pragma once
 
+#include "mongo/logv2/log_format.h"
+
 #include <memory>
+#include <string>
 
 namespace mongo {
 namespace logv2 {
@@ -42,10 +45,10 @@ class LogDomain;
  * Use this while setting up the logging system, before launching any threads.
  */
 class LogManager {
+public:
     LogManager(const LogManager&) = delete;
     LogManager& operator=(const LogManager&) = delete;
 
-public:
     LogManager();
     ~LogManager();
 
@@ -57,12 +60,15 @@ public:
      */
     LogDomain& getGlobalDomain();
 
+    void setOutputFormat(LogFormat format);
+
     /**
      * Detaches the default log backends
      *
      * @note This function is not thread safe.
      */
     void detachDefaultBackends();
+    void detachConsoleBackend();
 
     /**
      * Reattaches the default log backends
@@ -70,6 +76,14 @@ public:
      * @note This function is not thread safe.
      */
     void reattachDefaultBackends();
+    void reattachConsoleBackend();
+
+    void setupSyslogBackend(int syslogFacility);
+    void reattachSyslogBackend();
+
+    void setupRotatableFileBackend(std::string path, bool append);
+    void reattachRotatableFileBackend();
+    void rotate();
 
     /**
      * Checks if the default log backends are attached

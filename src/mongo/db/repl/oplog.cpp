@@ -94,7 +94,7 @@
 #include "mongo/scripting/engine.h"
 #include "mongo/util/concurrency/idle_thread_block.h"
 #include "mongo/util/elapsed_tracker.h"
-#include "mongo/util/fail_point_service.h"
+#include "mongo/util/fail_point.h"
 #include "mongo/util/file.h"
 #include "mongo/util/log.h"
 #include "mongo/util/str.h"
@@ -212,8 +212,9 @@ Status commitIndexBuild(OperationContext* opCtx,
     if (!statusWithIndexes.isOK()) {
         return statusWithIndexes.getStatus();
     }
-    return IndexBuildsCoordinator::get(opCtx)->commitIndexBuild(
-        opCtx, statusWithIndexes.getValue(), indexBuildUUID);
+    auto indexBuildsCoord = IndexBuildsCoordinator::get(opCtx);
+    indexBuildsCoord->commitIndexBuild(opCtx, statusWithIndexes.getValue(), indexBuildUUID);
+    return Status::OK();
 }
 
 Status abortIndexBuild(OperationContext* opCtx,
@@ -221,9 +222,12 @@ Status abortIndexBuild(OperationContext* opCtx,
                        const Status& cause,
                        OplogApplication::Mode mode) {
     // Wait until the index build finishes aborting.
-    Future<void> abort = IndexBuildsCoordinator::get(opCtx)->abortIndexBuildByBuildUUID(
-        indexBuildUUID, str::stream() << "abortIndexBuild oplog entry encountered: " << cause);
-    return abort.waitNoThrow();
+    IndexBuildsCoordinator::get(opCtx)->abortIndexBuildByBuildUUID(
+        opCtx,
+        indexBuildUUID,
+        str::stream() << "abortIndexBuild oplog entry encountered: " << cause);
+    IndexBuildsCoordinator::get(opCtx)->joinIndexBuild(opCtx, indexBuildUUID);
+    return Status::OK();
 }
 
 void createIndexForApplyOps(OperationContext* opCtx,
@@ -235,7 +239,8 @@ void createIndexForApplyOps(OperationContext* opCtx,
     // Check if collection exists.
     auto databaseHolder = DatabaseHolder::get(opCtx);
     auto db = databaseHolder->getDb(opCtx, indexNss.ns());
-    auto indexCollection = db ? db->getCollection(opCtx, indexNss) : nullptr;
+    auto indexCollection =
+        db ? CollectionCatalog::get(opCtx).lookupCollectionByNamespace(indexNss) : nullptr;
     uassert(ErrorCodes::NamespaceNotFound,
             str::stream() << "Failed to create index due to missing collection: " << indexNss.ns(),
             indexCollection);
@@ -576,7 +581,8 @@ void createOplog(OperationContext* opCtx,
     const ReplSettings& replSettings = ReplicationCoordinator::get(opCtx)->getSettings();
 
     OldClientContext ctx(opCtx, oplogCollectionName.ns());
-    Collection* collection = ctx.db()->getCollection(opCtx, oplogCollectionName);
+    Collection* collection =
+        CollectionCatalog::get(opCtx).lookupCollectionByNamespace(oplogCollectionName);
 
     if (collection) {
         if (replSettings.getOplogSizeBytes() != 0) {
@@ -839,6 +845,8 @@ const StringMap<ApplyOpMetadata> kOpsMap = {
                   "commitIndexBuild value must be a string",
                   first.type() == mongo::String);
 
+          // May throw NamespaceNotFound exception on a non-existent collection, especially if two
+          // phase index builds are not enabled.
           const NamespaceString nss(
               extractNsFromUUIDorNs(opCtx, entry.getNss(), entry.getUuid(), cmd));
 
@@ -859,9 +867,7 @@ const StringMap<ApplyOpMetadata> kOpsMap = {
 
           return commitIndexBuild(opCtx, nss, indexBuildUUID, indexesElem, mode);
       },
-      // TODO(SERVER-39239): Remove NamespaceNotFound from acceptable errors for commitIndexBuild.
-      // It should be impossible to commit an index build on a dropped collection.
-      {ErrorCodes::NamespaceNotFound}}},
+      {ErrorCodes::NamespaceNotFound, ErrorCodes::NoSuchKey}}},
     {"abortIndexBuild",
      {[](OperationContext* opCtx, const OplogEntry& entry, OplogApplication::Mode mode) -> Status {
          // {
@@ -1139,7 +1145,7 @@ Status applyOperation_inlock(OperationContext* opCtx,
         dassert(opCtx->lockState()->isCollectionLockedForMode(
                     requestNss, supportsDocLocking() ? MODE_IX : MODE_X),
                 requestNss.ns());
-        collection = db->getCollection(opCtx, requestNss);
+        collection = CollectionCatalog::get(opCtx).lookupCollectionByNamespace(requestNss);
     }
 
     BSONObj o = op.getObject();
@@ -1551,7 +1557,8 @@ Status applyCommand_inlock(OperationContext* opCtx,
         Lock::DBLock lock(opCtx, nss.db(), MODE_IS);
         auto databaseHolder = DatabaseHolder::get(opCtx);
         auto db = databaseHolder->getDb(opCtx, nss.ns());
-        if (db && !db->getCollection(opCtx, nss) && ViewCatalog::get(db)->lookup(opCtx, nss.ns())) {
+        if (db && !CollectionCatalog::get(opCtx).lookupCollectionByNamespace(nss) &&
+            ViewCatalog::get(db)->lookup(opCtx, nss.ns())) {
             return {ErrorCodes::CommandNotSupportedOnView,
                     str::stream() << "applyOps not supported on view:" << nss.ns()};
         }

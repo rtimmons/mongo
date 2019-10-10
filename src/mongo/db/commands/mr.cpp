@@ -46,6 +46,7 @@
 #include "mongo/db/client.h"
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/commands.h"
+#include "mongo/db/commands/map_reduce_gen.h"
 #include "mongo/db/concurrency/write_conflict_exception.h"
 #include "mongo/db/db_raii.h"
 #include "mongo/db/dbhelpers.h"
@@ -113,7 +114,7 @@ unsigned long long collectionCount(OperationContext* opCtx,
         auto databaseHolder = DatabaseHolder::get(opCtx);
         auto db = databaseHolder->getDb(opCtx, nss.ns());
         if (db) {
-            coll = db->getCollection(opCtx, nss);
+            coll = CollectionCatalog::get(opCtx).lookupCollectionByNamespace(nss);
         }
     } else {
         ctx.emplace(opCtx, nss);
@@ -182,7 +183,8 @@ void dropTempCollections(OperationContext* cleanupOpCtx,
             [cleanupOpCtx, &tempNamespace] {
                 AutoGetDb autoDb(cleanupOpCtx, tempNamespace.db(), MODE_X);
                 if (auto db = autoDb.getDb()) {
-                    if (auto collection = db->getCollection(cleanupOpCtx, tempNamespace)) {
+                    if (auto collection = CollectionCatalog::get(cleanupOpCtx)
+                                              .lookupCollectionByNamespace(tempNamespace)) {
                         uassert(ErrorCodes::PrimarySteppedDown,
                                 str::stream() << "no longer primary while dropping temporary "
                                                  "collection for mapReduce: "
@@ -207,7 +209,8 @@ void dropTempCollections(OperationContext* cleanupOpCtx,
                 Lock::DBLock lk(cleanupOpCtx, incLong.db(), MODE_X);
                 auto databaseHolder = DatabaseHolder::get(cleanupOpCtx);
                 if (auto db = databaseHolder->getDb(cleanupOpCtx, incLong.ns())) {
-                    if (auto collection = db->getCollection(cleanupOpCtx, incLong)) {
+                    if (auto collection = CollectionCatalog::get(cleanupOpCtx)
+                                              .lookupCollectionByNamespace(incLong)) {
                         BackgroundOperation::assertNoBgOpInProgForNs(incLong.ns());
                         IndexBuildsCoordinator::get(cleanupOpCtx)
                             ->assertNoIndexBuildInProgForCollection(collection->uuid());
@@ -423,17 +426,17 @@ Config::Config(const string& _dbname, const BSONObj& cmdObj) {
 
     uassert(13602, "outType is no longer a valid option", cmdObj["outType"].eoo());
 
-    outputOptions = mr::parseOutputOptions(dbname, cmdObj);
+    outputOptions = map_reduce_common::parseOutputOptions(dbname, cmdObj);
 
     shardedFirstPass = false;
     if (cmdObj.hasField("shardedFirstPass") && cmdObj["shardedFirstPass"].trueValue()) {
         massert(16054,
                 "shardedFirstPass should only use replace outType",
-                outputOptions.outType == mr::OutputType::kReplace);
+                outputOptions.outType == OutputType::Replace);
         shardedFirstPass = true;
     }
 
-    if (outputOptions.outType != mr::OutputType::kInMemory) {
+    if (outputOptions.outType != OutputType::InMemory) {
         // Create names for the temp collection and the incremental collection. The incremental
         // collection goes in the "local" database, so that it doesn't get replicated.
         const std::string& outDBName = outputOptions.outDB.empty() ? dbname : outputOptions.outDB;
@@ -522,7 +525,7 @@ void State::prepTempCollection() {
         writeConflictRetry(_opCtx, "M/R prepTempCollection", _config.incLong.ns(), [this] {
             AutoGetOrCreateDb autoGetIncCollDb(_opCtx, _config.incLong.db(), MODE_X);
             auto const db = autoGetIncCollDb.getDb();
-            invariant(!db->getCollection(_opCtx, _config.incLong));
+            invariant(!CollectionCatalog::get(_opCtx).lookupCollectionByNamespace(_config.incLong));
 
             CollectionOptions options;
             options.setNoIdIndex();
@@ -584,7 +587,8 @@ void State::prepTempCollection() {
         // Create temp collection and insert the indexes from temporary storage
         AutoGetOrCreateDb autoGetFinalDb(_opCtx, _config.tempNamespace.db(), MODE_X);
         auto const db = autoGetFinalDb.getDb();
-        invariant(!db->getCollection(_opCtx, _config.tempNamespace));
+        invariant(
+            !CollectionCatalog::get(_opCtx).lookupCollectionByNamespace(_config.tempNamespace));
 
         uassert(
             ErrorCodes::PrimarySteppedDown,
@@ -736,7 +740,7 @@ void State::appendResults(BSONObjBuilder& final) {
  * This may involve replacing, merging or reducing.
  */
 long long State::postProcessCollection(OperationContext* opCtx, CurOp* curOp) {
-    if (_onDisk == false || _config.outputOptions.outType == mr::OutputType::kInMemory)
+    if (_onDisk == false || _config.outputOptions.outType == OutputType::InMemory)
         return numInMemKeys();
 
     bool holdingGlobalLock = false;
@@ -760,7 +764,7 @@ long long State::postProcessCollectionNonAtomic(OperationContext* opCtx,
     if (_config.outputOptions.finalNamespace == _config.tempNamespace)
         return collectionCount(opCtx, _config.outputOptions.finalNamespace, callerHoldsGlobalLock);
 
-    if (_config.outputOptions.outType == mr::OutputType::kReplace ||
+    if (_config.outputOptions.outType == OutputType::Replace ||
         collectionCount(opCtx, _config.outputOptions.finalNamespace, callerHoldsGlobalLock) == 0) {
         // This must be global because we may write across different databases.
         Lock::GlobalWrite lock(opCtx);
@@ -777,7 +781,7 @@ long long State::postProcessCollectionNonAtomic(OperationContext* opCtx,
         }
 
         _db.dropCollection(_config.tempNamespace.ns());
-    } else if (_config.outputOptions.outType == mr::OutputType::kMerge) {
+    } else if (_config.outputOptions.outType == OutputType::Merge) {
         // merge: upsert new docs into old collection
         const auto count = collectionCount(opCtx, _config.tempNamespace, callerHoldsGlobalLock);
 
@@ -796,7 +800,7 @@ long long State::postProcessCollectionNonAtomic(OperationContext* opCtx,
         }
         _db.dropCollection(_config.tempNamespace.ns());
         pm.finished();
-    } else if (_config.outputOptions.outType == mr::OutputType::kReduce) {
+    } else if (_config.outputOptions.outType == OutputType::Reduce) {
         // reduce: apply reduce op on new result and existing one
         BSONList values;
 
@@ -923,7 +927,7 @@ State::State(OperationContext* opCtx, const Config& c)
       _dupCount(0),
       _numEmits(0) {
     _temp.reset(new InMemory());
-    _onDisk = _config.outputOptions.outType != mr::OutputType::kInMemory;
+    _onDisk = _config.outputOptions.outType != OutputType::InMemory;
 }
 
 bool State::sourceExists() {
@@ -1215,7 +1219,7 @@ void State::finalReduce(OperationContext* opCtx, CurOp* curOp) {
     BSONObj prev;
     BSONList all;
 
-    const auto count = _db.count(_config.incLong.ns(), BSONObj(), QueryOption_SlaveOk);
+    const auto count = _db.count(_config.incLong, BSONObj(), QueryOption_SlaveOk);
     ProgressMeterHolder pm;
     {
         stdx::unique_lock<Client> lk(*opCtx->getClient());
@@ -1744,7 +1748,7 @@ bool runMapReduceShardedFinish(OperationContext* opCtx,
 
     std::vector<Chunk> chunks;
 
-    if (config.outputOptions.outType != mr::OutputType::kInMemory) {
+    if (config.outputOptions.outType != OutputType::InMemory) {
         auto outRoutingInfoStatus = Grid::get(opCtx)->catalogCache()->getCollectionRoutingInfo(
             opCtx, config.outputOptions.finalNamespace);
         uassertStatusOK(outRoutingInfoStatus.getStatus());

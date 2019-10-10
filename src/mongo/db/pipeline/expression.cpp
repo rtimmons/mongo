@@ -40,10 +40,10 @@
 #include <vector>
 
 #include "mongo/db/commands/feature_compatibility_version_documentation.h"
+#include "mongo/db/exec/document_value/document.h"
+#include "mongo/db/exec/document_value/value.h"
 #include "mongo/db/jsobj.h"
-#include "mongo/db/pipeline/document.h"
 #include "mongo/db/pipeline/expression_context.h"
-#include "mongo/db/pipeline/value.h"
 #include "mongo/db/query/datetime/date_time_support.h"
 #include "mongo/platform/bits.h"
 #include "mongo/platform/decimal128.h"
@@ -145,9 +145,9 @@ intrusive_ptr<Expression> Expression::parseExpression(
     // version.
     auto& entry = it->second;
     uassert(ErrorCodes::QueryFeatureNotAllowed,
-            // TODO SERVER-31968 we would like to include the current version and the required
-            // minimum version in this error message, but using
-            // FeatureCompatibilityVersion::toString() would introduce a dependency cycle.
+            // We would like to include the current version and the required minimum version in this
+            // error message, but using FeatureCompatibilityVersion::toString() would introduce a
+            // dependency cycle (see SERVER-31968).
             str::stream() << opName
                           << " is not allowed in the current feature compatibility version. See "
                           << feature_compatibility_version_documentation::kCompatibilityLink
@@ -2623,7 +2623,10 @@ Value ExpressionMeta::evaluate(const Document& root, Variables* variables) const
         case MetaType::kIndexKey:
             return metadata.hasIndexKey() ? Value(metadata.getIndexKey()) : Value();
         case MetaType::kSortKey:
-            return metadata.hasSortKey() ? Value(metadata.getSortKey()) : Value();
+            return metadata.hasSortKey()
+                ? Value(DocumentMetadataFields::serializeSortKey(metadata.isSingleElementKey(),
+                                                                 metadata.getSortKey()))
+                : Value();
         default:
             MONGO_UNREACHABLE;
     }
@@ -2679,17 +2682,19 @@ Value ExpressionMod::evaluate(const Document& root, Variables* variables) const 
 
             double left = lhs.coerceToDouble();
             return Value(fmod(left, right));
-        } else if (leftType == NumberLong || rightType == NumberLong) {
+        }
+
+        if (leftType == NumberLong || rightType == NumberLong) {
             // if either is long, return long
             long long left = lhs.coerceToLong();
             long long rightLong = rhs.coerceToLong();
-            return Value(left % rightLong);
+            return Value(overflow::safeMod(left, rightLong));
         }
 
         // lastly they must both be ints, return int
         int left = lhs.coerceToInt();
         int rightInt = rhs.coerceToInt();
-        return Value(left % rightInt);
+        return Value(overflow::safeMod(left, rightInt));
     } else if (lhs.nullish() || rhs.nullish()) {
         return Value(BSONNULL);
     } else {

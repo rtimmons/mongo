@@ -50,7 +50,6 @@
 #include "mongo/db/query/collection_query_info.h"
 #include "mongo/db/repl/repl_set_config.h"
 #include "mongo/db/repl/replication_coordinator.h"
-#include "mongo/db/server_options.h"
 #include "mongo/db/storage/storage_options.h"
 #include "mongo/db/storage/write_unit_of_work.h"
 #include "mongo/logger/redaction.h"
@@ -64,25 +63,6 @@
 
 namespace mongo {
 
-namespace {
-
-/**
- * We do not need synchronization with step up and step down. Dropping the RSTL is important because
- * otherwise if we held the RSTL it would create deadlocks with prepared transactions on step up and
- * step down.  A deadlock could result if the index build was attempting to acquire a Collection S
- * or X lock while a prepared transaction held a Collection IX lock, and a step down was waiting to
- * acquire the RSTL in mode X.
- */
-void _unlockRSTLForIndexCleanup(OperationContext* opCtx) {
-    if (!serverGlobalParams.featureCompatibility.isVersionInitialized()) {
-        return;
-    }
-    opCtx->lockState()->unlockRSTLforPrepare();
-    invariant(!opCtx->lockState()->isRSTLLocked());
-}
-
-}  // namespace
-
 MONGO_FAIL_POINT_DEFINE(hangAfterSettingUpIndexBuild);
 MONGO_FAIL_POINT_DEFINE(hangAfterStartingIndexBuild);
 MONGO_FAIL_POINT_DEFINE(hangAfterStartingIndexBuildUnlocked);
@@ -95,7 +75,11 @@ MultiIndexBlock::~MultiIndexBlock() {
     invariant(_buildIsCleanedUp);
 }
 
-void MultiIndexBlock::cleanUpAfterBuild(OperationContext* opCtx, Collection* collection) {
+MultiIndexBlock::OnCleanUpFn MultiIndexBlock::kNoopOnCleanUpFn = []() {};
+
+void MultiIndexBlock::cleanUpAfterBuild(OperationContext* opCtx,
+                                        Collection* collection,
+                                        OnCleanUpFn onCleanUp) {
     if (_collectionUUID) {
         // init() was previously called with a collection pointer, so ensure that the same
         // collection is being provided for clean up and the interface in not being abused.
@@ -131,24 +115,9 @@ void MultiIndexBlock::cleanUpAfterBuild(OperationContext* opCtx, Collection* col
         return;
     }
 
-    // Make lock acquisition uninterruptible.
-    UninterruptibleLockGuard noInterrupt(opCtx->lockState());
-    // Lock the collection if it's not already locked.
-    boost::optional<Lock::DBLock> dbLock;
-    boost::optional<Lock::CollectionLock> collLock;
-
     auto nss = collection->ns();
 
-    if (!opCtx->lockState()->isCollectionLockedForMode(nss, MODE_X)) {
-        dbLock.emplace(opCtx, nss.db(), MODE_IX);
-        // Since DBLock implicitly acquires RSTL, we release the RSTL after acquiring the database
-        // lock. Additionally, the RSTL has to be released before acquiring a strong lock (MODE_X)
-        // on the collection to avoid potential deadlocks.
-        _unlockRSTLForIndexCleanup(opCtx);
-        collLock.emplace(opCtx, nss, MODE_X);
-    } else {
-        _unlockRSTLForIndexCleanup(opCtx);
-    }
+    invariant(opCtx->lockState()->isCollectionLockedForMode(nss, MODE_X), nss.toString());
 
     while (true) {
         try {
@@ -175,6 +144,9 @@ void MultiIndexBlock::cleanUpAfterBuild(OperationContext* opCtx, Collection* col
                     log() << "Did not timestamp index abort write.";
                 }
             }
+
+            onCleanUp();
+
             wunit.commit();
             _buildIsCleanedUp = true;
             return;

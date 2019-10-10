@@ -46,7 +46,7 @@
 #include "mongo/platform/condition_variable.h"
 #include "mongo/platform/mutex.h"
 #include "mongo/util/concurrency/with_lock.h"
-#include "mongo/util/fail_point_service.h"
+#include "mongo/util/fail_point.h"
 #include "mongo/util/future.h"
 #include "mongo/util/net/hostandport.h"
 #include "mongo/util/string_map.h"
@@ -139,19 +139,16 @@ public:
         const UUID& buildUUID);
 
     /**
-     * TODO: not yet implemented.
+     * Waits for the index build identified by 'buildUUID' to complete.
      */
-    Future<void> joinIndexBuilds(const NamespaceString& nss,
-                                 const std::vector<BSONObj>& indexSpecs);
+    void joinIndexBuild(OperationContext* opCtx, const UUID& buildUUID);
 
     /**
      * Commits the index build identified by 'buildUUID'.
-     *
-     * TODO: not yet implemented.
      */
-    virtual Status commitIndexBuild(OperationContext* opCtx,
-                                    const std::vector<BSONObj>& specs,
-                                    const UUID& buildUUID) = 0;
+    void commitIndexBuild(OperationContext* opCtx,
+                          const std::vector<BSONObj>& specs,
+                          const UUID& buildUUID);
 
     /**
      * Waits for all index builds to stop after they have been interrupted during shutdown.
@@ -209,7 +206,9 @@ public:
     /**
      * Aborts a given index build by index build UUID.
      */
-    Future<void> abortIndexBuildByBuildUUID(const UUID& buildUUID, const std::string& reason);
+    void abortIndexBuildByBuildUUID(OperationContext* opCtx,
+                                    const UUID& buildUUID,
+                                    const std::string& reason);
 
     /**
      * TODO: This is not yet implemented.
@@ -375,6 +374,7 @@ protected:
     void _buildIndex(OperationContext* opCtx,
                      const NamespaceStringOrUUID& dbAndUUID,
                      std::shared_ptr<ReplIndexBuildState> replState,
+                     const IndexBuildOptions& indexBuildOptions,
                      boost::optional<Lock::CollectionLock>* collLock);
     /**
      * Returns total number of indexes in collection, including unfinished/in-progress indexes.
@@ -412,6 +412,11 @@ protected:
         Collection* collection,
         ReplIndexBuildState::IndexCatalogStats& indexCatalogStats,
         const UUID& buildUUID) noexcept;
+
+    /**
+     * Looks up active index build by UUID.
+     */
+    StatusWith<std::shared_ptr<ReplIndexBuildState>> _getIndexBuild(const UUID& buildUUID) const;
 
     // Protects the below state.
     mutable Mutex _mutex = MONGO_MAKE_LATCH("IndexBuildsCoordinator::_mutex");

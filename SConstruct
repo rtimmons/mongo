@@ -180,15 +180,6 @@ add_option('ssl-provider',
     type='choice',
 )
 
-add_option('mmapv1',
-    choices=['auto', 'on', 'off'],
-    const='on',
-    default='auto',
-    help='Enable MMapV1',
-    nargs='?',
-    type='choice',
-)
-
 add_option('wiredtiger',
     choices=['on', 'off'],
     const='on',
@@ -1133,11 +1124,6 @@ endian = get_option( "endian" )
 if endian == "auto":
     endian = sys.byteorder
 
-if endian == "little":
-    env.SetConfigHeaderDefine("MONGO_CONFIG_BYTE_ORDER", "1234")
-elif endian == "big":
-    env.SetConfigHeaderDefine("MONGO_CONFIG_BYTE_ORDER", "4321")
-
 # These preprocessor macros came from
 # http://nadeausoftware.com/articles/2012/02/c_c_tip_how_detect_processor_type_using_compiler_predefined_macros
 #
@@ -1493,8 +1479,7 @@ if (
         get_option('build-fast-and-loose') == 'on' or
         (
             get_option('build-fast-and-loose') == 'auto' and
-            not has_option('release') and
-            not has_option('cache')
+            not has_option('release')
          )
 ):
     # See http://www.scons.org/wiki/GoFastButton for details
@@ -1950,15 +1935,6 @@ if env.TargetOSIs('posix'):
                 '-Wl,-fatal_warnings' if env.TargetOSIs('darwin') else "-Wl,--fatal-warnings",
             ]
         )
-
-mmapv1 = False
-if get_option('mmapv1') == 'auto':
-    # The mmapv1 storage engine is only supported on x86
-    # targets. Unless explicitly requested, disable it on all other
-    # platforms.
-    mmapv1 = (env['TARGET_ARCH'] in ['i386', 'x86_64'])
-elif get_option('mmapv1') == 'on':
-    mmapv1 = True
 
 wiredtiger = False
 if get_option('wiredtiger') == 'on':
@@ -3359,6 +3335,7 @@ def doConfigure(myenv):
             "BOOST_MATH_NO_LONG_DOUBLE_MATH_FUNCTIONS",
             "BOOST_ENABLE_ASSERT_DEBUG_HANDLER",
             "BOOST_LOG_NO_SHORTHAND_NAMES",
+            "BOOST_LOG_USE_NATIVE_SYSLOG",
             "ABSL_FORCE_ALIGNED_ACCESS",
         ]
     )
@@ -4031,7 +4008,6 @@ Export([
     'get_option',
     'has_option',
     'http_client',
-    'mmapv1',
     'mobile_se',
     'module_sconscripts',
     'optBuild',

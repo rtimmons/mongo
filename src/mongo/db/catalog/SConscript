@@ -226,7 +226,9 @@ env.Library(
     ],
     LIBDEPS=[
         'collection',
+        'index_build_block',
         'index_timestamp_helper',
+        'index_build_block',
         '$BUILD_DIR/mongo/base',
         '$BUILD_DIR/mongo/db/audit',
         '$BUILD_DIR/mongo/db/background',
@@ -239,7 +241,6 @@ env.Library(
         '$BUILD_DIR/mongo/util/progress_meter',
     ],
     LIBDEPS_PRIVATE=[
-        'index_build_block',
         '$BUILD_DIR/mongo/db/index/index_build_interceptor',
         '$BUILD_DIR/mongo/db/storage/storage_options',
         '$BUILD_DIR/mongo/idl/server_parameter',
