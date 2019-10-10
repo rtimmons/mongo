@@ -13,7 +13,7 @@ if (_isWindows()) {
 
 const child = MongoRunner.runMongod();
 try {
-    MongoRunner.runHangAnalyzer([child.pid])
+    MongoRunner.runHangAnalyzer([child.pid]);
 
     const anyLineMatches = function(lines, rex) {
         for (const line of lines) {
