@@ -1494,9 +1494,6 @@ functions:
         # invocation. It doesn't set any environment variables and should therefore come last in
         # this list of expansions.
         set +o errexit
-        PATH="$path_value" echo "python is $(which python)"
-        PATH="$path_value" echo "PYTHONPATH is $PYTHONPATH"
-        PATH="$path_value" echo "python version is $(python --version)"
         PATH="$path_value"                              \
             AWS_PROFILE=${aws_profile_remote}           \
             ${gcov_environment}                         \

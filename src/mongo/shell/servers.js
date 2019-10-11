@@ -127,10 +127,8 @@ function runHangAnalyzer(pids) {
     print(`Running hang_analyzer.py for pids [${pids}]`);
     const scriptPath = pathJoin('.', 'buildscripts', 'hang_analyzer.py');
     if (_isWindows()) {
-      runProgram('python', '--version');
       runProgram('python', scriptPath, '-c', '-d', pids);
     } else {
-      runProgram('/usr/bin/env', 'python3', '--version');
       runProgram('/usr/bin/env', 'python3', scriptPath, '-c', '-d', pids);
     }
 }
