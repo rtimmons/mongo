@@ -9687,7 +9687,7 @@ buildvariants:
         - windows-64-vs2017-compile
     - name: burn_in_tests_gen
     - name: buildscripts_test
-    - name: unittest_peer_pids_gen
+    - name: unittest_shell_hang_analyzer_gen
     - name: dbtest_TG
       distros:
         - windows-64-vs2017-compile
@@ -10650,7 +10650,7 @@ buildvariants:
     distros:
     - centos6-perf
   - name: buildscripts_test
-  - name: unittest_peer_pids_gen
+  - name: unittest_shell_hang_analyzer_gen
   - name: .causally_consistent !.sharding
   - name: .change_streams
   - name: .misc_js
