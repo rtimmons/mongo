@@ -87,8 +87,6 @@ MongoRunner.VersionSub = function(pattern, version) {
 (function() {
 // Hang Analyzer integration.
 
-MongoRunner.runProgram = runProgram;
-
 function getPids() {
     let pids = [];
     if (typeof TestData !== 'undefined' && typeof TestData.peerPids !== 'undefined') {
@@ -100,18 +98,13 @@ function getPids() {
 
 // A path.join-like thing for paths that must work
 // on Windows (\-separated) and *nix (/-separated).
-//
-// Because this relies on running db.hostInfo(),
-// this is only intended to be used when connecting
-// to localhost as is done by resmoke.py.
 function pathJoin(...parts) {
-    const separator = db.hostInfo().os.type === 'Windows' ? '\\' : '/';
+    const separator = _isWindows() ? '\\' : '/';
     return parts.join(separator);
 }
 
 /**
- * Run `/usr/bin/env ./buildscripts/hang_analyzer.py`.
- * This is a nop on windows.
+ * Run `./buildscripts/hang_analyzer.py`.
  *
  * @param {Number[]} pids
  *     optional pids of processes to pass to hang_analyzer.py.
@@ -134,7 +127,7 @@ function runHangAnalyzer(pids) {
     print(`Running hang_analyzer.py for pids [${pids}]`);
     const scriptPath = pathJoin('.', 'buildscripts', 'hang_analyzer.py');
     if (_isWindows()) {
-      runProgram('python', scriptPath, '-c', '-d', pids);
+      runProgram('python3', scriptPath, '-c', '-d', pids);
     } else {
       runProgram('/usr/bin/env', 'python3', scriptPath, '-c', '-d', pids);
     }

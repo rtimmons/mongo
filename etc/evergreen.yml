@@ -1480,7 +1480,7 @@ functions:
           extra_args="$extra_args --mongodSetParameter {'jsHeapLimitMB':10}"
         fi
 
-        path_value="/cygdrive/c/python/python37:$PATH"
+        path_value="$PATH"
         if [ ${variant_path_suffix} ]; then
           path_value="$path_value:${variant_path_suffix}"
         fi
