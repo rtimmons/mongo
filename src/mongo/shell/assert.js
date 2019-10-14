@@ -337,6 +337,7 @@ assert = (function() {
 
             diff = (new Date()).getTime() - start.getTime();
             if (diff > timeout) {
+                MongoRunner.runHangAnalyzer();
                 doassert(_buildAssertionMessage(msg, msgPrefix));
             }
             sleep(interval);
