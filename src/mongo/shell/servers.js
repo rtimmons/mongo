@@ -118,7 +118,7 @@ function runHangAnalyzer(pids) {
         pids = getPids();
     }
     if (pids.length <= 0) {
-        print("No running child or peer mongo processes.");
+        print("Skipping runHangAnalyzer: no running child or peer mongo processes.");
         return;
     }
     // Result of runningChildPids may be NumberLong(), so
@@ -126,11 +126,7 @@ function runHangAnalyzer(pids) {
     pids = pids.map(p => p + 0).join(',');
     print(`Running hang_analyzer.py for pids [${pids}]`);
     const scriptPath = pathJoin('.', 'buildscripts', 'hang_analyzer.py');
-    if (_isWindows()) {
-        runProgram('python', scriptPath, '-c', '-d', pids);
-    } else {
-        runProgram('/usr/bin/env', 'python3', scriptPath, '-c', '-d', pids);
-    }
+    runProgram('python', scriptPath, '-c', '-d', pids);
 }
 
 MongoRunner.runHangAnalyzer = runHangAnalyzer;
