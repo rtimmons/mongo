@@ -487,6 +487,63 @@ class JstackWindowsDumper(object):
         root_logger.warning("Debugger jstack not supported, skipping dumping of %d", pid)
 
 
+class DebugExtractor(object):
+    """Extracts `mongo-debugsymbols.tgz`."""
+
+    @staticmethod
+    def extract_debug_symbols(root_logger):
+        path = os.path.join(os.getcwd(), 'mongo-debugsymbols.tgz')
+        root_logger.debug('Starting: Extract debug-symbols from %s', path)
+        if not os.path.exists(path):
+            root_logger.info('Debug-symbols archive-file does not exist. '
+                             'Hang-Analyzer may not complete successfully.')
+            return
+        try:
+            DebugExtractor._exxtract_tar(path, root_logger)
+        except Exception as e:
+            root_logger.warning('Error when extracting %s: %s', path, e)
+        root_logger.debug('Finished: Extract debug symbols.')
+
+    @staticmethod
+    def _exxtract_tar(path, root_logger):
+        import tarfile
+        import shutil
+
+        tar = tarfile.open(path)
+        try:
+            existing = [os.path.basename(dest)
+                        for (src, dest)
+                        in DebugExtractor._extracted_files_to_copy()
+                        if os.path.exists(dest)]
+            # 'existing' will be empty even if the symbols have already
+            # been copied but the inflated dir removed.
+            # Don't be too clever. It's possible we've already got
+            # e.g. 'mongo.debug' in cwd, but there may be additional
+            # files in the archive, so always extractall()
+            if not existing:
+                tar.extractall()
+            for (src, dest) in DebugExtractor._extracted_files_to_copy():
+                if os.path.exists(dest):
+                    continue
+                shutil.copy(src, dest)
+                root_logger.info('Copied debug symbol %s.', dest)
+        finally:
+            tar.close()
+
+    @staticmethod
+    def _extracted_files_to_copy():
+        import glob
+        out = []
+        for ext in ['debug', 'dSYM', 'pdb']:
+            for file in ['mongo', 'mongod', 'mongos']:
+                # need to glob because it untar's to a directory that looks like
+                # mongodb-linux-x86_64-enterprise-rhel62-4.3.0-1823-gb9c13fa-patch-5daa05630ae60652f0890f76
+                haystack = os.path.join('mongodb*', 'bin', '{file}.{ext}'.format(file=file, ext=ext))
+                for needle in glob.glob(haystack):
+                    out.append((needle, os.path.join(os.getcwd(), os.path.basename(needle))))
+        return out
+
+
 def get_hang_analyzers():
     """Return hang analyzers."""
 
@@ -587,6 +644,10 @@ def main():  # pylint: disable=too-many-branches,too-many-locals,too-many-statem
 
     root_logger.info("Python Version: %s", sys.version)
     root_logger.info("OS: %s", platform.platform())
+
+    if sys.argv[1] == "unzip":
+        DebugExtractor.extract_debug_symbols(root_logger)
+        return
 
     try:
         if _IS_WINDOWS or sys.platform == "cygwin":
