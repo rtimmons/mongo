@@ -815,31 +815,6 @@ functions:
       bucket: mciuploads
       local_file: src/mongo-debugsymbols.tgz
 
-  "extract debugsymbols": &extract_debugsymbols
-    command: shell.exec
-    params:
-      working_dir: src
-      script: |
-        set -o errexit
-        set -o verbose
-        # Debug symbols are not created for every variant
-        if [ ! -f mongo-debugsymbols.tgz ]; then
-          exit
-        fi
-        ${decompress} mongo-debugsymbols.tgz
-        files="mongo mongod mongos"
-        file_exts="debug dSYM pdb"
-        for file_ext in $file_exts
-        do
-            for file in $files
-            do
-                echo mv mongodb*/bin/$file.$file_ext .
-                mv mongodb*/bin/$file.$file_ext . 2>/dev/null || true
-            done
-            # rm -r mongodb*/bin/*.$file_ext 2>/dev/null || true
-        done
-        # rm mongo-debugsymbols.tgz 2>/dev/null || true
-
   "fetch and build OpenSSL":
     command: shell.exec
     params:
@@ -1649,8 +1624,7 @@ functions:
           - src/generated_resmoke_config/*.json
 
   "run generated tests":
-  - *fetch_debugsymbols_archive # needed for resmoke hang_analyzer.py integration
-  - *extract_debugsymbols
+  - *fetch_debugsymbols_archive
   - *retrieve_generated_test_configuration
   - *extract_generated_test_configuration
   - command: expansions.update
@@ -3652,7 +3626,6 @@ post:
 # Timeout steps
 timeout:
   - func: "fetch debugsymbols archive"
-  - func: "extract debugsymbols"
   - func: "get EC2 address"
   - func: "update EC2 address"
   - func: "run hang analyzer"

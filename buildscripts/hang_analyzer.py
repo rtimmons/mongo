@@ -645,10 +645,6 @@ def main():  # pylint: disable=too-many-branches,too-many-locals,too-many-statem
     root_logger.info("Python Version: %s", sys.version)
     root_logger.info("OS: %s", platform.platform())
 
-    if sys.argv[1] == "unzip":
-        DebugExtractor.extract_debug_symbols(root_logger)
-        return
-
     try:
         if _IS_WINDOWS or sys.platform == "cygwin":
             distro = platform.win32_ver()
@@ -669,6 +665,8 @@ def main():  # pylint: disable=too-many-branches,too-many-locals,too-many-statem
         root_logger.warning("Cannot determine Unix Current Login")
     except AttributeError:
         root_logger.warning("Cannot determine Unix Current Login, not supported on Windows")
+
+    DebugExtractor.extract_debug_symbols(root_logger)
 
     interesting_processes = ["mongo", "mongod", "mongos", "_test", "dbtest", "python", "java"]
     go_processes = []
