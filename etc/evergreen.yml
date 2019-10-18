@@ -833,11 +833,12 @@ functions:
         do
             for file in $files
             do
+                echo mv mongodb*/bin/$file.$file_ext .
                 mv mongodb*/bin/$file.$file_ext . 2>/dev/null || true
             done
-            rm -r mongodb*/bin/*.$file_ext 2>/dev/null || true
+            # rm -r mongodb*/bin/*.$file_ext 2>/dev/null || true
         done
-        rm mongo-debugsymbols.tgz 2>/dev/null || true
+        # rm mongo-debugsymbols.tgz 2>/dev/null || true
 
   "fetch and build OpenSSL":
     command: shell.exec
@@ -1649,6 +1650,7 @@ functions:
 
   "run generated tests":
   - *fetch_debugsymbols_archive # needed for resmoke hang_analyzer.py integration
+  - *extract_debugsymbols
   - *retrieve_generated_test_configuration
   - *extract_generated_test_configuration
   - command: expansions.update
