@@ -337,6 +337,7 @@ assert = (function() {
 
             diff = (new Date()).getTime() - start.getTime();
             if (diff > timeout) {
+                MongoRunner.runHangAnalyzer();
                 doassert(_buildAssertionMessage(msg, msgPrefix));
             }
             sleep(interval);
@@ -374,6 +375,7 @@ assert = (function() {
             }
         }
         // Used up all attempts
+        MongoRunner.runHangAnalyzer();
         doassert(msg);
     };
 
@@ -425,6 +427,7 @@ assert = (function() {
 
         diff = (new Date()).getTime() - start.getTime();
         if (diff > timeout) {
+            MongoRunner.runHangAnalyzer();
             const msgPrefix =
                 "assert.time failed timeout " + timeout + "ms took " + diff + "ms : " + f + ", msg";
             doassert(_buildAssertionMessage(msg, msgPrefix));
