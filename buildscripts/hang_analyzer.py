@@ -493,7 +493,8 @@ class DebugExtractor(object):
     @staticmethod
     def extract_debug_symbols(root_logger):
         """
-        Extracts debug symbols. Idempotent.
+        Extract debug symbols. Idempotent.
+
         :param root_logger: logger to use
         :return: None
         """
