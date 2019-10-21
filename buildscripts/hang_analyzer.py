@@ -492,6 +492,11 @@ class DebugExtractor(object):
 
     @staticmethod
     def extract_debug_symbols(root_logger):
+        """
+        Extracts debug symbols. Idempotent.
+        :param root_logger: logger to use
+        :return: None
+        """
         path = os.path.join(os.getcwd(), 'mongo-debugsymbols.tgz')
         root_logger.debug('Starting: Extract debug-symbols from %s.', path)
         if not os.path.exists(path):
@@ -500,8 +505,12 @@ class DebugExtractor(object):
             return
         try:
             DebugExtractor._exxtract_tar(path, root_logger)
-        except Exception as e:
-            root_logger.warning('Error when extracting %s: %s', path, e)
+        # We never want this to cause the whole task to fail.
+        # The rest of hang_analyzer.py will continue to work without the
+        # symbols it just won't be quite as helpful.
+        # pylint: disable=broad-except
+        except Exception as exception:
+            root_logger.warning('Error when extracting %s: %s', path, exception)
         root_logger.debug('Finished: Extract debug-symbols from %s.', path)
 
     @staticmethod
@@ -527,7 +536,6 @@ class DebugExtractor(object):
 
     @staticmethod
     def _extracted_files_to_copy():
-        import glob
         out = []
         for ext in ['debug', 'dSYM', 'pdb']:
             for file in ['mongo', 'mongod', 'mongos']:
