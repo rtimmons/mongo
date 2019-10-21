@@ -518,20 +518,9 @@ class DebugExtractor(object):
     @staticmethod
     def _exxtract_tar(path, root_logger):
         import shutil
-
-        existing = [
-            os.path.basename(dest) for (src, dest) in DebugExtractor._extracted_files_to_copy()
-            if os.path.exists(dest)
-        ]
-        # 'existing' will be empty even if the symbols have already
-        # been copied but the inflated dir removed.
-        # Don't be too clever. It's possible we've already got
-        # e.g. 'mongo.debug' in cwd, but there may be additional
-        # files in the archive, so always extractall()
-        if not existing:
-            # The file name is always .tgz but it's "secretly" a zip file on Windows :(
-            compressed_format = 'zip' if _IS_WINDOWS else 'gztar'
-            shutil.unpack_archive(path, format=compressed_format)
+        # The file name is always .tgz but it's "secretly" a zip file on Windows :(
+        compressed_format = 'zip' if _IS_WINDOWS else 'gztar'
+        shutil.unpack_archive(path, format=compressed_format)
         for (src, dest) in DebugExtractor._extracted_files_to_copy():
             if os.path.exists(dest):
                 continue
