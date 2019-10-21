@@ -501,7 +501,8 @@ class DebugExtractor(object):
         root_logger.debug('Starting: Extract debug-symbols from %s.', path)
         if not os.path.exists(path):
             root_logger.info('Debug-symbols archive-file does not exist. '
-                             'Hang-Analyzer may not complete successfully.')
+                             'Hang-Analyzer may not complete successfully, '
+                             'or debug-symbols may already be extracted.')
             return
         try:
             DebugExtractor._exxtract_tar(path, root_logger)
