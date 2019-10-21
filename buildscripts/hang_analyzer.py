@@ -508,10 +508,10 @@ class DebugExtractor(object):
     def _exxtract_tar(path, root_logger):
         import shutil
 
-        existing = [os.path.basename(dest)
-                    for (src, dest)
-                    in DebugExtractor._extracted_files_to_copy()
-                    if os.path.exists(dest)]
+        existing = [
+            os.path.basename(dest) for (src, dest) in DebugExtractor._extracted_files_to_copy()
+            if os.path.exists(dest)
+        ]
         # 'existing' will be empty even if the symbols have already
         # been copied but the inflated dir removed.
         # Don't be too clever. It's possible we've already got
@@ -533,7 +533,8 @@ class DebugExtractor(object):
             for file in ['mongo', 'mongod', 'mongos']:
                 # need to glob because it untar's to a directory that looks like
                 # mongodb-linux-x86_64-enterprise-rhel62-4.3.0-1823-gb9c13fa-patch-5daa05630ae60652f0890f76
-                haystack = os.path.join('mongodb*', 'bin', '{file}.{ext}'.format(file=file, ext=ext))
+                haystack = os.path.join('mongodb*', 'bin', '{file}.{ext}'.format(
+                    file=file, ext=ext))
                 for needle in glob.glob(haystack):
                     out.append((needle, os.path.join(os.getcwd(), os.path.basename(needle))))
         return out
