@@ -425,14 +425,37 @@ void IndexBuildsCoordinator::onStepUp(OperationContext* opCtx) {
     log() << "IndexBuildsCoordinator::onStepUp - this node is stepping up to primary";
 
     auto indexBuilds = _getIndexBuilds();
-    auto onIndexBuild = [](std::shared_ptr<ReplIndexBuildState> replState) {};
+    auto onIndexBuild = [](std::shared_ptr<ReplIndexBuildState> replState) {
+        stdx::unique_lock<Latch> lk(replState->mutex);
+        if (!replState->aborted) {
+            // Leave commit timestamp as null. We will be writing a commitIndexBuild oplog entry now
+            // that we are primary and using the timestamp from the oplog entry to update the mdb
+            // catalog.
+            invariant(replState->commitTimestamp.isNull(), replState->buildUUID.toString());
+            invariant(!replState->isCommitReady, replState->buildUUID.toString());
+            replState->isCommitReady = true;
+            replState->condVar.notify_all();
+        }
+    };
     forEachIndexBuild(indexBuilds, "IndexBuildsCoordinator::onStepUp - "_sd, onIndexBuild);
 }
 
 void IndexBuildsCoordinator::onRollback(OperationContext* opCtx) {
     log() << "IndexBuildsCoordinator::onRollback - this node is entering the rollback state";
     auto indexBuilds = _getIndexBuilds();
-    auto onIndexBuild = [](std::shared_ptr<ReplIndexBuildState> replState) {};
+    auto onIndexBuild = [](std::shared_ptr<ReplIndexBuildState> replState) {
+        stdx::unique_lock<Latch> lk(replState->mutex);
+        if (!replState->aborted) {
+            // Leave abort timestamp as null. This will unblock the index build and allow it to
+            // complete using a ghost timestamp. Subsequently, the rollback algorithm can decide how
+            // undo the index build depending on the state of the oplog.
+            invariant(replState->abortTimestamp.isNull(), replState->buildUUID.toString());
+            invariant(!replState->aborted, replState->buildUUID.toString());
+            replState->aborted = true;
+            replState->abortReason = "rollback";
+            replState->condVar.notify_all();
+        }
+    };
     forEachIndexBuild(indexBuilds, "IndexBuildsCoordinator::onRollback - "_sd, onIndexBuild);
 }
 
