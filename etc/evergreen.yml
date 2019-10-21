@@ -1624,7 +1624,6 @@ functions:
           - src/generated_resmoke_config/*.json
 
   "run generated tests":
-  - *fetch_debugsymbols_archive
   - *retrieve_generated_test_configuration
   - *extract_generated_test_configuration
   - command: expansions.update
@@ -1636,6 +1635,8 @@ functions:
         value: mongodata_aws
       - key: aws_secret_remote
         value: ${mongodatafiles_aws_secret}
+  - *set_task_expansion_macros
+  - *fetch_debugsymbols_archive
   - *set_up_remote_credentials
   - *determine_resmoke_jobs
   - *update_resmoke_jobs_expansions
