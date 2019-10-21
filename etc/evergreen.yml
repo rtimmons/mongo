@@ -48,6 +48,8 @@ variables:
   - name: compile
   commands:
   - func: "do setup"
+  - func: "set task expansion macros"
+  - func: "fetch debugsymbols archive"
   - func: "run tests"
     vars:
       resmoke_args: --help
