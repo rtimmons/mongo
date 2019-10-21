@@ -493,7 +493,7 @@ class DebugExtractor(object):
     @staticmethod
     def extract_debug_symbols(root_logger):
         path = os.path.join(os.getcwd(), 'mongo-debugsymbols.tgz')
-        root_logger.debug('Starting: Extract debug-symbols from %s', path)
+        root_logger.debug('Starting: Extract debug-symbols from %s.', path)
         if not os.path.exists(path):
             root_logger.info('Debug-symbols archive-file does not exist. '
                              'Hang-Analyzer may not complete successfully.')
@@ -502,14 +502,14 @@ class DebugExtractor(object):
             DebugExtractor._exxtract_tar(path, root_logger)
         except Exception as e:
             root_logger.warning('Error when extracting %s: %s', path, e)
-        root_logger.debug('Finished: Extract debug symbols.')
+        root_logger.debug('Finished: Extract debug-symbols from %s.', path)
 
     @staticmethod
     def _exxtract_tar(path, root_logger):
         import tarfile
         import shutil
 
-        tar = tarfile.open(path)
+        tar = tarfile.open(path, mode="r:gz")
         try:
             existing = [os.path.basename(dest)
                         for (src, dest)
