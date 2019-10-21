@@ -1664,8 +1664,6 @@ functions:
           value: mongodata_aws
         - key: aws_secret_remote
           value: ${mongodatafiles_aws_secret}
-    - *set_task_expansion_macros
-    - *fetch_debugsymbols_archive
     - *set_up_remote_credentials
     - *determine_resmoke_jobs
     - *update_resmoke_jobs_expansions
