@@ -337,8 +337,10 @@ assert = (function() {
 
             diff = (new Date()).getTime() - start.getTime();
             if (diff > timeout) {
-                MongoRunner.runHangAnalyzer();
-                doassert(_buildAssertionMessage(msg, msgPrefix));
+                const msg = _buildAssertionMessage(msg, msgPrefix);
+                print(msg + ". Running hang analyzer from assert.soon.");
+                MongoRunner.runHangAnalyzer(msg);
+                doassert(msg);
             }
             sleep(interval);
         }
@@ -375,6 +377,7 @@ assert = (function() {
             }
         }
         // Used up all attempts
+        print(msg + ". Running hang analyzer from assert.retry.");
         MongoRunner.runHangAnalyzer();
         doassert(msg);
     };
@@ -427,10 +430,12 @@ assert = (function() {
 
         diff = (new Date()).getTime() - start.getTime();
         if (diff > timeout) {
-            MongoRunner.runHangAnalyzer();
             const msgPrefix =
                 "assert.time failed timeout " + timeout + "ms took " + diff + "ms : " + f + ", msg";
-            doassert(_buildAssertionMessage(msg, msgPrefix));
+            const msg = _buildAssertionMessage(msg, msgPrefix);
+            print(msg + ". Running hang analyzer from assert.time.");
+            MongoRunner.runHangAnalyzer();
+            doassert(msg);
         }
         return res;
     };
