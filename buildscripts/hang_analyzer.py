@@ -524,6 +524,7 @@ class DebugExtractor(object):
         for (src, dest) in DebugExtractor._extracted_files_to_copy():
             if os.path.exists(dest):
                 root_logger.debug('Debug symbol %s already exists, not copying from %s.', dest, src)
+                continue
             shutil.copy(src, dest)
             root_logger.debug('Copied debug symbol %s.', dest)
 
