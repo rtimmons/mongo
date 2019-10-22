@@ -523,7 +523,7 @@ class DebugExtractor(object):
         shutil.unpack_archive(path, format=compressed_format)
         for (src, dest) in DebugExtractor._extracted_files_to_copy():
             if os.path.exists(dest):
-                continue
+                root_logger.debug('Debug symbol %s already exists, not copying from %s.', dest, src)
             shutil.copy(src, dest)
             root_logger.debug('Copied debug symbol %s.', dest)
 
