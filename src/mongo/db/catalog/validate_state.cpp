@@ -55,7 +55,7 @@ ValidateState::ValidateState(OperationContext* opCtx,
                              const NamespaceString& nss,
                              bool background,
                              bool fullValidate)
-    : _nss(nss), _background(background), _fullValidate(fullValidate) {
+    : _nss(nss), _background(background), _fullValidate(fullValidate), _dataThrottle(opCtx) {
 
     // Subsequent re-locks will use the UUID when 'background' is true.
     if (_background) {
@@ -69,7 +69,6 @@ ValidateState::ValidateState(OperationContext* opCtx,
     _database = _databaseLock->getDb() ? _databaseLock->getDb() : nullptr;
     _collection =
         _database ? CollectionCatalog::get(opCtx).lookupCollectionByNamespace(_nss) : nullptr;
-
 
     if (!_collection) {
         if (_database && ViewCatalog::get(_database)->lookup(opCtx, _nss.ns())) {
@@ -231,6 +230,17 @@ void ValidateState::initializeCursors(OperationContext* opCtx) {
             // not the corresponding index table.
             log() << "Skipping validation on index '" << desc->indexName() << "' in collection '"
                   << _nss << "' because the index data is not in a checkpoint: " << ex;
+            continue;
+        }
+
+        // Skip any newly created indexes that, because they were built with a WT bulk loader, are
+        // checkpoint'ed but not yet consistent with the rest of checkpoint's PIT view of the data.
+        if (_background &&
+            opCtx->getServiceContext()->getStorageEngine()->isInIndividuallyCheckpointedIndexesList(
+                diskIndexIdent)) {
+            _indexCursors.erase(desc->indexName());
+            log() << "Skipping validation on index '" << desc->indexName() << "' in collection '"
+                  << _nss << "' because the index data is not yet consistent in the checkpoint.";
             continue;
         }
 

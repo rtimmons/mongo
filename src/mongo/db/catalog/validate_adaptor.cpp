@@ -105,7 +105,7 @@ Status ValidateAdaptor::validateRecord(OperationContext* opCtx,
 
         if (!descriptor->isMultikey() &&
             iam->shouldMarkIndexAsMultikey(
-                {documentKeySet.begin(), documentKeySet.end()},
+                documentKeySet.size(),
                 {multikeyMetadataKeys.begin(), multikeyMetadataKeys.end()},
                 multikeyPaths)) {
             std::string msg = str::stream()
@@ -324,7 +324,7 @@ void ValidateAdaptor::validateIndexKeyCount(const IndexDescriptor* idx, Validate
     bool noErrorOnTooFewKeys = !_validateState->isFullValidate();
 
     if (idx->isIdIndex() && numTotalKeys != _numRecords) {
-        hasTooFewKeys = numTotalKeys < _numRecords ? true : hasTooFewKeys;
+        hasTooFewKeys = (numTotalKeys < _numRecords);
         std::string msg = str::stream()
             << "number of _id index entries (" << numTotalKeys
             << ") does not match the number of documents in the index (" << _numRecords << ")";

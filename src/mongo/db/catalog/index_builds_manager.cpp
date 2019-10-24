@@ -199,12 +199,14 @@ StatusWith<std::pair<long long, long long>> IndexBuildsManager::startBuildingInd
     return std::make_pair(numRecords, dataSize);
 }
 
-Status IndexBuildsManager::drainBackgroundWrites(OperationContext* opCtx,
-                                                 const UUID& buildUUID,
-                                                 RecoveryUnit::ReadSource readSource) {
+Status IndexBuildsManager::drainBackgroundWrites(
+    OperationContext* opCtx,
+    const UUID& buildUUID,
+    RecoveryUnit::ReadSource readSource,
+    IndexBuildInterceptor::DrainYieldPolicy drainYieldPolicy) {
     auto builder = _getBuilder(buildUUID);
 
-    return builder->drainBackgroundWrites(opCtx, readSource);
+    return builder->drainBackgroundWrites(opCtx, readSource, drainYieldPolicy);
 }
 
 Status IndexBuildsManager::finishBuildingPhase(const UUID& buildUUID) {

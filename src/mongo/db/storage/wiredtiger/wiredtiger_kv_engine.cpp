@@ -100,6 +100,15 @@ using namespace fmt::literals;
 
 namespace mongo {
 
+namespace {
+
+MONGO_FAIL_POINT_DEFINE(WTPreserveSnapshotHistoryIndefinitely);
+MONGO_FAIL_POINT_DEFINE(WTSetOldestTSToStableTS);
+
+MONGO_FAIL_POINT_DEFINE(pauseCheckpointThread);
+
+}  // namespace
+
 bool WiredTigerFileVersion::shouldDowngrade(bool readOnly,
                                             bool repairMode,
                                             bool hasRecoveryTimestamp) {
@@ -331,6 +340,8 @@ public:
                                       wiredTigerGlobalOptions.checkpointDelaySecs)));
             }
 
+            pauseCheckpointThread.pauseWhileSet();
+
             // Might have been awakened by another thread shutting us down.
             if (_shuttingDown.load()) {
                 break;
@@ -375,6 +386,7 @@ public:
                     UniqueWiredTigerSession session = _sessionCache->getSession();
                     WT_SESSION* s = session->getSession();
                     auto checkpointLock = _wiredTigerKVEngine->getCheckpointLock(opCtx.get());
+                    _wiredTigerKVEngine->clearIndividuallyCheckpointedIndexesList();
                     invariantWTOK(s->checkpoint(s, "use_timestamp=false"));
                 } else if (stableTimestamp < initialDataTimestamp) {
                     LOG_FOR_RECOVERY(2)
@@ -391,8 +403,11 @@ public:
 
                     UniqueWiredTigerSession session = _sessionCache->getSession();
                     WT_SESSION* s = session->getSession();
-                    auto checkpointLock = _wiredTigerKVEngine->getCheckpointLock(opCtx.get());
-                    invariantWTOK(s->checkpoint(s, "use_timestamp=true"));
+                    {
+                        auto checkpointLock = _wiredTigerKVEngine->getCheckpointLock(opCtx.get());
+                        _wiredTigerKVEngine->clearIndividuallyCheckpointedIndexesList();
+                        invariantWTOK(s->checkpoint(s, "use_timestamp=true"));
+                    }
 
                     if (oplogNeededForRollback.isOK()) {
                         // Now that the checkpoint is durable, publish the oplog needed to recover
@@ -1635,13 +1650,6 @@ void WiredTigerKVEngine::setJournalListener(JournalListener* jl) {
     return _sessionCache->setJournalListener(jl);
 }
 
-namespace {
-
-MONGO_FAIL_POINT_DEFINE(WTPreserveSnapshotHistoryIndefinitely);
-MONGO_FAIL_POINT_DEFINE(WTSetOldestTSToStableTS);
-
-}  // namespace
-
 void WiredTigerKVEngine::setStableTimestamp(Timestamp stableTimestamp, bool force) {
     if (stableTimestamp.isNull()) {
         return;
@@ -1978,6 +1986,15 @@ Timestamp WiredTigerKVEngine::getPinnedOplog() const {
 std::unique_ptr<StorageEngine::CheckpointLock> WiredTigerKVEngine::getCheckpointLock(
     OperationContext* opCtx) {
     return std::make_unique<CheckpointLockImpl>(opCtx, _checkpointMutex);
+}
+
+bool WiredTigerKVEngine::isInIndividuallyCheckpointedIndexesList(const std::string& ident) const {
+    for (auto it = _checkpointedIndexes.begin(); it != _checkpointedIndexes.end(); ++it) {
+        if (*it == ident) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool WiredTigerKVEngine::supportsReadConcernSnapshot() const {

@@ -27,8 +27,9 @@
  *    it in the license file.
  */
 
+#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
+
 #include <algorithm>
-#include <third_party/murmurhash3/MurmurHash3.h>
 
 #include "mongo/platform/basic.h"
 
@@ -37,6 +38,7 @@
 #include "mongo/db/catalog/index_catalog.h"
 #include "mongo/db/db_raii.h"
 #include "mongo/db/index/index_descriptor.h"
+#include "mongo/util/log.h"
 #include "mongo/util/string_map.h"
 
 namespace mongo {
@@ -120,7 +122,7 @@ void IndexConsistency::addIndexEntryErrors(ValidateResultsMap* indexNsResultsMap
         numExtraIndexEntryErrors += item.second.size();
     }
 
-    // Inform which indexes have inconsistences and add the BSON objects of the inconsistent index
+    // Inform which indexes have inconsistencies and add the BSON objects of the inconsistent index
     // entries to the results vector.
     bool missingIndexEntrySizeLimitWarning = false;
     for (const auto& missingIndexEntry : _missingIndexEntries) {
@@ -305,9 +307,6 @@ BSONObj IndexConsistency::_generateInfo(const IndexInfo& indexInfo,
 
 uint32_t IndexConsistency::_hashKeyString(const KeyString::Value& ks,
                                           uint32_t indexNameHash) const {
-    MurmurHash3_x86_32(
-        ks.getTypeBits().getBuffer(), ks.getTypeBits().getSize(), indexNameHash, &indexNameHash);
-    MurmurHash3_x86_32(ks.getBuffer(), ks.getSize(), indexNameHash, &indexNameHash);
-    return indexNameHash % kNumHashBuckets;
+    return ks.hash(indexNameHash) % kNumHashBuckets;
 }
 }  // namespace mongo

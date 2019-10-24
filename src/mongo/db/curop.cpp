@@ -311,11 +311,13 @@ void CurOp::reportCurrentOpForClient(OperationContext* opCtx,
         waitingForLatchBuilder.append("captureName", diagnostic->getCaptureName());
         if (backtraceMode) {
             BSONArrayBuilder backtraceBuilder(waitingForLatchBuilder.subarrayStart("backtrace"));
+            /** This branch becomes useful again with SERVER-44091
             for (const auto& frame : diagnostic->makeStackTrace().frames) {
                 BSONObjBuilder backtraceObj(backtraceBuilder.subobjStart());
                 backtraceObj.append("addr", integerToHex(frame.instructionOffset));
                 backtraceObj.append("path", frame.objectPath);
             }
+            */
         }
     }
 }
@@ -696,6 +698,14 @@ string OpDebug::report(OperationContext* opCtx, const SingleThreadedLockStats* l
         s << " prepareConflictDuration: " << prepareConflictDurationMillis;
     }
 
+    if (dataThroughputLastSecond) {
+        s << " dataThroughputLastSecond: " << *dataThroughputLastSecond << " MB/sec";
+    }
+
+    if (dataThroughputAverage) {
+        s << " dataThroughputAverage: " << *dataThroughputAverage << " MB/sec";
+    }
+
     OPDEBUG_TOSTRING_HELP(nShards);
     OPDEBUG_TOSTRING_HELP(cursorid);
     if (mongotCursorId) {
@@ -826,6 +836,9 @@ void OpDebug::append(OperationContext* opCtx,
     OPDEBUG_APPEND_OPTIONAL("keysDeleted", additiveMetrics.keysDeleted);
     OPDEBUG_APPEND_ATOMIC("prepareReadConflicts", additiveMetrics.prepareReadConflicts);
     OPDEBUG_APPEND_ATOMIC("writeConflicts", additiveMetrics.writeConflicts);
+
+    OPDEBUG_APPEND_OPTIONAL("dataThroughputLastSecond", dataThroughputLastSecond);
+    OPDEBUG_APPEND_OPTIONAL("dataThroughputAverage", dataThroughputAverage);
 
     b.appendNumber("numYield", curop.numYields());
     OPDEBUG_APPEND_NUMBER(nreturned);

@@ -652,22 +652,12 @@ StatusWith<unique_ptr<PlanStage>> applyProjection(OperationContext* opCtx,
                                                   unique_ptr<PlanStage> root) {
     invariant(!projObj.isEmpty());
 
-    projection_ast::Projection proj = projection_ast::parse(
-        cq->getExpCtx(), projObj.getOwned(), cq->root(), cq->getQueryObj(), ProjectionPolicies{});
-
-    {
-        // The query system is in the process of migrating from one projection
-        // implementation/language to another. If there's a projection that the old parser rejects
-        // but the new parser accepts, then the client is attempting to use a feature only available
-        // as part of the new language, so we fail to parse.
-        // TODO SERVER-42423: Remove this.
-        ParsedProjection* rawParsedProj;
-        Status ppStatus = ParsedProjection::make(opCtx, projObj, cq->root(), &rawParsedProj);
-        if (!ppStatus.isOK()) {
-            return ppStatus;
-        }
-        std::unique_ptr<ParsedProjection> projDeleter(rawParsedProj);
-    }
+    projection_ast::Projection proj =
+        projection_ast::parse(cq->getExpCtx(),
+                              projObj.getOwned(),
+                              cq->root(),
+                              cq->getQueryObj(),
+                              ProjectionPolicies::findProjectionPolicies());
 
     // ProjectionExec requires the MatchDetails from the query expression when the projection
     // uses the positional operator. Since the query may no longer match the newly-updated
@@ -1015,6 +1005,14 @@ bool turnIxscanIntoCount(QuerySolution* soln) {
     if (!IndexBoundsBuilder::isSingleInterval(
             isn->bounds, &startKey, &startKeyInclusive, &endKey, &endKeyInclusive)) {
         return false;
+    }
+
+    // Since count scans return no data, they are always forward scans. Index scans, on the other
+    // hand, may need to scan the index in reverse order in order to obtain a sort. If the index
+    // scan direction is backwards, then we need to swap the start and end of the count scan bounds.
+    if (isn->direction < 0) {
+        startKey.swap(endKey);
+        std::swap(startKeyInclusive, endKeyInclusive);
     }
 
     // Make the count node that we replace the fetch + ixscan with.
