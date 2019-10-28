@@ -38,10 +38,8 @@ assert.commandWorked(secondary.getDB(name).setProfilingLevel(1, 60 * 60 * 1000))
 assert.commandWorked(primary.getDB(name)["fastOp"].insert({"fast": "cheetah"}));
 rst.awaitReplication();
 
-// The op should not have been logged.
-assert.throws(function() {
-    checkLog.contains(secondary, "cheetah", 1 * 1000);
-});
+// The op should not have been logged after 1 second of waiting.
+checkLog.doesNotContain(secondary, "cheetah", 1000);
 
 /**
  * Part 2: Issue a slow op and make sure that we *do* log it.

@@ -53,6 +53,17 @@ checkLog = (function() {
     };
 
     /*
+     * Calls getLog after waiting for a while and asserts the given message has *not* been logged.
+     */
+    let doesNotContain = function(conn, msg, timeout) {
+        // No need to go through assert.soon - we're *not* expecting the log to ever contain
+        // the message so no need to periodically call/check/sleep/retry - just do the sleeps
+        // and final check.
+        sleep(timeout);
+        return !checkContainsOnce(conn, msg);
+    };
+
+    /*
      * Calls the 'getLog' function at regular intervals on the provided connection 'conn' until
      * the provided 'msg' is found in the logs 'expectedCount' times, or it times out.
      * Throws an exception on timeout. If 'exact' is true, checks whether the count is exactly
@@ -129,6 +140,7 @@ checkLog = (function() {
         getGlobalLog: getGlobalLog,
         checkContainsOnce: checkContainsOnce,
         contains: contains,
+        doesNotContain: doesNotContain,
         containsWithCount: containsWithCount,
         containsWithAtLeastCount: containsWithAtLeastCount,
         formatAsLogLine: formatAsLogLine
