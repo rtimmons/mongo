@@ -151,11 +151,13 @@ assert = (function() {
         doassert(_buildAssertionMessage(msg, "assert failed"));
     };
 
+    assert.ASSERT_DEPTH = 0;
+
     assert.automsg = function(b) {
         assert(eval(b), b);
     };
 
-    assert._debug = false;
+    assert._debug = true;
 
     function _isEq(a, b) {
         if (a == b) {
@@ -306,12 +308,32 @@ assert = (function() {
         }
     };
 
+    assert.DEPTH = 0;
+    const wrapAssert = function(fn) {
+        return function(...args) {
+            let success = false;
+            if (assert.DEPTH > 0) {
+                success = false;
+            }
+            try {
+                ++assert.DEPTH;
+                const out = fn(...args);
+                if (!success) {
+                    throw new Error('Calling assert inside another assert.');
+                }
+                return out;
+            } finally {
+                --assert.DEPTH;
+            }
+        };
+    };
+
     /*
      * Calls a function 'func' at repeated intervals until either func() returns true
      * or more than 'timeout' milliseconds have elapsed. Throws an exception with
      * message 'msg' after timing out.
      */
-    assert.soon = function(func, msg, timeout, interval) {
+    assert.soon = wrapAssert(function(func, msg, timeout, interval) {
         _validateAssertionMessage(msg);
 
         var msgPrefix = "assert.soon failed: " + func;
@@ -341,7 +363,7 @@ assert = (function() {
             }
             sleep(interval);
         }
-    };
+    });
 
     /*
      * Calls a function 'func' at repeated intervals until either func() returns true without
@@ -361,7 +383,7 @@ assert = (function() {
      * message 'msg' after all attempts are used up. If no 'intervalMS' argument is passed,
      * it defaults to 0.
      */
-    assert.retry = function(func, msg, num_attempts, intervalMS) {
+    assert.retry = wrapAssert(function(func, msg, num_attempts, intervalMS) {
         var intervalMS = intervalMS || 0;
         var attempts_made = 0;
         while (attempts_made < num_attempts) {
@@ -375,7 +397,7 @@ assert = (function() {
         }
         // Used up all attempts
         doassert(msg);
-    };
+    });
 
     /*
      * Calls the given function 'func' repeatedly at time intervals specified by
@@ -412,7 +434,7 @@ assert = (function() {
         return res;
     };
 
-    assert.time = function(f, msg, timeout /*ms*/) {
+    assert.time = wrapAssert(function(f, msg, timeout /*ms*/) {
         _validateAssertionMessage(msg);
 
         var start = new Date();
@@ -430,7 +452,7 @@ assert = (function() {
             doassert(_buildAssertionMessage(msg, msgPrefix));
         }
         return res;
-    };
+    });
 
     function assertThrowsHelper(func, params) {
         if (typeof func !== "function") {
@@ -483,7 +505,7 @@ assert = (function() {
         return {error: error, res: res};
     }
 
-    assert.throws = function(func, params, msg) {
+    assert.throws = wrapAssert(function(func, params, msg) {
         _validateAssertionMessage(msg);
 
         // Use .apply() instead of calling the function directly with explicit arguments to
@@ -495,9 +517,9 @@ assert = (function() {
         }
 
         return error;
-    };
+    });
 
-    assert.doesNotThrow = function(func, params, msg) {
+    assert.doesNotThrow = wrapAssert(function(func, params, msg) {
         _validateAssertionMessage(msg);
 
         // Use .apply() instead of calling the function directly with explicit arguments to
@@ -509,7 +531,7 @@ assert = (function() {
         }
 
         return res;
-    };
+    });
 
     assert.throws.automsg = function(func, params) {
         if (arguments.length === 1)
