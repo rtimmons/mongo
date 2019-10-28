@@ -308,22 +308,19 @@ assert = (function() {
         }
     };
 
-    assert.DEPTH = 0;
-    const wrapAssert = function(fn) {
+    const STACK = [];
+    const wrapAssert = function(name, fn) {
         return function(...args) {
-            let success = false;
-            if (assert.DEPTH > 0) {
-                success = false;
+            STACK.push(name);
+            if (STACK.length > 1) {
+                const e = new Error(`Calling ${name} from inside another assert. Stack: ${STACK.join(', ')}.`);
+                e.fatal = true;
+                throw e;
             }
             try {
-                ++assert.DEPTH;
-                const out = fn(...args);
-                if (!success) {
-                    throw new Error('Calling assert inside another assert.');
-                }
-                return out;
+                return fn(...args);
             } finally {
-                --assert.DEPTH;
+                STACK.pop();
             }
         };
     };
@@ -333,7 +330,7 @@ assert = (function() {
      * or more than 'timeout' milliseconds have elapsed. Throws an exception with
      * message 'msg' after timing out.
      */
-    assert.soon = wrapAssert(function(func, msg, timeout, interval) {
+    assert.soon = wrapAssert('soon', function(func, msg, timeout, interval) {
         _validateAssertionMessage(msg);
 
         var msgPrefix = "assert.soon failed: " + func;
@@ -383,7 +380,7 @@ assert = (function() {
      * message 'msg' after all attempts are used up. If no 'intervalMS' argument is passed,
      * it defaults to 0.
      */
-    assert.retry = wrapAssert(function(func, msg, num_attempts, intervalMS) {
+    assert.retry = wrapAssert('retry', function(func, msg, num_attempts, intervalMS) {
         var intervalMS = intervalMS || 0;
         var attempts_made = 0;
         while (attempts_made < num_attempts) {
@@ -434,7 +431,7 @@ assert = (function() {
         return res;
     };
 
-    assert.time = wrapAssert(function(f, msg, timeout /*ms*/) {
+    assert.time = wrapAssert('time', function(f, msg, timeout /*ms*/) {
         _validateAssertionMessage(msg);
 
         var start = new Date();
@@ -493,6 +490,9 @@ assert = (function() {
         try {
             res = func.apply(thisSpy, params);
         } catch (e) {
+            if (typeof e.fatal !== 'undefined') {
+                throw e;
+            }
             error = e;
         }
 
@@ -505,7 +505,7 @@ assert = (function() {
         return {error: error, res: res};
     }
 
-    assert.throws = wrapAssert(function(func, params, msg) {
+    assert.throws = wrapAssert('throws', function(func, params, msg) {
         _validateAssertionMessage(msg);
 
         // Use .apply() instead of calling the function directly with explicit arguments to
@@ -519,7 +519,7 @@ assert = (function() {
         return error;
     });
 
-    assert.doesNotThrow = wrapAssert(function(func, params, msg) {
+    assert.doesNotThrow = wrapAssert('doesNotThrow', function(func, params, msg) {
         _validateAssertionMessage(msg);
 
         // Use .apply() instead of calling the function directly with explicit arguments to
