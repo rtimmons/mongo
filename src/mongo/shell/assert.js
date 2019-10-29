@@ -311,13 +311,13 @@ assert = (function() {
     const STACK = [];
     const wrapAssert = function(name, fn) {
         return function(...args) {
-            STACK.push(name);
-            if (STACK.length > 1) {
-                const e = new Error(`Calling ${name} from inside another assert. Stack: ${STACK.join(', ')}.`);
-                e.fatal = true;
-                throw e;
-            }
             try {
+                STACK.push(name);
+                if (new Set(STACK).size !== 1) {
+                    const e = new Error(`Calling ${name} from inside another assert. Stack: ${STACK.join(', ')}.`);
+                    e.fatal = true;
+                    throw e;
+                }
                 return fn(...args);
             } finally {
                 STACK.pop();
@@ -326,11 +326,11 @@ assert = (function() {
     };
 
     /*
-     * Calls a function 'func' at repeated intervals until either func() returns true
+     * Calls a function 'func' at assert.soon = wrapAssert('soon', repeated intervals until either func() returns true
      * or more than 'timeout' milliseconds have elapsed. Throws an exception with
      * message 'msg' after timing out.
      */
-    assert.soon = wrapAssert('soon', function(func, msg, timeout, interval) {
+    const soonImpl = function(func, msg, timeout, interval) {
         _validateAssertionMessage(msg);
 
         var msgPrefix = "assert.soon failed: " + func;
@@ -360,7 +360,9 @@ assert = (function() {
             }
             sleep(interval);
         }
-    });
+    };
+
+    assert.soon = wrapAssert('soon', soonImpl);
 
     /*
      * Calls a function 'func' at repeated intervals until either func() returns true without
