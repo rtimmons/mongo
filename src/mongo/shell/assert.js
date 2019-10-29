@@ -157,7 +157,7 @@ assert = (function() {
         assert(eval(b), b);
     };
 
-    assert._debug = true;
+    assert._debug = false;
 
     function _isEq(a, b) {
         if (a == b) {
@@ -316,7 +316,12 @@ assert = (function() {
                 if (new Set(STACK).size !== 1) {
                     const e = new Error(`Calling ${name} from inside another assert. Stack: ${STACK.join(', ')}.`);
                     e.fatal = true;
-                    throw e;
+                    try {
+                        throw e;
+                    } catch (e) {
+                        print(e.stack);
+                        throw e;
+                    }
                 }
                 return fn(...args);
             } finally {
