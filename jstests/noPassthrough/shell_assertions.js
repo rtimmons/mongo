@@ -363,7 +363,9 @@
         assert.throws(() => {
             assert.retry(() => {
                 return false;
-            }, 'assert message', kDefaultRetryAttempts, kSmallRetryIntervalMS, {runHangAnalyzer: false});
+            }, 'assert message', kDefaultRetryAttempts, kSmallRetryIntervalMS, {
+                runHangAnalyzer: false
+            });
         });
     });
 
@@ -387,7 +389,9 @@
         assert.throws(() => {
             assert.retryNoExcept(() => {
                 throw new Error('failed');
-            }, 'assert message', kDefaultRetryAttempts, kSmallRetryIntervalMS, {runHangAnalyzer: false});
+            }, 'assert message', kDefaultRetryAttempts, kSmallRetryIntervalMS, {
+                runHangAnalyzer: false
+            });
         });
     });
 

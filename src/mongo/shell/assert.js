@@ -311,7 +311,7 @@ assert = (function() {
      * or more than 'timeout' milliseconds have elapsed. Throws an exception with
      * message 'msg' after timing out.
      */
-    assert.soon = function(func, msg, timeout, interval, {runHangAnalyzer=true} = {}) {
+    assert.soon = function(func, msg, timeout, interval, {runHangAnalyzer = true} = {}) {
         _validateAssertionMessage(msg);
 
         var msgPrefix = "assert.soon failed: " + func;
@@ -372,7 +372,7 @@ assert = (function() {
      * message 'msg' after all attempts are used up. If no 'intervalMS' argument is passed,
      * it defaults to 0.
      */
-    assert.retry = function(func, msg, num_attempts, intervalMS, {runHangAnalyzer=true} = {}) {
+    assert.retry = function(func, msg, num_attempts, intervalMS, {runHangAnalyzer = true} = {}) {
         var intervalMS = intervalMS || 0;
         var attempts_made = 0;
         while (attempts_made < num_attempts) {
@@ -387,8 +387,7 @@ assert = (function() {
         // Used up all attempts
         msg = _buildAssertionMessage(msg, msgPrefix);
         if (runHangAnalyzer) {
-            msg = msg +
-                "The hang analyzer is automatically called in assert.retry functions. " +
+            msg = msg + "The hang analyzer is automatically called in assert.retry functions. " +
                 "If you are *expecting* assert.soon to possibly fail, call assert.retry " +
                 "with {runHangAnalyzer: false} as the fifth argument " +
                 "(you can fill unused arguments with `undefined`).";
@@ -433,7 +432,7 @@ assert = (function() {
         return res;
     };
 
-    assert.time = function(f, msg, timeout /*ms*/, {runHangAnalyzer=true} = {}) {
+    assert.time = function(f, msg, timeout /*ms*/, {runHangAnalyzer = true} = {}) {
         _validateAssertionMessage(msg);
 
         var start = new Date();
@@ -450,8 +449,7 @@ assert = (function() {
                 "assert.time failed timeout " + timeout + "ms took " + diff + "ms : " + f + ", msg";
             msg = _buildAssertionMessage(msg, msgPrefix);
             if (runHangAnalyzer) {
-                msg = msg +
-                    "The hang analyzer is automatically called in assert.time functions. " +
+                msg = msg + "The hang analyzer is automatically called in assert.time functions. " +
                     "If you are *expecting* assert.soon to possibly fail, call assert.time " +
                     "with {runHangAnalyzer: false} as the fourth argument " +
                     "(you can fill unused arguments with `undefined`).";
