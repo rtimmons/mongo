@@ -344,7 +344,7 @@ assert = (function() {
                         "If you are *expecting* assert.soon to possibly fail, call assert.soon " +
                         "with {runHangAnalyzer: false} as the fifth argument " +
                         "(you can fill unused arguments with `undefined`).";
-                    print(msg + ". Running hang analyzer from assert.soon.");
+                    print(msg + " Running hang analyzer from assert.soon.");
                     MongoRunner.runHangAnalyzer(msg);
                 }
                 doassert(msg);
@@ -392,7 +392,7 @@ assert = (function() {
                 "If you are *expecting* assert.soon to possibly fail, call assert.retry " +
                 "with {runHangAnalyzer: false} as the fifth argument " +
                 "(you can fill unused arguments with `undefined`).";
-            print(msg + ". Running hang analyzer from assert.retry.");
+            print(msg + " Running hang analyzer from assert.retry.");
             MongoRunner.runHangAnalyzer(msg);
         }
         doassert(msg);
@@ -433,7 +433,7 @@ assert = (function() {
         return res;
     };
 
-    assert.time = function(f, msg, timeout /*ms*/) {
+    assert.time = function(f, msg, timeout /*ms*/, {runHangAnalyzer=true} = {}) {
         _validateAssertionMessage(msg);
 
         var start = new Date();
@@ -448,9 +448,16 @@ assert = (function() {
         if (diff > timeout) {
             const msgPrefix =
                 "assert.time failed timeout " + timeout + "ms took " + diff + "ms : " + f + ", msg";
-            const msg = _buildAssertionMessage(msg, msgPrefix);
-            print(msg + ". Running hang analyzer from assert.time.");
-            MongoRunner.runHangAnalyzer();
+            msg = _buildAssertionMessage(msg, msgPrefix);
+            if (runHangAnalyzer) {
+                msg = msg +
+                    "The hang analyzer is automatically called in assert.time functions. " +
+                    "If you are *expecting* assert.soon to possibly fail, call assert.time " +
+                    "with {runHangAnalyzer: false} as the fourth argument " +
+                    "(you can fill unused arguments with `undefined`).";
+                print(msg + " Running hang analyzer from assert.time.");
+                MongoRunner.runHangAnalyzer(msg);
+            }
             doassert(msg);
         }
         return res;
