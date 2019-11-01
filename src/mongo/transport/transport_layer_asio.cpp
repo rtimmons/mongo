@@ -36,6 +36,8 @@
 #include <asio.hpp>
 #include <asio/system_timer.hpp>
 #include <boost/algorithm/string.hpp>
+#include <thread>
+#include <chrono>
 
 #include "mongo/config.h"
 
@@ -621,10 +623,12 @@ Future<SessionHandle> TransportLayerASIO::asyncConnect(HostAndPort peer,
             return makeConnectError(status, connector->peer, connector->resolvedEndpoint);
         })
         .getAsync([connector](Status connectResult) {
-            if (MONGO_unlikely(transportLayerASIOasyncConnectTimesOut.shouldFail())) {
-                log() << "asyncConnectTimesOut fail point is active. simulating timeout.";
-                return;
-            }
+//            if (MONGO_unlikely(transportLayerASIOasyncConnectTimesOut.shouldFail())) {
+//                log() << "asyncConnectTimesOut fail point is active. simulating timeout.";
+//                return;
+//            }
+            log() << "simulating timeout.";
+            std::this_thread::sleep_for(std::chrono::minutes(10));
 
             if (connector->done.swap(true)) {
                 return;
