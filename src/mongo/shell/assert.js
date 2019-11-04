@@ -345,7 +345,7 @@ assert = (function() {
                         "with {runHangAnalyzer: false} as the fifth argument " +
                         "(you can fill unused arguments with `undefined`).";
                     print(msg + " Running hang analyzer from assert.soon.");
-                    MongoRunner.runHangAnalyzer(msg);
+                    MongoRunner.runHangAnalyzer();
                 }
                 doassert(msg);
             } else {
@@ -392,7 +392,7 @@ assert = (function() {
                 "with {runHangAnalyzer: false} as the fifth argument " +
                 "(you can fill unused arguments with `undefined`).";
             print(msg + " Running hang analyzer from assert.retry.");
-            MongoRunner.runHangAnalyzer(msg);
+            MongoRunner.runHangAnalyzer();
         }
         doassert(msg);
     };
@@ -454,7 +454,7 @@ assert = (function() {
                     "with {runHangAnalyzer: false} as the fourth argument " +
                     "(you can fill unused arguments with `undefined`).";
                 print(msg + " Running hang analyzer from assert.time.");
-                MongoRunner.runHangAnalyzer(msg);
+                MongoRunner.runHangAnalyzer();
             }
             doassert(msg);
         }
