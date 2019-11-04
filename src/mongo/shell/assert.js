@@ -385,7 +385,7 @@ assert = (function() {
             }
         }
         // Used up all attempts
-        msg = _buildAssertionMessage(msg, msgPrefix);
+        msg = _buildAssertionMessage(msg);
         if (runHangAnalyzer) {
             msg = msg + "The hang analyzer is automatically called in assert.retry functions. " +
                 "If you are *expecting* assert.soon to possibly fail, call assert.retry " +
