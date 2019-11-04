@@ -58,7 +58,7 @@ assertErrorCode(
     [{$merge: {into: outColl.getName(), whenMatched: "fail", whenNotMatched: "insert"}}],
     ErrorCodes.DuplicateKey);
 assert.soon(() => {
-    return outColl.find().itcount() == 900;
+    return outColl.find().itcount() == 9;
 });
 
 assertErrorCode(
