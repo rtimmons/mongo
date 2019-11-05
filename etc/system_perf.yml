@@ -482,13 +482,13 @@ tasks:
     - func: "run test"
     - func: "analyze"
 
-- name: delayed_ping_latency
+- name: delayed_write_latency
   priority: 5
   commands:
     - func: "prepare environment"
       vars:
-        test: delayed_ping_latency
-        setup: single-replica-delay
+        test: delayed_write_latency
+        setup: replica-delay
     - func: "deploy cluster"
     - func: "run test"
     - func: "analyze"
@@ -1059,7 +1059,6 @@ buildvariants:
     - name: create_big_index
     - name: create_index
     - name: parallel_insert
-    - name: delayed_ping_latency
 
 - name: linux-standalone
   display_name: Linux Standalone
@@ -1320,6 +1319,7 @@ buildvariants:
     - name: linkbench
     - name: big_update
     - name: parallel_insert
+    - name: delayed_write_latency
 
 - name: linux-3-node-replSet-noflowcontrol
   display_name: Linux 3-Node ReplSet (Flow Control off)
