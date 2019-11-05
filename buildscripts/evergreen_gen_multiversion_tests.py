@@ -76,7 +76,7 @@ def update_suite_config_for_multiversion_sharded(suite_config):
 
     if base_num_shards is not default_shards or base_num_rs_nodes_per_shard is not default_num_nodes:
         num_shard_num_nodes_pair = "{}-{}".format(base_num_shards, base_num_rs_nodes_per_shard)
-        assert num_shard_num_nodes_pair in {"default_shards-2"}, \
+        assert num_shard_num_nodes_pair in {"default_shards-2", "2-default_nodes"}, \
                "The multiversion suite runs sharded clusters with 2 shards and 2 nodes per shard. "\
                " acceptable, please add '{}' to this assert.".format(num_shard_num_nodes_pair)
 
@@ -108,7 +108,7 @@ class EvergreenConfigGenerator(object):
 
     def _generate_sub_task(self, mixed_version_config, task, task_index, suite, num_suites,
                            burn_in_test=None):
-        #pylint: disable=too-many-arguments
+        # pylint: disable=too-many-arguments
         """Generate a sub task to be run with the provided suite and  mixed version config."""
 
         # Create a sub task name appended with the task_index and build variant name.
@@ -121,11 +121,14 @@ class EvergreenConfigGenerator(object):
 
         gen_task_name = BURN_IN_TASK if burn_in_test is not None else self.task
 
-        commands = [CommandDefinition().function("do setup")]
-        # Fetch and download the proper mongod binaries before running multiversion tests.
-        commands.append(CommandDefinition().function("do multiversion setup"))
+        commands = [
+            CommandDefinition().function("do setup"),
+            # Fetch and download the proper mongod binaries before running multiversion tests.
+            CommandDefinition().function("do multiversion setup")
+        ]
         exclude_tags = "requires_fcv_44"
-        # TODO(SERVER-43306): Remove --dryRun command line option once we start turning on multiversion tests.
+        # TODO(SERVER-43306): Remove --dryRun command line option once we start turning on
+        #  multiversion tests.
         run_tests_vars = {
             "resmoke_args":
                 "{0} --suite={1} --mixedBinVersions={2} --excludeWithAnyTags={3} --dryRun=tests ".
