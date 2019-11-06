@@ -26,6 +26,7 @@ selector:
   - jstests/sharding/explain_cmd.js
   # Enable when 4.4 becomes last stable
   - jstests/sharding/agg_explain_fmt.js
+  - jstests/sharding/allow_partial_results_nshards.js
   - jstests/sharding/array_shard_key.js
   - jstests/sharding/banned_txn_databases_sharded.js
   - jstests/sharding/mongos_precache_routing_info.js
@@ -66,7 +67,8 @@ selector:
     # Enable if SERVER-42273 is backported or 4.4 becomes last-stable
   - jstests/sharding/move_jumbo_chunk.js
   - jstests/sharding/movechunk_interrupt_at_primary_stepdown.js
-
+  # Enable after SERVER-31083 is backported and available on 4.2 and 4.0 binaries
+  - jstests/sharding/enable_sharding_with_primary.js
 executor:
   config:
     shell_options:
