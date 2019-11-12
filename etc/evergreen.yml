@@ -290,18 +290,18 @@ variables:
 
 # Use this template for enterprise Windows testing coverage on non-pushing
 # variants
-- &enterprise-windows-64-2k8-nopush-template
-  name: enterprise-windows-64-2k8-nopush-template
+- &enterprise-windows-nopush-template
+  name: enterprise-windows-nopush-template
   run_on:
   - windows-64-vs2017-test
   modules:
   - enterprise
-  expansions: &enterprise-windows-64-2k8-nopush-expansions-template
+  expansions: &enterprise-windows-nopush-expansions-template
     platform_decompress: unzip
     exe: ".exe"
     msi_target: msi
     content_type: application/zip
-    compile_flags: --ssl MONGO_DISTMOD=windows-64 CPPPATH="c:/sasl/include c:/snmp/include" LIBPATH="c:/sasl/lib c:/snmp/lib" -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) --win-version-min=ws08r2
+    compile_flags: --ssl MONGO_DISTMOD=windows CPPPATH="c:/sasl/include c:/snmp/include" LIBPATH="c:/sasl/lib c:/snmp/lib" -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) --win-version-min=win10
     # We invoke SCons using --jobs = (# of CPUs / 4) to avoid causing out of memory errors due to
     # spawning a large number of linker processes.
     num_scons_link_jobs_available: $(( $(grep -c ^processor /proc/cpuinfo) / 4 ))
@@ -397,19 +397,18 @@ variables:
   - enterprise-ubuntu-dynamic-1604-clang
   - enterprise-ubuntu1604-64
   - enterprise-ubuntu1604-arm64
-  - enterprise-ubuntu1604-s390x
   - enterprise-ubuntu1804-64
   - enterprise-ubuntu1804-arm64
   - enterprise-ubuntu1804-ppc64le
   - enterprise-ubuntu1804-s390x
-  - enterprise-windows-64-2k8
-  - enterprise-windows-64-2k8-async
-  - enterprise-windows-64-2k8-compile-all
-  - enterprise-windows-64-2k8-debug-unoptimized
-  - enterprise-windows-64-2k8-inmem
-  - enterprise-windows-64-2k8-nopush-template
-  - enterprise-windows-64-2k8-required
-  - enterprise-windows-64-2k8-wtdevelop
+  - enterprise-windows
+  - enterprise-windows-async
+  - enterprise-windows-compile-all
+  - enterprise-windows-debug-unoptimized
+  - enterprise-windows-inmem
+  - enterprise-windows-nopush-template
+  - enterprise-windows-required
+  - enterprise-windows-wtdevelop
   - ubuntu1804-debug-asan
   - ubuntu1804-debug-ubsan
   - ubuntu1804-debug-aubsan-lite
@@ -426,7 +425,7 @@ variables:
   - enterprise-rhel-70-64-bit
   - enterprise-ubuntu1604-64
   - enterprise-ubuntu1804-64
-  - enterprise-windows-64-2k8
+  - enterprise-windows
 
 #######################################
 #            Functions                #
@@ -477,6 +476,15 @@ functions:
       aws_key: ${aws_key}
       aws_secret: ${aws_secret}
       remote_file: ${project}/${build_variant}/${revision}/artifacts/${build_id}.tgz
+      bucket: mciuploads
+      extract_to: src
+
+  "fetch packages": &fetch_packages
+    command: s3.get
+    params:
+      aws_key: ${aws_key}
+      aws_secret: ${aws_secret}
+      remote_file: ${project}/${build_variant}/${revision}/artifacts/${build_id}-packages.tgz
       bucket: mciuploads
       extract_to: src
 
@@ -1375,6 +1383,55 @@ functions:
   - *set_up_credentials
   - *fetch_benchrun_embedded_files
 
+  "do multiversion setup": &do_multiversion_setup
+    command: shell.exec
+    params:
+      working_dir: src
+      script: |
+        set -o errexit
+        set -o verbose
+
+        ${activate_virtualenv}
+
+        rm -rf /data/install /data/multiversion
+
+        edition="${multiversion_edition|base}"
+        platform="${multiversion_platform|linux}"
+        architecture="${multiversion_architecture|x86_64}"
+
+        $python buildscripts/setup_multiversion_mongodb.py   \
+          --installDir /data/install                         \
+          --linkDir /data/multiversion                       \
+          --edition $edition                                 \
+          --platform $platform                               \
+          --architecture $architecture                       \
+          --useLatest 3.2 3.4 3.6 4.0
+
+        # The platform and architecture for how some of the binaries are reported in
+        # https://downloads.mongodb.org/full.json changed between MongoDB 4.0 and MongoDB 4.2.
+        # Certain build variants define additional multiversion_*_42_or_later expansions in order to
+        # be able to fetch a complete set of versions.
+
+        if [ ! -z "${multiversion_edition_42_or_later}" ]; then
+          edition="${multiversion_edition_42_or_later}"
+        fi
+
+        if [ ! -z "${multiversion_platform_42_or_later}" ]; then
+          platform="${multiversion_platform_42_or_later}"
+        fi
+
+        if [ ! -z "${multiversion_architecture_42_or_later}" ]; then
+          architecture="${multiversion_architecture_42_or_later}"
+        fi
+
+        $python buildscripts/setup_multiversion_mongodb.py   \
+          --installDir /data/install                         \
+          --linkDir /data/multiversion                       \
+          --edition $edition                                 \
+          --platform $platform                               \
+          --architecture $architecture                       \
+          --useLatest 4.2
+
   "execute resmoke tests": &execute_resmoke_tests
     command: shell.exec
     type: test
@@ -1574,6 +1631,61 @@ functions:
         files:
           - src/generated_burn_in_tags_config/burn_in_tags_gen.json
 
+  "generate randomized multiversion tasks":
+    - command: manifest.load
+    - *git_get_project
+    - *set_task_expansion_macros
+    - *set_up_virtualenv
+    - *upload_pip_requirements
+    - *configure_evergreen_api_credentials
+    - command: expansions.write
+      params:
+        file: src/expansions.yml
+
+    - command: shell.exec
+      type: test
+      params:
+        working_dir: src
+        script: |
+          set -o errexit
+
+          ${activate_virtualenv}
+          $python buildscripts/evergreen_generate_resmoke_tasks.py --expansion-file expansions.yml --verbose
+    - *do_multiversion_setup
+    - command: shell.exec
+      params:
+        working_dir: src
+        script: |
+          set -o errexit
+          set -o verbose
+
+          ${activate_virtualenv}
+          $python buildscripts/evergreen_gen_multiversion_tests.py generate-exclude-files --suite=${suite} --task-path-suffix=${use_multiversion} --is-generated-suite=true
+    - command: archive.targz_pack
+      params:
+        target: generate_tasks_config.tgz
+        source_dir: src/generated_resmoke_config
+        include:
+          - "*"
+
+    - command: s3.put
+      params:
+        aws_key: ${aws_key}
+        aws_secret: ${aws_secret}
+        local_file: generate_tasks_config.tgz
+        remote_file: ${project}/${build_variant}/${revision}/generate_tasks/${task_name}-${build_id}.tgz
+        bucket: mciuploads
+        permissions: public-read
+        content_type: ${content_type|application/gzip}
+        display_name: Generated Task Config - Execution ${execution}
+        optional: true
+
+    - command: generate.tasks
+      params:
+        optional: true
+        files:
+          - src/generated_resmoke_config/*.json
+
   "generate resmoke tasks":
     - command: manifest.load
     - *git_get_project
@@ -1730,6 +1842,9 @@ functions:
         if [ "${scons_cache_scope|}" = "shared" ]; then
           extra_args="$extra_args --cache-debug=scons_cache.log"
         fi
+
+        # Enable performance debugging
+        extra_args="$extra_args --debug=time"
 
         # If we are doing a patch build or we are building a non-push
         # build on the waterfall, then we don't need the --release
@@ -1962,6 +2077,16 @@ functions:
     - command: expansions.write
       params:
         file: src/expansions.yml
+    - *do_multiversion_setup
+    - command: shell.exec
+      params:
+        working_dir: src
+        script: |
+          set -o errexit
+          set -o verbose
+
+          ${activate_virtualenv}
+          $python buildscripts/evergreen_gen_multiversion_tests.py run --expansion-file expansions.yml
 
     - command: shell.exec
       params:
@@ -1971,7 +2096,7 @@ functions:
           set -o verbose
 
           ${activate_virtualenv}
-          $python buildscripts/evergreen_gen_multiversion_tests.py --expansion-file expansions.yml
+          $python buildscripts/evergreen_gen_multiversion_tests.py generate-exclude-files --suite=${task_name} --task-path-suffix=${task_path_suffix} --is-generated-suite=true
 
     - command: archive.targz_pack
       params:
@@ -2265,56 +2390,6 @@ functions:
           echo "Exiting powercycle with code $exit_code"
           exit $exit_code
 
-
-  "do multiversion setup":
-    command: shell.exec
-    params:
-      working_dir: src
-      script: |
-        set -o errexit
-        set -o verbose
-
-        ${activate_virtualenv}
-
-        rm -rf /data/install /data/multiversion
-
-        edition="${multiversion_edition|base}"
-        platform="${multiversion_platform|linux}"
-        architecture="${multiversion_architecture|x86_64}"
-
-        $python buildscripts/setup_multiversion_mongodb.py   \
-          --installDir /data/install                         \
-          --linkDir /data/multiversion                       \
-          --edition $edition                                 \
-          --platform $platform                               \
-          --architecture $architecture                       \
-          --useLatest 3.2 3.4 3.6 4.0
-
-        # The platform and architecture for how some of the binaries are reported in
-        # https://downloads.mongodb.org/full.json changed between MongoDB 4.0 and MongoDB 4.2.
-        # Certain build variants define additional multiversion_*_42_or_later expansions in order to
-        # be able to fetch a complete set of versions.
-
-        if [ ! -z "${multiversion_edition_42_or_later}" ]; then
-          edition="${multiversion_edition_42_or_later}"
-        fi
-
-        if [ ! -z "${multiversion_platform_42_or_later}" ]; then
-          platform="${multiversion_platform_42_or_later}"
-        fi
-
-        if [ ! -z "${multiversion_architecture_42_or_later}" ]; then
-          architecture="${multiversion_architecture_42_or_later}"
-        fi
-
-        $python buildscripts/setup_multiversion_mongodb.py   \
-          --installDir /data/install                         \
-          --linkDir /data/multiversion                       \
-          --edition $edition                                 \
-          --platform $platform                               \
-          --architecture $architecture                       \
-          --useLatest 4.2
-
   "do snmp setup":
     command: shell.exec
     params:
@@ -2407,7 +2482,7 @@ functions:
       script: |
         set -o errexit
 
-        export KITCHEN_ARTIFACTS_URL="https://s3.amazonaws.com/mciuploads/${project}/${build_variant}/${revision}/artifacts/${build_id}.tgz"
+        export KITCHEN_ARTIFACTS_URL="https://s3.amazonaws.com/mciuploads/${project}/${build_variant}/${revision}/artifacts/${build_id}-packages.tgz"
         export KITCHEN_SECURITY_GROUP="${kitchen_security_group}"
         export KITCHEN_SSH_KEY_ID="${kitchen_ssh_key_id}"
         export KITCHEN_SUBNET="${kitchen_subnet}"
@@ -2726,7 +2801,7 @@ functions:
           ${set_sudo}
           # Set up curator to collect system & process stats on remote.
           if [ "Windows_NT" = "$OS" ]; then
-             variant=windows-64
+             variant=windows
           else
              variant=ubuntu1604
           fi
@@ -3666,15 +3741,15 @@ tasks:
     - func: "build new tools"
     - func: "scons compile"
       vars:
-        targets: core tools ${mh_target|}
-        task_compile_flags: >-
-          --use-new-tools
-          --build-mongoreplay="${build_mongoreplay}"
-          --detect-odr-violations
-    - func: "scons compile"
-      vars:
-        targets: archive-dist archive-dist-debug distsrc-${ext|tgz} ${msi_target|}
-        additional_targets: ""
+        targets: >-
+          archive-dist
+          archive-dist-debug
+          install-core
+          install-tools
+          distsrc-${ext|tgz}
+          ${additional_targets|}
+          ${msi_target|}
+          ${mh_target|}
         task_compile_flags: >-
           --use-new-tools
           --build-mongoreplay="${build_mongoreplay}"
@@ -3697,7 +3772,8 @@ tasks:
           mv mongodb-src-*.${ext|tgz} distsrc.${ext|tgz}
           mv mongodb-*-debugsymbols.${ext|tgz} mongo-debugsymbols.tgz || true
           mv mongodb-*.${ext|tgz} mongodb-binaries.tgz
-          mv mh-*.${ext|tgz} mh-binaries.${ext|tgz} || true
+          mv mh-*-debugsymbols.${ext|tgz} mh-debugsymbols.${ext|tgz} || true
+          mv mh-mongodb*.${ext|tgz} mh-binaries.${ext|tgz} || true
 
     # Tar unstripped dbtest, to be archived in case of failure
     - command: archive.targz_pack
@@ -3706,26 +3782,6 @@ tasks:
         source_dir: "src"
         include:
           - "./dbtest*"
-
-    - command: shell.exec
-      type: test
-      params:
-        working_dir: src
-        script: |
-          set -o errexit
-          set -o verbose
-
-          if [ "${is_patch}" = "true" ] && [ "${bypass_compile|false}" = "true" ]; then
-            exit 0
-          fi
-
-          # If strip is on the path (everywhere except windows) then we should strip the test binaries
-          # before tarring them up
-          if [ -x ${strip_path|/usr/bin/strip} ]; then
-            ${strip_command|/usr/bin/strip} mongobridge
-            ${strip_command|/usr/bin/strip} wt
-          fi
-
 
     - command: shell.exec
       params:
@@ -3767,6 +3823,13 @@ tasks:
 
     - command: archive.targz_pack
       params:
+        target: "packages.tgz"
+        source_dir: "src"
+        include:
+          - "repo/**"
+
+    - command: archive.targz_pack
+      params:
         target: "artifacts.tgz"
         source_dir: "src"
         include:
@@ -3793,7 +3856,6 @@ tasks:
           - "./etc/*san.suppressions"
           - "./etc/repo_config.yaml"
           - "./build/**.gcno"
-          - "repo/**"
           - "src/mongo/util/options_parser/test_config_files/**"
           - "library_dependency_graph.json"
           - "src/third_party/JSON-Schema-Test-Suite/tests/draft4/**"
@@ -3802,6 +3864,7 @@ tasks:
           - "artifacts.json"
         exclude_files:
           - "*_test.pdb"
+
     - func: "upload debugsymbols"
     - command: s3.put
       params:
@@ -3835,7 +3898,18 @@ tasks:
         bucket: mciuploads
         permissions: public-read
         content_type: ${content_type|application/gzip}
-        display_name: MH
+        display_name: MH Binaries
+    - command: s3.put
+      params:
+        optional: true
+        aws_key: ${aws_key}
+        aws_secret: ${aws_secret}
+        local_file: src/mh-debugsymbols.${ext|tgz}
+        remote_file: ${mh_archive}
+        bucket: mciuploads
+        permissions: public-read
+        content_type: ${content_type|application/gzip}
+        display_name: MH Debuginfo
     - command: s3.put
       params:
         optional: true
@@ -3859,6 +3933,17 @@ tasks:
         display_name: Artifacts
     - command: s3.put
       params:
+        optional: true
+        aws_key: ${aws_key}
+        aws_secret: ${aws_secret}
+        local_file: packages.tgz
+        remote_file: ${project}/${build_variant}/${revision}/artifacts/${build_id}-packages.tgz
+        bucket: mciuploads
+        permissions: public-read
+        content_type: application/tar
+        display_name: Packages
+    - command: s3.put
+      params:
         aws_key: ${aws_key}
         aws_secret: ${aws_secret}
         local_file: src/distsrc.${ext|tgz}
@@ -3868,8 +3953,8 @@ tasks:
         content_type: ${content_type|application/gzip}
         display_name: Source tarball
         # We only need to upload the source tarball from one of the build variants
-        # because it should be the same everywhere, so just use rhel70/windows-64-2k8-ssl.
-        build_variants: [rhel70, windows-64-2k8-ssl]
+        # because it should be the same everywhere, so just use rhel70/windows.
+        build_variants: [rhel70, windows]
     - command: s3.put
       params:
         optional: true
@@ -3897,15 +3982,7 @@ tasks:
     - func: "build new tools"
     - func: "scons compile"
       vars:
-        targets: core tools ${mh_target|}
-        compiling_for_test: true
-        task_compile_flags: >-
-          --use-new-tools
-          --build-mongoreplay="${build_mongoreplay}"
-          --detect-odr-violations
-    - func: "scons compile"
-      vars:
-        targets: archive-dist
+        targets: install-core install-tools archive-dist ${mh_target|}
         compiling_for_test: true
         additional_targets: ""
         task_compile_flags: >-
@@ -5978,8 +6055,7 @@ tasks:
       resmoke_args: "--suites=jstestfuzz_sharded_session --storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: jstestfuzz_sharded_session
 
-- <<: *multiversion_template
-  name: replica_sets_jscore_multiversion_passthrough_gen
+- name: replica_sets_jscore_multiversion_passthrough_gen
   tags: ["multiversion_passthrough"]
   commands:
   - func: "generate multiversion tasks"
@@ -6994,6 +7070,17 @@ tasks:
       resmoke_args: --suites=sharded_collections_jscore_passthrough --storageEngine=wiredTiger
 
 - <<: *task_template
+  name: sharded_collections_jscore_multiversion_passthrough_gen
+  tags: ["multiversion_passthrough"]
+  commands:
+  - func: "generate multiversion tasks"
+    vars:
+      suite: sharded_collections_jscore_passthrough
+      resmoke_args: --storageEngine=wiredTiger
+      task_path_suffix: /data/multiversion
+      fallback_num_sub_suites: 4
+
+- <<: *task_template
   name: sharding_jscore_passthrough
   tags: ["sharding", "jscore", "common"]
   depends_on:
@@ -7003,6 +7090,17 @@ tasks:
   - func: "run tests"
     vars:
       resmoke_args: --suites=sharding_jscore_passthrough --storageEngine=wiredTiger
+
+- <<: *task_template
+  name: sharding_jscore_multiversion_passthrough_gen
+  tags: ["multiversion_passthrough"]
+  commands:
+  - func: "generate multiversion tasks"
+    vars:
+      suite: sharding_jscore_passthrough
+      resmoke_args: --storageEngine=wiredTiger
+      task_path_suffix: /data/multiversion
+      fallback_num_sub_suites: 4
 
 - <<: *task_template
   name: sharding_jscore_op_query_passthrough
@@ -7143,6 +7241,17 @@ tasks:
       resmoke_jobs_max: 1
 
 - <<: *task_template
+  name: concurrency_replication_multiversion_gen
+  tags: [multiversion_passthrough]
+  commands:
+  - func: "generate multiversion tasks"
+    vars:
+      suite: concurrency_replication
+      resmoke_args: --storageEngine=wiredTiger
+      task_path_suffix: /data/multiversion
+      fallback_num_sub_suites: 4
+
+- <<: *task_template
   name: concurrency_replication_causal_consistency
   tags: ["concurrency", "repl", "large"]
   commands:
@@ -7222,6 +7331,17 @@ tasks:
     vars:
       resmoke_args: --suites=concurrency_sharded_replication --storageEngine=wiredTiger
       resmoke_jobs_max: 1
+
+- <<: *task_template
+  name: concurrency_sharded_replication_multiversion_gen
+  tags: [multiversion_passthrough]
+  commands:
+  - func: "generate multiversion tasks"
+    vars:
+      suite: concurrency_sharded_replication
+      resmoke_args: --storageEngine=wiredTiger
+      task_path_suffix: /data/multiversion
+      fallback_num_sub_suites: 4
 
 - <<: *task_template
   name: concurrency_sharded_replication_with_balancer
@@ -7526,8 +7646,18 @@ tasks:
   name: replica_sets_multiversion
   tags: ["random_multiversion_replica_sets"]
   commands:
+  - func: "git get project"
   - func: "do setup"
   - func: "do multiversion setup"
+  - command: shell.exec
+    params:
+      working_dir: src
+      script: |
+        set -o errexit
+        set -o verbose
+
+        ${activate_virtualenv}
+        $python buildscripts/evergreen_gen_multiversion_tests.py generate-exclude-files --suite=replica_sets_multiversion --task-path-suffix=/data/multiversion --is-generated-suite=false
   - func: "run tests"
     vars:
       task_path_suffix: /data/multiversion
@@ -7553,12 +7683,13 @@ tasks:
 - name: sharding_multiversion_gen
   tags: ["random_multiversion_replica_sets"]
   commands:
-  - func: "generate resmoke tasks"
+  - func: "generate randomized multiversion tasks"
     vars:
       use_large_distro: "true"
       resmoke_args: --storageEngine=wiredTiger --dryRun=tests
       fallback_num_sub_suites: 32
       use_multiversion: /data/multiversion
+      suite: sharding_multiversion
 
 - name: sharding_rs_matching_disabled_gen
   tags: ["sharding", "common"]
@@ -7752,17 +7883,6 @@ tasks:
       depends_on: jsCore
       resmoke_args: --storageEngine=wiredTiger
       fallback_num_sub_suites: 15
-
-- <<: *multiversion_template
-  name: sharded_causally_consistent_jscore_multiversion_passthrough_gen
-  tags: ["multiversion_passthrough"]
-  commands:
-  - func: "generate multiversion tasks"
-    vars:
-      suite: sharded_causally_consistent_jscore_passthrough
-      resmoke_args: --storageEngine=wiredTiger
-      task_path_suffix: /data/multiversion
-      fallback_num_sub_suites: 4
 
 - name: retryable_writes_jscore_passthrough_gen
   tags: ["retry"]
@@ -8202,6 +8322,7 @@ tasks:
   - name: replica_sets_jscore_passthrough
   commands:
     - func: "fetch artifacts"
+    - func: "fetch packages"
     - func: "apply compile expansions"
     - func: "set up remote credentials"
       vars:
@@ -8232,6 +8353,7 @@ tasks:
   stepback: false
   commands:
     - func: "fetch artifacts"
+    - func: "fetch packages"
     - func: "fetch binaries"
     # Fetch the shell
     - command: s3.get
@@ -8267,7 +8389,7 @@ tasks:
         remote_file: ${project}/${build_variant}/${revision}/sources/mongo-src-${build_id}.${ext|tgz}
         bucket: mciuploads
         local_file: src/distsrc.${ext|tgz}
-        build_variants: [rhel70, windows-64-2k8-ssl]
+        build_variants: [rhel70, windows]
     - func: "apply compile expansions"
     - func: "fetch debugsymbols archive"
     - func: "set up remote credentials"
@@ -8290,7 +8412,7 @@ tasks:
           mv mh.tgz mh-${push_name}-${push_arch}-${suffix}.${ext|tgz} || true
           mv mongo-debugsymbols.tgz mongodb-${push_name}-${push_arch}-debugsymbols-${suffix}.${ext|tgz} || true
           mv distsrc.${ext|tgz} mongodb-src-${src_suffix}.${ext|tar.gz} || true
-          /usr/bin/find build/ -type f | grep msi$ | xargs -I original_filename cp original_filename mongodb-win32-${push_arch}-${suffix}.msi || true
+          /usr/bin/find build/ -type f | grep msi$ | xargs -I original_filename cp original_filename mongodb-${push_arch}-${suffix}.msi || true
 
           /usr/local/bin/notary-client.py --key-name "server-4.4" --auth-token-file ${workdir}/src/signing_auth_token --comment "Evergreen Automatic Signing ${revision} - ${build_variant} - ${branch_name}" --notary-url http://notary-service.build.10gen.cc:5000 --skip-missing mongodb-${push_name}-${push_arch}-${suffix}.${ext|tgz} mongodb-shell-${push_name}-${push_arch}-${suffix}.${ext|tgz} mongodb-${push_name}-${push_arch}-debugsymbols-${suffix}.${ext|tgz} mongodb-win32-${push_arch}-${suffix}.msi mongodb-src-${src_suffix}.${ext|tar.gz} mongodb-cryptd-${push_name}-${push_arch}-${suffix}.${ext|tgz}
 
@@ -8346,7 +8468,7 @@ tasks:
         permissions: public-read
         content_type: ${content_type|application/gzip}
         remote_file: ${push_path}-STAGE/${push_name}/mongodb-src-${src_suffix}-${task_id}.${ext|tar.gz}
-        build_variants: [rhel70, windows-64-2k8-ssl]
+        build_variants: [rhel70, windows]
 
     # Put the debug symbols
     - command: s3.put
@@ -8404,7 +8526,7 @@ tasks:
         permissions: public-read
         content_type: ${content_type|application/gzip}
         remote_file: ${push_path}-STAGE/${push_name}/mongodb-src-${src_suffix}-${task_id}.${ext|tar.gz}.sig
-        build_variants: [rhel70, windows-64-2k8-ssl]
+        build_variants: [rhel70, windows]
 
     # Put the debug symbols signature
     - command: s3.put
@@ -8424,11 +8546,11 @@ tasks:
         aws_key: ${aws_key}
         aws_secret: ${aws_secret}
         permissions: public-read
-        build_variants: ["enterprise-windows-64-2k8", "windows-64-2k8-ssl"]
-        local_file: src/mongodb-win32-${push_arch}-${suffix}-signed.msi
+        build_variants: ["enterprise-windows", "windows"]
+        local_file: src/mongodb-${push_arch}-${suffix}.msi
         bucket: build-push-testing
         content_type: application/x-msi
-        remote_file: ${push_path}-STAGE/${push_name}/mongodb-win32-${push_arch}-${suffix}-${task_id}-signed.msi
+        remote_file: ${push_path}-STAGE/${push_name}/mongodb-${push_arch}-${suffix}-${task_id}.msi
 
     # Put the binaries tarball sha1
     - command: s3.put
@@ -8474,7 +8596,7 @@ tasks:
         bucket: build-push-testing
         content_type: text/plain
         remote_file: ${push_path}-STAGE/${push_name}/mongodb-src-${src_suffix}-${task_id}.${ext|tar.gz}.sha1
-        build_variants: [rhel70, windows-64-2k8-ssl]
+        build_variants: [rhel70, windows]
 
     # Put the debug symbols sha1
     - command: s3.put
@@ -8494,11 +8616,11 @@ tasks:
         aws_key: ${aws_key}
         aws_secret: ${aws_secret}
         permissions: public-read
-        build_variants: ["enterprise-windows-64-2k8", "windows-64-2k8-ssl"]
-        local_file: src/mongodb-win32-${push_arch}-${suffix}-signed.msi.sha1
+        build_variants: ["enterprise-windows", "windows"]
+        local_file: src/mongodb-${push_arch}-${suffix}.msi.sha1
         bucket: build-push-testing
         content_type: text/plain
-        remote_file: ${push_path}-STAGE/${push_name}/mongodb-win32-${push_arch}-${suffix}-${task_id}-signed.msi.sha1
+        remote_file: ${push_path}-STAGE/${push_name}/mongodb-${push_arch}-${suffix}-${task_id}.msi.sha1
 
     # Put the binaries tarball sha256
     - command: s3.put
@@ -8544,7 +8666,7 @@ tasks:
         bucket: build-push-testing
         content_type: text/plain
         remote_file: ${push_path}-STAGE/${push_name}/mongodb-src-${src_suffix}-${task_id}.${ext|tar.gz}.sha256
-        build_variants: [rhel70, windows-64-2k8-ssl]
+        build_variants: [rhel70, windows]
 
     # Put the debug symbols sha256
     - command: s3.put
@@ -8563,11 +8685,11 @@ tasks:
       params:
         aws_key: ${aws_key}
         aws_secret: ${aws_secret}
-        build_variants: ["enterprise-windows-64-2k8", "windows-64-2k8-ssl"]
-        local_file: src/mongodb-win32-${push_arch}-${suffix}-signed.msi.sha256
+        build_variants: ["enterprise-windows", "windows"]
+        local_file: src/mongodb-${push_arch}-${suffix}.msi.sha256
         bucket: build-push-testing
         permissions: public-read
-        remote_file: ${push_path}-STAGE/${push_name}/mongodb-win32-${push_arch}-${suffix}-${task_id}-signed.msi.sha256
+        remote_file: ${push_path}-STAGE/${push_name}/mongodb-${push_arch}-${suffix}-${task_id}.msi.sha256
         content_type: text/plain
 
     # Put the binaries tarball md5
@@ -8614,7 +8736,7 @@ tasks:
         permissions: public-read
         content_type: text/plain
         remote_file: ${push_path}-STAGE/${push_name}/mongodb-src-${src_suffix}-${task_id}.${ext|tar.gz}.md5
-        build_variants: [rhel70, windows-64-2k8-ssl]
+        build_variants: [rhel70, windows]
 
     # Put the debug symbols md5
     - command: s3.put
@@ -8633,12 +8755,12 @@ tasks:
       params:
         aws_key: ${aws_key}
         aws_secret: ${aws_secret}
-        build_variants: ["enterprise-windows-64-2k8", "windows-64-2k8-ssl"]
-        local_file: src/mongodb-win32-${push_arch}-${suffix}-signed.msi.md5
+        build_variants: ["enterprise-windows", "windows"]
+        local_file: src/mongodb-${push_arch}-${suffix}.msi.md5
         bucket: build-push-testing
         permissions: public-read
         content_type: text/plain
-        remote_file: ${push_path}-STAGE/${push_name}/mongodb-win32-${push_arch}-${suffix}-${task_id}-signed.msi.md5
+        remote_file: ${push_path}-STAGE/${push_name}/mongodb-${push_arch}-${suffix}-${task_id}.msi.md5
 
     - command: s3Copy.copy
       params:
@@ -8666,12 +8788,12 @@ tasks:
             #Source tarball
             - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-src-${src_suffix}-${task_id}.${ext|tar.gz}', 'bucket': 'build-push-testing'},
                'destination': {'path': 'src/mongodb-src-${src_suffix}.${ext|tar.gz}', 'bucket': '${push_bucket}'},
-               'build_variants': ['rhel70', 'windows-64-2k8-ssl']}
+               'build_variants': ['rhel70', 'windows']}
 
             #MSI (Windows only)
-            - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-win32-${push_arch}-${suffix}-${task_id}-signed.msi', 'bucket': 'build-push-testing'},
-               'destination': {'path': '${push_path}/mongodb-win32-${push_arch}-${suffix}-signed.msi', 'bucket': '${push_bucket}'},
-               'build_variants': ['enterprise-windows-64-2k8', 'windows-64-2k8-ssl']}
+            - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-${push_arch}-${suffix}-${task_id}.msi', 'bucket': 'build-push-testing'},
+               'destination': {'path': '${push_path}/mongodb-${push_arch}-${suffix}.msi', 'bucket': '${push_bucket}'},
+               'build_variants': ['enterprise-windows', 'windows']}
 
             #Binaries Signature
             - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-${push_name}-${push_arch}-${suffix}-${task_id}.${ext|tgz}.sig', 'bucket': 'build-push-testing'},
@@ -8689,7 +8811,7 @@ tasks:
             #Source tarball signature
             - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-src-${src_suffix}-${task_id}.${ext|tar.gz}.sig', 'bucket': 'build-push-testing'},
                'destination': {'path': 'src/mongodb-src-${src_suffix}.${ext|tar.gz}.sig', 'bucket': '${push_bucket}'},
-               'build_variants': ['rhel70', 'windows-64-2k8-ssl']}
+               'build_variants': ['rhel70', 'windows']}
 
             #SHA1 for binaries
             - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-${push_name}-${push_arch}-${suffix}-${task_id}.${ext|tgz}.sha1', 'bucket': 'build-push-testing'},
@@ -8707,12 +8829,12 @@ tasks:
             #SHA1 for source tarball
             - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-src-${src_suffix}-${task_id}.${ext|tar.gz}.sha1', 'bucket': 'build-push-testing'},
                'destination': {'path': 'src/mongodb-src-${src_suffix}.${ext|tar.gz}.sha1', 'bucket': '${push_bucket}'},
-               'build_variants': ['rhel70', 'windows-64-2k8-ssl']}
+               'build_variants': ['rhel70', 'windows']}
 
             #SHA1 for MSI
-            - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-win32-${push_arch}-${suffix}-${task_id}-signed.msi.sha1', 'bucket': 'build-push-testing'},
-               'destination': {'path': '${push_path}/mongodb-win32-${push_arch}-${suffix}-signed.msi.sha1', 'bucket': '${push_bucket}'},
-               'build_variants': ['enterprise-windows-64-2k8', 'windows-64-2k8-ssl']}
+            - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-${push_arch}-${suffix}-${task_id}.msi.sha1', 'bucket': 'build-push-testing'},
+               'destination': {'path': '${push_path}/mongodb-${push_arch}-${suffix}.msi.sha1', 'bucket': '${push_bucket}'},
+               'build_variants': ['enterprise-windows', 'windows']}
 
             #SHA256 for binaries
             - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-${push_name}-${push_arch}-${suffix}-${task_id}.${ext|tgz}.sha256', 'bucket': 'build-push-testing'},
@@ -8730,12 +8852,12 @@ tasks:
             #SHA256 for source tarball
             - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-src-${src_suffix}-${task_id}.${ext|tar.gz}.sha256', 'bucket': 'build-push-testing'},
                'destination': {'path': 'src/mongodb-src-${src_suffix}.${ext|tar.gz}.sha256', 'bucket': '${push_bucket}'},
-               'build_variants': ['rhel70', 'windows-64-2k8-ssl']}
+               'build_variants': ['rhel70', 'windows']}
 
             #SHA256 for MSI files
-            - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-win32-${push_arch}-${suffix}-${task_id}-signed.msi.sha256', 'bucket': 'build-push-testing'},
-               'destination': {'path': '${push_path}/mongodb-win32-${push_arch}-${suffix}-signed.msi.sha256', 'bucket': '${push_bucket}'},
-               'build_variants': ['enterprise-windows-64-2k8', 'windows-64-2k8-ssl']}
+            - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-${push_arch}-${suffix}-${task_id}.msi.sha256', 'bucket': 'build-push-testing'},
+               'destination': {'path': '${push_path}/mongodb-${push_arch}-${suffix}.msi.sha256', 'bucket': '${push_bucket}'},
+               'build_variants': ['enterprise-windows', 'windows']}
 
             #MD5 for binaries
             - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-${push_name}-${push_arch}-${suffix}-${task_id}.${ext|tgz}.md5', 'bucket': 'build-push-testing'},
@@ -8753,12 +8875,12 @@ tasks:
             #MD5 for source tarball
             - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-src-${src_suffix}-${task_id}.${ext|tar.gz}.md5', 'bucket': 'build-push-testing'},
                'destination': {'path': 'src/mongodb-src-${src_suffix}.${ext|tar.gz}.md5', 'bucket': '${push_bucket}'},
-               'build_variants': ['rhel70', 'windows-64-2k8-ssl']}
+               'build_variants': ['rhel70', 'windows']}
 
             #MD5 for MSIs
-            - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-win32-${push_arch}-${suffix}-${task_id}-signed.msi.md5', 'bucket': 'build-push-testing'},
-               'destination': {'path': '${push_path}/mongodb-win32-${push_arch}-${suffix}-signed.msi.md5', 'bucket': '${push_bucket}'},
-               'build_variants': ['enterprise-windows-64-2k8', 'windows-64-2k8-ssl']}
+            - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-${push_arch}-${suffix}-${task_id}.msi.md5', 'bucket': 'build-push-testing'},
+               'destination': {'path': '${push_path}/mongodb-${push_arch}-${suffix}.msi.md5', 'bucket': '${push_bucket}'},
+               'build_variants': ['enterprise-windows', 'windows']}
 
     # Debug symbols are not created for all variants and the copy is optional.
     - command: s3Copy.copy
@@ -9149,7 +9271,7 @@ buildvariants:
     push_bucket: downloads.10gen.com
     push_name: linux
     push_arch: x86_64-enterprise-ubuntu1804
-    mh_target: dist-mh
+    mh_target: archive-mh archive-mh-debug
     compile_flags: --ssl MONGO_DISTMOD=ubuntu1804 -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars
     multiversion_platform: ubuntu1804
     multiversion_edition: enterprise
@@ -9436,65 +9558,6 @@ buildvariants:
   - name: .publish
     distros:
     - ubuntu1804-test
-
-- name: enterprise-ubuntu1604-s390x
-  display_name: Enterprise Ubuntu 16.04 s390x
-  modules:
-  - enterprise
-  run_on:
-  - ubuntu1604-zseries-small
-  batchtime: 10080 # 7 days
-  stepback: false
-  expansions:
-    push_path: linux
-    push_bucket: downloads.10gen.com
-    push_name: linux
-    push_arch: s390x-enterprise-ubuntu1604
-    compile_flags: --ssl MONGO_DISTMOD=ubuntu1604 -j3 CCFLAGS="-march=z196 -mtune=zEC12" --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars
-    resmoke_jobs_max: 2
-    has_packages: true
-    packager_script: packager_enterprise.py
-    packager_arch: s390x
-    packager_distro: ubuntu1604
-    repo_edition: enterprise
-    tooltags: "ssl sasl gssapi"
-    build_mongoreplay: true
-    multiversion_platform: ubuntu1604
-    multiversion_architecture: s390x
-    multiversion_edition: enterprise
-  tasks:
-  - name: compile_all_run_unittests_TG
-    distros:
-    - ubuntu1604-zseries-large
-  - name: aggregation
-  - name: aggregation_read_concern_majority_passthrough
-  - name: aggregation_sharded_collections_passthrough
-  - name: audit
-  - name: .auth !.multiversion !.jscore
-  - name: causally_consistent_jscore_txns_passthrough
-  - name: .misc_js
-  - name: .concurrency .common
-  - name: concurrency_replication_causal_consistency
-  - name: .encrypt
-  - name: .integration !.audit
-    distros:
-    - ubuntu1604-zseries-large
-  - name: .jscore .common !.auth
-  - name: jsCore_op_query
-  - name: .jstestfuzz .common
-  - name: .logical_session_cache .one_sec
-  - name: .read_write_concern
-  - name: replica_sets
-  - name: .replica_sets .common
-  - name: sasl
-  - name: .sharding .jscore !.wo_snapshot !.multi_stmt
-  - name: .sharding .common !.multiversion !.jscore
-  - name: .sharding .txns
-  - name: snmp
-  - name: .stitch
-  - name: .publish
-    distros:
-    - ubuntu1604-test
 
 - name: ubuntu1804-s390x
   display_name: Ubuntu 18.04 s390x
@@ -9822,20 +9885,20 @@ buildvariants:
 #         Windows buildvariants           #
 ###########################################
 
-- name: enterprise-windows-64-2k8-required
-  display_name: "! Enterprise Windows 2008R2"
+- name: enterprise-windows-required
+  display_name: "! Enterprise Windows"
   modules:
     - enterprise
   run_on:
     - windows-64-vs2017-test
-  expansions: &enterprise_windows_64_2k8_expansions
-    burn_in_tests_build_variant: enterprise-windows-64-2k8
+  expansions: &enterprise_windows_expansions
+    burn_in_tests_build_variant: enterprise-windows
     platform_decompress: unzip
     exe: ".exe"
     msi_target: msi
-    mh_target: dist-mh
+    mh_target: archive-mh archive-mh-debug
     content_type: application/zip
-    compile_flags: --ssl MONGO_DISTMOD=windows-64 CPPPATH="c:/sasl/include c:/snmp/include" LIBPATH="c:/sasl/lib c:/snmp/lib" -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) --win-version-min=ws08r2
+    compile_flags: --ssl MONGO_DISTMOD=windows CPPPATH="c:/sasl/include c:/snmp/include" LIBPATH="c:/sasl/lib c:/snmp/lib" -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) --win-version-min=win10
     # We invoke SCons using --jobs = (# of CPUs / 4) to avoid causing out of memory errors due to
     # spawning a large number of linker processes.
     num_scons_link_jobs_available: $(( $(grep -c ^processor /proc/cpuinfo) / 4 ))
@@ -9863,15 +9926,15 @@ buildvariants:
         - windows-64-vs2017-compile
     - name: noPassthrough_gen
 
-- name: windows-64-2k8-debug
-  display_name: "* Windows 2008R2 DEBUG"
+- name: windows-debug
+  display_name: "* Windows DEBUG"
   run_on:
   - windows-64-vs2017-test
   expansions:
     platform_decompress: unzip
     exe: ".exe"
     content_type: application/zip
-    compile_flags: --dbg=on --opt=on --win-version-min=ws08r2 -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) MONGO_DISTMOD=2012plus
+    compile_flags: --dbg=on --opt=on --win-version-min=win10 -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) MONGO_DISTMOD=windows
     # We invoke SCons using --jobs = (# of CPUs / 4) to avoid causing out of memory errors due to
     # spawning a large number of linker processes.
     num_scons_link_jobs_available: $(( $(grep -c ^processor /proc/cpuinfo) / 4 ))
@@ -9930,18 +9993,18 @@ buildvariants:
   - name: sharding_gen
   - name: .stitch
 
-- name: enterprise-windows-64-2k8
-  display_name: "* Enterprise Windows 2008R2"
+- name: enterprise-windows
+  display_name: "* Enterprise Windows"
   modules:
   - enterprise
   run_on:
   - windows-64-vs2017-test
   expansions:
-    <<: *enterprise_windows_64_2k8_expansions
-    push_path: win32
+    <<: *enterprise_windows_expansions
+    push_path: windows
     push_bucket: downloads.10gen.com
-    push_name: win32
-    push_arch: x86_64-enterprise-windows-64
+    push_name: windows
+    push_arch: x86-enterprise
   tasks:
   - name: compile_TG
     requires:
@@ -9986,20 +10049,20 @@ buildvariants:
     distros:
     - rhel70-small
 
-- <<: *enterprise-windows-64-2k8-nopush-template
-  name: enterprise-windows-64-2k8-wtdevelop
-  display_name: "~ Enterprise Windows 2008R2 WiredTiger develop"
+- <<: *enterprise-windows-nopush-template
+  name: enterprise-windows-wtdevelop
+  display_name: "~ Enterprise Windows WiredTiger develop"
   batchtime: 1440 # 1 day
   modules:
   - enterprise
   - wtdevelop
   expansions:
-    <<: *enterprise-windows-64-2k8-nopush-expansions-template
+    <<: *enterprise-windows-nopush-expansions-template
     use_wt_develop: true
 
-- <<: *enterprise-windows-64-2k8-nopush-template
-  name: enterprise-windows-64-2k8-compile-all
-  display_name: "* Enterprise Windows 2008R2 compile_all"
+- <<: *enterprise-windows-nopush-template
+  name: enterprise-windows-compile-all
+  display_name: "* Enterprise Windows compile_all"
   run_on:
   - windows-64-vs2017-test
   tasks:
@@ -10008,8 +10071,8 @@ buildvariants:
     - windows-64-vs2017-compile
   # Do not add more tasks to this list.
 
-- name: enterprise-windows-64-2k8-async
-  display_name: "~ Enterprise Windows 2008R2 async"
+- name: enterprise-windows-async
+  display_name: "~ Enterprise Windows async"
   modules:
   - enterprise
   run_on:
@@ -10021,7 +10084,7 @@ buildvariants:
     exe: ".exe"
     msi_target: msi
     content_type: application/zip
-    compile_flags: --ssl MONGO_DISTMOD=windows-64 CPPPATH="c:/sasl/include c:/snmp/include" LIBPATH="c:/sasl/lib c:/snmp/lib" -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) --win-version-min=ws08r2
+    compile_flags: --ssl MONGO_DISTMOD=windows CPPPATH="c:/sasl/include c:/snmp/include" LIBPATH="c:/sasl/lib c:/snmp/lib" -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) --win-version-min=win10
     # We invoke SCons using --jobs = (# of CPUs / 4) to avoid causing out of memory errors due to
     # spawning a large number of linker processes.
     num_scons_link_jobs_available: $(( $(grep -c ^processor /proc/cpuinfo) / 4 ))
@@ -10042,8 +10105,8 @@ buildvariants:
   - name: replica_sets
   - name: sharding_gen
 
-- name: enterprise-windows-64-2k8-inmem
-  display_name: Enterprise Windows 2008R2 (inMemory)
+- name: enterprise-windows-inmem
+  display_name: Enterprise Windows (inMemory)
   modules:
   - enterprise
   run_on:
@@ -10054,7 +10117,7 @@ buildvariants:
     exe: ".exe"
     msi_target: msi
     content_type: application/zip
-    compile_flags: --ssl MONGO_DISTMOD=windows-64 CPPPATH="c:/sasl/include c:/snmp/include" LIBPATH="c:/sasl/lib c:/snmp/lib" -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) --win-version-min=ws08r2
+    compile_flags: --ssl MONGO_DISTMOD=windows CPPPATH="c:/sasl/include c:/snmp/include" LIBPATH="c:/sasl/lib c:/snmp/lib" -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) --win-version-min=win10
     # We invoke SCons using --jobs = (# of CPUs / 4) to avoid causing out of memory errors due to
     # spawning a large number of linker processes.
     num_scons_link_jobs_available: $(( $(grep -c ^processor /proc/cpuinfo) / 4 ))
@@ -10094,23 +10157,23 @@ buildvariants:
   - name: snmp
   - name: .ssl
 
-- name: windows-64-2k8-ssl
-  display_name: Windows 2008R2
+- name: windows
+  display_name: Windows
   run_on:
   - windows-64-vs2017-test
   batchtime: 1440 # 1 day
   expansions:
     platform_decompress: unzip
     exe: ".exe"
-    push_path: win32
+    push_path: windows
     push_bucket: downloads.mongodb.org
-    push_name: win32
-    push_arch: x86_64-2012plus
+    push_name: windows
+    push_arch: x64
     multiversion_platform: windows_x86_64-2008plus-ssl
     multiversion_platform_42_or_later: windows_x86_64-2012plus
     msi_target: msi
     content_type: application/zip
-    compile_flags: --ssl MONGO_DISTMOD=2012plus -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) --win-version-min=ws08r2
+    compile_flags: --ssl MONGO_DISTMOD=windows -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) --win-version-min=win10
     # We invoke SCons using --jobs = (# of CPUs / 4) to avoid causing out of memory errors due to
     # spawning a large number of linker processes.
     num_scons_link_jobs_available: $(( $(grep -c ^processor /proc/cpuinfo) / 4 ))
@@ -10157,8 +10220,8 @@ buildvariants:
     distros:
     - rhel70-small
 
-- name: enterprise-windows-64-2k8-debug-unoptimized
-  display_name: Enterprise Windows 2008R2 DEBUG (Unoptimized)
+- name: enterprise-windows-debug-unoptimized
+  display_name: Enterprise Windows DEBUG (Unoptimized)
   modules:
   - enterprise
   run_on:
@@ -10168,7 +10231,7 @@ buildvariants:
     platform_decompress: unzip
     exe: ".exe"
     content_type: application/zip
-    compile_flags: --dbg=on --opt=off --ssl MONGO_DISTMOD=2012plus CPPPATH="c:/sasl/include c:/snmp/include" LIBPATH="c:/sasl/lib c:/snmp/lib" -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) --win-version-min=ws08r2
+    compile_flags: --dbg=on --opt=off --ssl MONGO_DISTMOD=windows CPPPATH="c:/sasl/include c:/snmp/include" LIBPATH="c:/sasl/lib c:/snmp/lib" -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) --win-version-min=win10
     # We invoke SCons using --jobs = (# of CPUs / 4) to avoid causing out of memory errors due to
     # spawning a large number of linker processes.
     num_scons_link_jobs_available: $(( $(grep -c ^processor /proc/cpuinfo) / 4 ))
@@ -10280,7 +10343,7 @@ buildvariants:
     push_bucket: downloads.10gen.com
     push_name: macos
     push_arch: x86_64-enterprise
-    mh_target: dist-mh
+    mh_target: archive-mh archive-mh-debug
     compile_env: DEVELOPER_DIR=/Applications/Xcode10.2.app
     compile_flags: --ssl -j$(sysctl -n hw.logicalcpu) --libc++ --variables-files=etc/scons/xcode_macosx.vars
     resmoke_jobs_max: 6
@@ -10747,7 +10810,7 @@ buildvariants:
     push_bucket: downloads.10gen.com
     push_name: linux
     push_arch: x86_64-enterprise-rhel62
-    mh_target: dist-mh
+    mh_target: archive-mh archive-mh-debug
     compile_flags: --ssl MONGO_DISTMOD=rhel62 -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars
     multiversion_platform: rhel62
     multiversion_edition: enterprise
@@ -11187,7 +11250,7 @@ buildvariants:
     push_bucket: downloads.10gen.com
     push_name: linux
     push_arch: x86_64-enterprise-rhel70
-    mh_target: dist-mh
+    mh_target: archive-mh archive-mh-debug
     compile_flags: --ssl MONGO_DISTMOD=rhel70 -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars
     multiversion_platform: rhel70
     multiversion_edition: enterprise
@@ -11247,7 +11310,7 @@ buildvariants:
     push_bucket: downloads.10gen.com
     push_name: linux
     push_arch: x86_64-enterprise-rhel80
-    mh_target: dist-mh
+    mh_target: archive-mh archive-mh-debug
     compile_flags: --ssl MONGO_DISTMOD=rhel80 -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars
     multiversion_platform: rhel80
     multiversion_edition: enterprise
@@ -11809,7 +11872,7 @@ buildvariants:
     push_name: linux
     lang_environment: LANG=C
     push_arch: x86_64-enterprise-ubuntu1604
-    mh_target: dist-mh
+    mh_target: archive-mh archive-mh-debug
     compile_flags: --ssl MONGO_DISTMOD=ubuntu1604 -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars
     multiversion_platform: ubuntu1604
     multiversion_edition: enterprise
@@ -12192,7 +12255,7 @@ buildvariants:
     push_bucket: downloads.10gen.com
     push_name: linux
     push_arch: x86_64-enterprise-debian92
-    mh_target: dist-mh
+    mh_target: archive-mh archive-mh-debug
     compile_flags: --ssl MONGO_DISTMOD=debian92 -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars
     multiversion_platform: debian92
     multiversion_edition: enterprise
@@ -12296,7 +12359,7 @@ buildvariants:
     push_bucket: downloads.10gen.com
     push_name: linux
     push_arch: x86_64-enterprise-debian10
-    mh_target: dist-mh
+    mh_target: archive-mh archive-mh-debug
     compile_flags: --ssl MONGO_DISTMOD=debian10 -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars
     multiversion_platform: debian10
     multiversion_edition: enterprise
@@ -12493,7 +12556,7 @@ buildvariants:
       MONGO_DISTMOD=rhel62
     scons_cache_scope: shared
     build_mongoreplay: true
-    additional_targets: mongoebench mongoed
+    additional_targets: install-embedded-test
   display_tasks:
   - *benchrun_embedded
   tasks:
@@ -12544,7 +12607,7 @@ buildvariants:
         MONGO_DISTMOD=ubuntu1604
     resmoke_jobs_max: 8 # Avoid starting too many mongod's on ARM test servers
     build_mongoreplay: true
-    additional_targets: mongoebench mongoed
+    additional_targets: install-embedded-test
   tasks:
   - name: compile_all_run_unittests_TG
   - name: aggregation
@@ -12608,7 +12671,7 @@ buildvariants:
       --variables-files=etc/scons/xcode_macosx.vars
     resmoke_jobs_max: 4
     build_mongoreplay: true
-    additional_targets: mongoebench mongoed
+    additional_targets: install-embedded-test
   tasks:
   - name: compile_all_run_unittests_TG
   - name: aggregation
@@ -13070,7 +13133,7 @@ buildvariants:
   batchtime: 10080 # 7 days
   stepback: false
   expansions:
-    mh_target: dist-mh
+    mh_target: archive-mh archive-mh-debug
     compile_flags: --ssl MONGO_DISTMOD=rhel62 -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars
     multiversion_platform: rhel62
     multiversion_edition: enterprise

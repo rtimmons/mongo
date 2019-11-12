@@ -188,7 +188,8 @@ InitialSyncer::InitialSyncer(
       _storage(storage),
       _replicationProcess(replicationProcess),
       _onCompletion(onCompletion),
-      _createClientFn([] { return std::make_unique<DBClientConnection>(); }) {
+      _createClientFn(
+          [] { return std::make_unique<DBClientConnection>(true /* autoReconnect */); }) {
     uassert(ErrorCodes::BadValue, "task executor cannot be null", _exec);
     uassert(ErrorCodes::BadValue, "invalid storage interface", _storage);
     uassert(ErrorCodes::BadValue, "invalid replication process", _replicationProcess);
@@ -1071,7 +1072,6 @@ void InitialSyncer::_allDatabaseClonerCallback(
     log() << "Finished cloning data: " << redact(databaseClonerFinishStatus)
           << ". Beginning oplog replay.";
     _client->shutdownAndDisallowReconnect();
-    _client.reset();
 
     if (MONGO_unlikely(initialSyncHangAfterDataCloning.shouldFail())) {
         // This could have been done with a scheduleWorkAt but this is used only by JS tests where
@@ -1085,6 +1085,7 @@ void InitialSyncer::_allDatabaseClonerCallback(
     }
 
     stdx::lock_guard<Latch> lock(_mutex);
+    _client.reset();
     auto status = _checkForShutdownAndConvertStatus_inlock(databaseClonerFinishStatus,
                                                            "error cloning databases");
     if (!status.isOK()) {

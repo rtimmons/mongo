@@ -310,7 +310,7 @@ StatusWith<std::vector<BSONObj>> MultiIndexBlock::init(OperationContext* opCtx,
 
             IndexToBuild index;
             index.block = std::make_unique<IndexBuildBlock>(
-                collection->getIndexCatalog(), collection->ns(), info, _method);
+                collection->getIndexCatalog(), collection->ns(), info, _method, _buildUUID);
             status = index.block->init(opCtx, collection);
             if (!status.isOK())
                 return status;
@@ -841,7 +841,7 @@ Status MultiIndexBlock::commit(OperationContext* opCtx,
                 opCtx->getServiceContext()->getStorageEngine()->getCheckpointLock(opCtx);
             auto indexIdent =
                 opCtx->getServiceContext()->getStorageEngine()->getCatalog()->getIndexIdent(
-                    opCtx, collection->ns(), _indexes[i].block->getIndexName());
+                    opCtx, collection->getCatalogId(), _indexes[i].block->getIndexName());
             opCtx->getServiceContext()->getStorageEngine()->addIndividuallyCheckpointedIndexToList(
                 indexIdent);
         }
