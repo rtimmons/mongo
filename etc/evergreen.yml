@@ -2154,7 +2154,7 @@ functions:
         aws_key: ${aws_key}
         aws_secret: ${aws_secret}
         local_file: generate_tasks_config.tgz
-        remote_file: ${project}/${build_variant}/${revision}/generate_tasks/${task_id}-${execution}.tgz
+        remote_file: ${project}/${build_variant}/${revision}/generate_tasks/${name}_gen-${build_id}.tgz
         bucket: mciuploads
         permissions: public-read
         content_type: ${content_type|application/gzip}
@@ -5551,7 +5551,8 @@ tasks:
       num_files: 10
       num_tasks: 15
       npm_command: initsync-fuzzer
-      resmoke_args: --suites=initial_sync_multiversion_fuzzer
+      suite: initial_sync_multiversion_fuzzer
+      resmoke_args: "--mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: initial_sync_multiversion_fuzzer
       task_path_suffix: "/data/multiversion"
 
@@ -5565,7 +5566,8 @@ tasks:
       num_files: 10
       num_tasks: 15
       npm_command: initsync-fuzzer
-      resmoke_args: "--suites=initial_sync_fuzzer --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: initial_sync_fuzzer
+      resmoke_args: "--mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: initial_sync_fuzzer
 
 ## Standalone generational fuzzer for multiversion aggregation pipelines ##
@@ -5578,7 +5580,8 @@ tasks:
       <<: *jstestfuzz_config_vars
       num_files: 5
       num_tasks: 10
-      resmoke_args: "--suites=generational_fuzzer --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: generational_fuzzer
+      resmoke_args: "--mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       npm_command: agg-fuzzer
       name: aggregation_multiversion_fuzzer
       task_path_suffix: "/data/multiversion"
@@ -5593,7 +5596,8 @@ tasks:
       <<: *jstestfuzz_config_vars
       num_files: 5
       num_tasks: 10
-      resmoke_args: "--suites=generational_fuzzer --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: generational_fuzzer
+      resmoke_args: "--mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       npm_command: agg-expr-fuzzer
       name: aggregation_expression_multiversion_fuzzer
       task_path_suffix: "/data/multiversion"
@@ -5609,7 +5613,8 @@ tasks:
       num_files: 5
       num_tasks: 10
       jstestfuzz_vars: --diffTestingMode optimization
-      resmoke_args: "--suites=generational_fuzzer --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: generational_fuzzer
+      resmoke_args: "--mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       npm_command: agg-expr-fuzzer
       name: aggregation_expression_optimization_fuzzer
 
@@ -5624,7 +5629,8 @@ tasks:
       num_files: 5
       num_tasks: 10
       jstestfuzz_vars: --diffTestingMode optimization
-      resmoke_args: "--suites=generational_fuzzer --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: generational_fuzzer
+      resmoke_args: "--mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       npm_command: agg-fuzzer
       name: aggregation_optimization_fuzzer
 
@@ -5640,7 +5646,8 @@ tasks:
       num_tasks: 10
       jstestfuzz_vars: --diffTestingMode wildcard
       npm_command: agg-fuzzer
-      resmoke_args: "--suites=generational_fuzzer --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: generational_fuzzer
+      resmoke_args: "--mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: aggregation_wildcard_fuzzer
 
 ## jstestfuzz standalone fuzzer for checking find and aggregate equivalence ##
@@ -5655,7 +5662,8 @@ tasks:
       num_tasks: 10
       jstestfuzz_vars: --diffTestingMode standalone
       npm_command: query-fuzzer
-      resmoke_args: "--suites=generational_fuzzer --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: generational_fuzzer
+      resmoke_args: "--mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: query_fuzzer_standalone
 
 ## jstestfuzz sharded fuzzer for checking find and aggregate equivalence ##
@@ -5670,7 +5678,8 @@ tasks:
       num_tasks: 10
       jstestfuzz_vars: --diffTestingMode sharded
       npm_command: query-fuzzer
-      resmoke_args: "--suites=generational_fuzzer --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: generational_fuzzer
+      resmoke_args: "--mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: query_fuzzer_sharded
 
 ## jstestfuzz standalone update generational fuzzer ##
@@ -5684,7 +5693,8 @@ tasks:
       num_files: 5
       num_tasks: 10
       npm_command: update-fuzzer
-      resmoke_args: "--suites=generational_fuzzer --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: generational_fuzzer
+      resmoke_args: "--mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: update_fuzzer
       task_path_suffix: "/data/multiversion"
 
@@ -5699,7 +5709,8 @@ tasks:
       num_files: 5
       num_tasks: 10
       npm_command: update-fuzzer
-      resmoke_args: "--suites=generational_fuzzer_replication --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: generational_fuzzer_replication
+      resmoke_args: "--mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: update_fuzzer_replication
       task_path_suffix: "/data/multiversion"
 
@@ -5714,7 +5725,8 @@ tasks:
       num_files: 3
       num_tasks: 5
       npm_command: rollback-fuzzer
-      resmoke_args: --suites=rollback_multiversion_fuzzer
+      suite: rollback_multiversion_fuzzer
+      resmoke_args: "--mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: rollback_multiversion_fuzzer
       task_path_suffix: "/data/multiversion"
 
@@ -5729,7 +5741,8 @@ tasks:
       num_files: 3
       num_tasks: 5
       npm_command: rollback-fuzzer
-      resmoke_args: "--suites=rollback_fuzzer --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: rollback_fuzzer
+      resmoke_args: "--mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: rollback_fuzzer
 
 ## rollback generational fuzzer with clean shutdowns ##
@@ -5744,7 +5757,8 @@ tasks:
       num_tasks: 4
       jstestfuzz_vars: --numLinesPerFile 300 --maxLinesBetweenEvents 50
       npm_command: rollback-fuzzer
-      resmoke_args: "--suites=rollback_fuzzer_clean_shutdowns --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: rollback_fuzzer_clean_shutdowns
+      resmoke_args: "--mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: rollback_fuzzer_clean_shutdowns
 
 ## rollback generational fuzzer with unclean shutdowns ##
@@ -5759,7 +5773,8 @@ tasks:
       num_tasks: 4
       jstestfuzz_vars: --numLinesPerFile 300 --maxLinesBetweenEvents 50
       npm_command: rollback-fuzzer
-      resmoke_args: "--suites=rollback_fuzzer_unclean_shutdowns --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: rollback_fuzzer_unclean_shutdowns
+      resmoke_args: "--mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: rollback_fuzzer_unclean_shutdowns
 
 ## jstestfuzz ##
@@ -5771,7 +5786,8 @@ tasks:
     vars:
       <<: *jstestfuzz_config_vars
       jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: "--suites=jstestfuzz --storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: jstestfuzz
+      resmoke_args: "--storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       npm_command: jstestfuzz
       name: jstestfuzz
 
@@ -5786,7 +5802,8 @@ tasks:
       num_files: ${jstestfuzz_concurrent_num_files|10}
       num_tasks: 15
       jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: --suites=jstestfuzz --storageEngine=wiredTiger --numClientsPerFixture=10
+      suite: jstestfuzz
+      resmoke_args: --storageEngine=wiredTiger --numClientsPerFixture=10
       name: jstestfuzz_concurrent
 
 ## jstestfuzz concurrent replica set ##
@@ -5800,7 +5817,8 @@ tasks:
       num_files: ${jstestfuzz_concurrent_num_files|10}
       num_tasks: 15
       jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: --suites=jstestfuzz_replication --storageEngine=wiredTiger --numClientsPerFixture=10
+      suite: jstestfuzz_replication
+      resmoke_args: --storageEngine=wiredTiger --numClientsPerFixture=10
       name: jstestfuzz_concurrent_replication
 
 ## jstestfuzz concurrent replica set with logical session ##
@@ -5814,7 +5832,8 @@ tasks:
       num_files: ${jstestfuzz_concurrent_num_files|10}
       num_tasks: 15
       jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: --suites=jstestfuzz_replication_session --storageEngine=wiredTiger --numClientsPerFixture=10
+      suite: jstestfuzz_replication_session
+      resmoke_args: --storageEngine=wiredTiger --numClientsPerFixture=10
       name: jstestfuzz_concurrent_replication_session
 
 ## jstestfuzz concurrent sharded cluster ##
@@ -5828,7 +5847,8 @@ tasks:
       num_files: ${jstestfuzz_concurrent_num_files|10}
       num_tasks: 15
       jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: --suites=jstestfuzz_sharded --storageEngine=wiredTiger --numClientsPerFixture=10
+      suite: jstestfuzz_sharded
+      resmoke_args: --storageEngine=wiredTiger --numClientsPerFixture=10
       name: jstestfuzz_concurrent_sharded
 
 ## jstestfuzz concurrent sharded cluster causal consistency ##
@@ -5842,7 +5862,8 @@ tasks:
       num_files: ${jstestfuzz_concurrent_num_files|10}
       num_tasks: 15
       jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: --suites=jstestfuzz_sharded_causal_consistency --storageEngine=wiredTiger --numClientsPerFixture=10
+      suite: jstestfuzz_sharded_causal_consistency
+      resmoke_args: --storageEngine=wiredTiger --numClientsPerFixture=10
       name: jstestfuzz_concurrent_sharded_causal_consistency
 
 ## jstestfuzz concurrent sharded cluster continuous stepdown ##
@@ -5856,7 +5877,8 @@ tasks:
       num_files: ${jstestfuzz_concurrent_num_files|10}
       num_tasks: 2
       jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: --suites=jstestfuzz_sharded_continuous_stepdown --storageEngine=wiredTiger --numClientsPerFixture=10
+      suite: jstestfuzz_sharded_continuous_stepdown
+      resmoke_args: --storageEngine=wiredTiger --numClientsPerFixture=10
       name: jstestfuzz_concurrent_sharded_continuous_stepdown
 
 ## jstestfuzz concurrent sharded cluster with logical session ##
@@ -5870,7 +5892,8 @@ tasks:
       num_files: ${jstestfuzz_concurrent_num_files|10}
       num_tasks: 15
       jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: --suites=jstestfuzz_sharded_session --storageEngine=wiredTiger --numClientsPerFixture=10
+      suite: jstestfuzz_sharded_session
+      resmoke_args: --storageEngine=wiredTiger --numClientsPerFixture=10
       name: jstestfuzz_concurrent_sharded_session
 
 # jstestfuzz interrupt #
@@ -5882,7 +5905,8 @@ tasks:
     vars:
       <<: *jstestfuzz_config_vars
       jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: "--suites=jstestfuzz_interrupt --storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: jstestfuzz_interrupt
+      resmoke_args: "--storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: jstestfuzz_interrupt
 
 # jstestfuzz interrupt #
@@ -5894,7 +5918,8 @@ tasks:
     vars:
       <<: *jstestfuzz_config_vars
       jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: "--suites=jstestfuzz_interrupt_replication --storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: jstestfuzz_interrupt_replication
+      resmoke_args: "--storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: jstestfuzz_interrupt_replication
 
 # jstestfuzz interrupt with flow control engaged #
@@ -5908,7 +5933,8 @@ tasks:
       num_files: 5
       num_tasks: 30
       jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: "--suites=jstestfuzz_interrupt_replication --flowControlTicketOverride=1 --storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: jstestfuzz_interrupt_replication
+      resmoke_args: "--flowControlTicketOverride=1 --storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: jstestfuzz_interrupt_replication_flow_control
 
 ## jstestfuzz sharded cluster continuous stepdown with flow control engaged ##
@@ -5922,7 +5948,8 @@ tasks:
       num_files: 5
       num_tasks: 10
       jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: "--suites=jstestfuzz_sharded_continuous_stepdown --flowControlTicketOverride=3 --storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: jstestfuzz_sharded_continuous_stepdown
+      resmoke_args: "--flowControlTicketOverride=3 --storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: jstestfuzz_sharded_continuous_stepdown_flow_control
 
 ## jstestfuzz concurrent sharded cluster continuous stepdown with flow control engaged ##
@@ -5936,7 +5963,8 @@ tasks:
       num_files: ${jstestfuzz_concurrent_num_files|10}
       num_tasks: 2
       jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: --suites=jstestfuzz_sharded_continuous_stepdown --flowControlTicketOverride=30 --storageEngine=wiredTiger --numClientsPerFixture=10
+      suite: jstestfuzz_sharded_continuous_stepdown
+      resmoke_args: --flowControlTicketOverride=30 --storageEngine=wiredTiger --numClientsPerFixture=10
       name: jstestfuzz_concurrent_sharded_continuous_stepdown_flow_control
 
 # jstestfuzz replication continuous stepdown with flow control engaged #
@@ -5950,7 +5978,8 @@ tasks:
       num_files: 5
       num_tasks: 30
       jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: "--suites=jstestfuzz_replication_continuous_stepdown --flowControlTicketOverride=1 --storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: jstestfuzz_replication_continuous_stepdown
+      resmoke_args: "--flowControlTicketOverride=1 --storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: jstestfuzz_replication_continuous_stepdown_flow_control
 
 ## jstestfuzz concurrent replication continuous stepdown with flow control engaged ##
@@ -5964,7 +5993,8 @@ tasks:
       num_files: ${jstestfuzz_concurrent_num_files|10}
       num_tasks: 15
       jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: --suites=jstestfuzz_replication_continuous_stepdown --flowControlTicketOverride=10 --storageEngine=wiredTiger --numClientsPerFixture=10
+      suite: jstestfuzz_replication_continuous_stepdown
+      resmoke_args: --flowControlTicketOverride=10 --storageEngine=wiredTiger --numClientsPerFixture=10
       name: jstestfuzz_concurrent_replication_continuous_stepdown_flow_control
 
 ## jstestfuzz replica set ##
@@ -5976,8 +6006,24 @@ tasks:
     vars:
       <<: *jstestfuzz_config_vars
       jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: "--suites=jstestfuzz_replication --storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: jstestfuzz_replication
+      resmoke_args: "--storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: jstestfuzz_replication
+
+## jstestfuzz replica set ##
+- <<: *jstestfuzz_template
+  name: jstestfuzz_replication_multiversion_gen
+  tags: ["jstestfuzz_multiversion_gen"]
+  commands:
+  - func: "generate multiversion tasks"
+    vars:
+      <<: *jstestfuzz_config_vars
+      jstestfuzz_vars: --jsTestsDir ../jstests
+      resmoke_args: "--storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: jstestfuzz_replication
+      is_jstestfuzz: true
+      use_multiversion: /data/multiversion
+      npm_command: jstestfuzz
 
 ## jstestfuzz initial sync replica set ##
 - <<: *jstestfuzz_template
@@ -5990,7 +6036,8 @@ tasks:
       num_files: 8
       num_tasks: 10
       jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: "--suites=jstestfuzz_replication_initsync --storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: jstestfuzz_replication_initsync
+      resmoke_args: "--storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: jstestfuzz_replication_initsync
 
 ## jstestfuzz replica set with logical session ##
@@ -6002,7 +6049,8 @@ tasks:
     vars:
       <<: *jstestfuzz_config_vars
       jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: "--suites=jstestfuzz_replication_session --storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: jstestfuzz_replication_session
+      resmoke_args: "--storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: jstestfuzz_replication_session
 
 ## jstestfuzz sharded cluster ##
@@ -6014,8 +6062,24 @@ tasks:
     vars:
       <<: *jstestfuzz_config_vars
       jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: "--suites=jstestfuzz_sharded --storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: jstestfuzz_sharded
+      resmoke_args: "--storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: jstestfuzz_sharded
+
+## jstestfuzz sharded multiversion cluster ##
+- <<: *jstestfuzz_template
+  name: jstestfuzz_sharded_multiversion_gen
+  tags: [jstestfuzz_multiversion_gen]
+  commands:
+  - func: "generate multiversion tasks"
+    vars:
+      <<: *jstestfuzz_config_vars
+      jstestfuzz_vars: --jsTestsDir ../jstests
+      resmoke_args: "--storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: jstestfuzz_sharded
+      is_jstestfuzz: true
+      use_multiversion: /data/multiversion
+      npm_command: jstestfuzz
 
 ## jstestfuzz sharded cluster causal consistency ##
 - <<: *jstestfuzz_template
@@ -6026,7 +6090,8 @@ tasks:
     vars:
       <<: *jstestfuzz_config_vars
       jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: "--suites=jstestfuzz_sharded_causal_consistency --storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: jstestfuzz_sharded_causal_consistency
+      resmoke_args: "--storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: jstestfuzz_sharded_causal_consistency
 
 ## jstestfuzz sharded cluster continuous stepdown ##
@@ -6040,7 +6105,8 @@ tasks:
       num_files: 5
       num_tasks: 10
       jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: "--suites=jstestfuzz_sharded_continuous_stepdown --storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: jstestfuzz_sharded_continuous_stepdown
+      resmoke_args: "--storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: jstestfuzz_sharded_continuous_stepdown
 
 ## jstestfuzz sharded cluster with logical session ##
@@ -6052,7 +6118,8 @@ tasks:
     vars:
       <<: *jstestfuzz_config_vars
       jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: "--suites=jstestfuzz_sharded_session --storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
+      suite: jstestfuzz_sharded_session
+      resmoke_args: "--storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: jstestfuzz_sharded_session
 
 - name: replica_sets_jscore_multiversion_passthrough_gen
@@ -9087,7 +9154,6 @@ buildvariants:
   display_name: ~ Linux Repeated Execution
   run_on:
   - rhel62-small
-  batchtime: 1440 # 1 day
   expansions:
     compile_flags: -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars --enable-free-mon=off --enable-http-client=off
     test_flags: >-
@@ -9122,6 +9188,7 @@ buildvariants:
 - &linux-64-debug-template
   name: linux-64-debug
   display_name: "! Linux DEBUG"
+  batchtime: 60 # 1 hour
   run_on:
   - rhel62-large
   expansions:
@@ -9162,7 +9229,6 @@ buildvariants:
 - <<: *linux-64-debug-template
   name: linux-64-debug-wtdevelop
   display_name: "~ Linux DEBUG WiredTiger develop"
-  batchtime: 1440 # 1 day
   modules:
   - wtdevelop
   expansions:
@@ -9177,7 +9243,6 @@ buildvariants:
   display_name: Linux (No Journal)
   run_on:
   - rhel62-small
-  batchtime: 1440 # 1 day
   expansions: &linux-64-required-duroff-expansions
     compile_flags: -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars --enable-free-mon=off --enable-http-client=off
     multiversion_platform: rhel62
@@ -9211,7 +9276,6 @@ buildvariants:
   display_name: Ubuntu 18.04
   run_on:
   - ubuntu1804-test
-  batchtime: 1440 # 1 day
   expansions:
     push_path: linux
     push_bucket: downloads.mongodb.org
@@ -9265,7 +9329,6 @@ buildvariants:
   - enterprise
   run_on:
   - ubuntu1804-test
-  batchtime: 1440 # 1 day
   expansions:
     push_path: linux
     push_bucket: downloads.10gen.com
@@ -9294,6 +9357,7 @@ buildvariants:
   - name: .jscore .common !.compat !.decimal !.sharding
   - name: jsCore_auth
   - name: .jstestfuzz .common
+  - name: .jstestfuzz_multiversion_gen
   - name: .logical_session_cache .one_sec
   - name: .multiversion_fuzzer
   - name: .multiversion_passthrough
@@ -9313,7 +9377,6 @@ buildvariants:
   display_name: Ubuntu 16.04
   run_on:
   - ubuntu1604-test
-  batchtime: 1440 # 1 day
   expansions:
     push_path: linux
     push_bucket: downloads.mongodb.org
@@ -9380,7 +9443,6 @@ buildvariants:
   - enterprise
   run_on:
   - ubuntu1604-arm64-large
-  batchtime: 1440 # 1 day
   expansions:
     push_path: linux
     push_bucket: downloads.10gen.com
@@ -9429,7 +9491,6 @@ buildvariants:
   - enterprise
   run_on:
   - ubuntu1804-arm64-build
-  batchtime: 1440 # 1 day
   expansions:
     push_path: linux
     push_bucket: downloads.10gen.com
@@ -9476,7 +9537,6 @@ buildvariants:
   display_name: Ubuntu 18.04 arm64
   run_on:
   - ubuntu1804-arm64-build
-  batchtime: 1440 # 1 day
   expansions:
     push_path: linux
     push_bucket: downloads.mongodb.org
@@ -9510,7 +9570,6 @@ buildvariants:
   - enterprise
   run_on:
   - ubuntu1804-power8-test
-  batchtime: 1440 # 1 day
   expansions:
     push_path: linux
     push_bucket: downloads.10gen.com
@@ -9655,7 +9714,6 @@ buildvariants:
   - enterprise
   run_on:
   - amazon1-2018-test
-  batchtime: 1440 # 1 day
   expansions:
     push_path: linux
     push_bucket: downloads.10gen.com
@@ -9707,7 +9765,6 @@ buildvariants:
   display_name: Amazon Linux
   run_on:
   - amazon1-2018-test
-  batchtime: 1440 # 1 day
   expansions:
     push_path: linux
     push_bucket: downloads.mongodb.org
@@ -9762,7 +9819,6 @@ buildvariants:
   - enterprise
   run_on:
   - amazon2-test
-  batchtime: 1440 # 1 day
   expansions:
     test_flags: >-
       --excludeWithAnyTags=SERVER-34286
@@ -9817,7 +9873,6 @@ buildvariants:
   display_name: Amazon Linux 2
   run_on:
   - amazon2-test
-  batchtime: 1440 # 1 day
   expansions:
     test_flags: >-
       --excludeWithAnyTags=SERVER-34286
@@ -9876,7 +9931,6 @@ buildvariants:
   display_name: "~ TIG Daily Cron"
   run_on:
   - rhel62-small
-  batchtime: 1440 # 1 day
   stepback: false
   tasks:
   - name: lint_fuzzer_sanity_all
@@ -9887,6 +9941,7 @@ buildvariants:
 
 - name: enterprise-windows-required
   display_name: "! Enterprise Windows"
+  batchtime: 60 # 1 hour
   modules:
     - enterprise
   run_on:
@@ -9928,6 +9983,7 @@ buildvariants:
 
 - name: windows-debug
   display_name: "* Windows DEBUG"
+  batchtime: 60 # 1 hour
   run_on:
   - windows-64-vs2017-test
   expansions:
@@ -9995,6 +10051,7 @@ buildvariants:
 
 - name: enterprise-windows
   display_name: "* Enterprise Windows"
+  batchtime: 60 # 1 hour
   modules:
   - enterprise
   run_on:
@@ -10052,7 +10109,6 @@ buildvariants:
 - <<: *enterprise-windows-nopush-template
   name: enterprise-windows-wtdevelop
   display_name: "~ Enterprise Windows WiredTiger develop"
-  batchtime: 1440 # 1 day
   modules:
   - enterprise
   - wtdevelop
@@ -10063,6 +10119,7 @@ buildvariants:
 - <<: *enterprise-windows-nopush-template
   name: enterprise-windows-compile-all
   display_name: "* Enterprise Windows compile_all"
+  batchtime: 60 # 1 hour
   run_on:
   - windows-64-vs2017-test
   tasks:
@@ -10111,7 +10168,6 @@ buildvariants:
   - enterprise
   run_on:
   - windows-64-vs2017-test
-  batchtime: 1440 # 1 day
   expansions:
     platform_decompress: unzip
     exe: ".exe"
@@ -10161,7 +10217,6 @@ buildvariants:
   display_name: Windows
   run_on:
   - windows-64-vs2017-test
-  batchtime: 1440 # 1 day
   expansions:
     platform_decompress: unzip
     exe: ".exe"
@@ -10226,7 +10281,6 @@ buildvariants:
   - enterprise
   run_on:
   - windows-64-vs2017-test
-  batchtime: 1440 # 1 day
   expansions:
     platform_decompress: unzip
     exe: ".exe"
@@ -10258,7 +10312,6 @@ buildvariants:
   display_name: macOS
   run_on:
   - macos-1014
-  batchtime: 1440 # 1 day
   expansions:
     test_flags: --excludeWithAnyTags=requires_ssl_mongo_tools
     push_path: osx
@@ -10306,6 +10359,7 @@ buildvariants:
 
 - name: macos-debug
   display_name: "* macOS DEBUG"
+  batchtime: 60 # 1 hour
   run_on:
   - macos-1014
   expansions:
@@ -10336,7 +10390,6 @@ buildvariants:
   - enterprise
   run_on:
   - macos-1014
-  batchtime: 1440 # 1 day
   expansions:
     test_flags: --excludeWithAnyTags=requires_ssl_mongo_tools
     push_path: osx
@@ -10621,7 +10674,6 @@ buildvariants:
   display_name: "Embedded SDK - Ubuntu 16.04 x86_64"
   run_on:
   - ubuntu1604-build
-  batchtime: 1440 # 1 day
   expansions:
     test_flags: --excludeWithAnyTags=uses_transactions
     # We need --allocator=system here to work around SERVER-27675
@@ -10801,6 +10853,7 @@ buildvariants:
 
 - name: enterprise-rhel-62-64-bit
   display_name: "! Enterprise RHEL 6.2"
+  batchtime: 60 # 1 hour
   modules:
   - enterprise
   run_on:
@@ -10986,7 +11039,6 @@ buildvariants:
   - enterprise
   run_on:
   - rhel62-small
-  batchtime: 1440 # 1 day
   expansions: &enterprise-rhel-62-64-bit-majority-read-concern-off-expansions
     # Ban tests that run prepareTransaction or multi-shard transactions (which use
     # prepareTransaction). prepareTransaction is rejected on nodes with
@@ -11215,6 +11267,7 @@ buildvariants:
     - name: jsCore_txns_large_txns_format
     - name: jsCore_minimum_batch_size
     - name: jsCore_op_query
+    - name: .jstestfuzz_multiversion_gen
     - name: .logical_session_cache .one_sec
     - name: .multi_shard .common
     - name: multiversion
@@ -11241,6 +11294,7 @@ buildvariants:
 - &enterprise-rhel-70-64-bit-template
   name: enterprise-rhel-70-64-bit
   display_name: "* Enterprise RHEL 7.0"
+  batchtime: 60 # 1 hour
   modules:
   - enterprise
   run_on:
@@ -11304,7 +11358,6 @@ buildvariants:
   - enterprise
   run_on:
   - rhel80-build
-  batchtime: 1440 # 1 day
   expansions:
     push_path: linux
     push_bucket: downloads.10gen.com
@@ -11361,7 +11414,6 @@ buildvariants:
 - <<: *enterprise-rhel-70-64-bit-template
   name: enterprise-rhel-70-64-bit-kitchen-sink
   display_name: "~ Enterprise RHEL 7.0 (Dagger, tcmalloc-profiling, libunwind)"
-  batchtime: 1440 # 1 day
   expansions:
     <<: *enterprise-rhel-70-64-bit-expansions-template
     compile_flags: --ssl --use-cpu-profiler --use-libunwind MONGO_DISTMOD=rhel70 -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars
@@ -11378,7 +11430,6 @@ buildvariants:
 - <<: *enterprise-rhel-70-64-bit-template
   name: hot_backups-rhel-70-64-bit
   display_name: "hot_backups RHEL 7.0"
-  batchtime: 1440 # 1 day
   run_on:
   - rhel70
   expansions:
@@ -11394,7 +11445,6 @@ buildvariants:
 - <<: *enterprise-rhel-70-64-bit-template
   name: enterprise-rhel-70-64-bit-libunwind
   display_name: "~ Enterprise RHEL 7.0 (libunwind)"
-  batchtime: 1440 # 1 day
   runs_on:
   - rhel70
   expansions:
@@ -11436,6 +11486,7 @@ buildvariants:
 
 - name: ubuntu1604-debug
   display_name: "* Ubuntu 16.04 DEBUG"
+  batchtime: 60 # 1 hour
   run_on:
   - ubuntu1604-test
   expansions:
@@ -11461,7 +11512,6 @@ buildvariants:
   display_name: RHEL 6.2
   run_on:
   - rhel62-small
-  batchtime: 1440 # 1 day
   expansions:
     push_path: linux
     push_bucket: downloads.mongodb.org
@@ -11511,7 +11561,6 @@ buildvariants:
   display_name: RHEL 7.0
   run_on:
   - rhel70-small
-  batchtime: 1440 # 1 day
   expansions:
     push_path: linux
     push_bucket: downloads.mongodb.org
@@ -11563,7 +11612,6 @@ buildvariants:
   display_name: RHEL 8.0
   run_on:
   - rhel80-build
-  batchtime: 1440 # 1 day
   expansions:
     push_path: linux
     push_bucket: downloads.mongodb.org
@@ -11616,7 +11664,6 @@ buildvariants:
   display_name: RHEL 7.0/7.6 Cross-ABI
   run_on:
   - rhel76-test
-  batchtime: 1440 # 1 day
   expansions:
     compile_flags: --ssl MONGO_DISTMOD=rhel70 -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars
   tasks:
@@ -11633,7 +11680,6 @@ buildvariants:
   - enterprise
   run_on:
   - rhel71-power8-test
-  batchtime: 1440 # 1 day
   stepback: false
   expansions:
     # We need to compensate for SMT8 setting the cpu count very high and lower the amount of parallelism down
@@ -11750,7 +11796,6 @@ buildvariants:
   - enterprise
   run_on:
   - rhel67-zseries-test
-  batchtime: 1440 # 1 day
   stepback: false
   expansions:
     compile_flags: --ssl MONGO_DISTMOD=rhel67 -j3 CCFLAGS="-march=z9-109 -mtune=z10" --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars --use-hardware-crc32=off
@@ -11801,7 +11846,6 @@ buildvariants:
   display_name: RHEL 7.2 s390x
   run_on:
   - rhel72-zseries-test
-  batchtime: 1440 # 1 day
   expansions:
     compile_flags: --ssl MONGO_DISTMOD=rhel72 -j3 CCFLAGS="-march=z196 -mtune=zEC12" --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars
     has_packages: true
@@ -11830,7 +11874,6 @@ buildvariants:
   display_name: RHEL 6.7 s390x
   run_on:
   - rhel67-zseries-test
-  batchtime: 1440 # 1 day
   expansions:
     compile_flags: --ssl MONGO_DISTMOD=rhel67 -j3 CCFLAGS="-march=z9-109 -mtune=z10" --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars --use-hardware-crc32=off
     has_packages: true
@@ -11865,7 +11908,6 @@ buildvariants:
   - enterprise
   run_on:
   - ubuntu1604-test
-  batchtime: 1440 # 1 day
   expansions:
     push_path: linux
     push_bucket: downloads.10gen.com
@@ -11913,6 +11955,7 @@ buildvariants:
 
 - name: enterprise-ubuntu-dynamic-1604-clang
   display_name: "! Shared Library Enterprise Ubuntu 16.04 (Clang)"
+  batchtime: 60 # 1 hour
   modules:
   - enterprise
   run_on:
@@ -11933,6 +11976,7 @@ buildvariants:
 
 - name: enterprise-ubuntu-dynamic-1604-clang-tidy
   display_name: "* Enterprise Clang Tidy"
+  batchtime: 60 # 1 hour
   modules:
   - enterprise
   run_on:
@@ -11948,6 +11992,7 @@ buildvariants:
 
 - name: ubuntu-dynamic-1604-clang
   display_name: "* Shared Library Ubuntu 16.04 (Clang)"
+  batchtime: 60 # 1 hour
   run_on:
    - ubuntu1604-test
   expansions:
@@ -11974,7 +12019,6 @@ buildvariants:
   - enterprise
   run_on:
   - suse12-test
-  batchtime: 1440 # 1 day
   expansions:
     push_path: linux
     push_bucket: downloads.10gen.com
@@ -12107,7 +12151,6 @@ buildvariants:
   display_name: SUSE 12
   run_on:
   - suse12-test
-  batchtime: 1440 # 1 day
   expansions:
     push_path: linux
     push_bucket: downloads.mongodb.org
@@ -12157,7 +12200,6 @@ buildvariants:
   - enterprise
   run_on:
   - suse15-test
-  batchtime: 1440 # 1 day
   expansions:
     push_path: linux
     push_bucket: downloads.10gen.com
@@ -12195,7 +12237,6 @@ buildvariants:
   display_name: SUSE 15
   run_on:
   - suse15-test
-  batchtime: 1440 # 1 day
   expansions:
     push_path: linux
     push_bucket: downloads.mongodb.org
@@ -12249,7 +12290,6 @@ buildvariants:
   - enterprise
   run_on:
   - debian92-test
-  batchtime: 1440 # 1 day
   expansions:
     push_path: linux
     push_bucket: downloads.10gen.com
@@ -12296,7 +12336,6 @@ buildvariants:
   display_name: Debian 9.2
   run_on:
   - debian92-test
-  batchtime: 1440 # 1 day
   expansions:
     push_path: linux
     push_bucket: downloads.mongodb.org
@@ -12353,7 +12392,6 @@ buildvariants:
   - enterprise
   run_on:
   - debian10-test
-  batchtime: 1440 # 1 day
   expansions:
     push_path: linux
     push_bucket: downloads.10gen.com
@@ -12400,7 +12438,6 @@ buildvariants:
   display_name: Debian 10
   run_on:
   - debian10-test
-  batchtime: 1440 # 1 day
   expansions:
     push_path: linux
     push_bucket: downloads.mongodb.org
@@ -12459,7 +12496,6 @@ buildvariants:
   display_name: RHEL 6.2 (Biggie)
   run_on:
   - rhel62-small
-  batchtime: 1440 # 1 day
   expansions:
     test_flags: --storageEngine=biggie --excludeWithAnyTags=SERVER-38379,requires_persistence,requires_journaling,uses_transactions,requires_wiredtiger,requires_snapshot_read
     compile_flags: MONGO_DISTMOD=rhel62 -j$(grep -c ^processor /proc/cpuinfo) --dbg=off --opt=on --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars
@@ -12479,7 +12515,6 @@ buildvariants:
   - enterprise
   run_on:
   - rhel62-small
-  batchtime: 1440 # 1 day
   expansions: &enterprise-rhel-62-64-bit-inmem-expansions
     test_flags: --storageEngine=inMemory --excludeWithAnyTags=requires_persistence,requires_journaling
     compile_flags: --ssl MONGO_DISTMOD=rhel62 -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars
@@ -12630,6 +12665,7 @@ buildvariants:
 
 - name: rhel-62-64-bit-required-mobile
   display_name: "! RHEL 6.2 (mobile)"
+  batchtime: 60 # 1 hour
   run_on:
   - rhel62-small
   expansions:
@@ -12694,7 +12730,6 @@ buildvariants:
   display_name: Linux (ephemeralForTest)
   run_on:
   - rhel62-small
-  batchtime: 1440 # 1 day
   expansions:
     # Transactions are not explicitly supported on the ephemeralForTest storage engine.
     # Speculative majority reads are currently only allowed for change streams, which are only supported on WiredTiger.
@@ -12842,7 +12877,6 @@ buildvariants:
   run_on:
   - ubuntu1804-build
   stepback: true
-  batchtime: 1440 # 1 day
   expansions:
     # We need llvm-symbolizer in the PATH for ASAN for clang-3.7 or later.
     variant_path_suffix: /opt/mongodbtoolchain/v3/bin
@@ -12876,6 +12910,7 @@ buildvariants:
   - name: jsCore_op_query
   - name: jsCore_txns_large_txns_format
   - name: jsonSchema
+  - name: .jstestfuzz_multiversion_gen
   - name: .logical_session_cache
   - name: .multi_shard .common
   - name: multiversion
@@ -12905,7 +12940,6 @@ buildvariants:
   run_on:
   - ubuntu1804-build
   stepback: true
-  batchtime: 1440 # 1 day
   expansions:
     # We need llvm-symbolizer in the PATH for ASAN for clang-3.7 or later.
     variant_path_suffix: /opt/mongodbtoolchain/v3/bin
@@ -12934,7 +12968,6 @@ buildvariants:
   run_on:
   - ubuntu1804-build
   stepback: true
-  batchtime: 1440 # 1 day
   expansions:
     # We need llvm-symbolizer in the PATH for UBSAN.
     variant_path_suffix: /opt/mongodbtoolchain/v3/bin
@@ -12966,6 +12999,7 @@ buildvariants:
   - name: jsCore_op_query
   - name: jsCore_txns_large_txns_format
   - name: jsonSchema
+  - name: .jstestfuzz_multiversion_gen
   - name: .logical_session_cache .one_sec
   - name: .multi_shard .common
   - name: multiversion
@@ -12991,6 +13025,7 @@ buildvariants:
 
 - name: ubuntu1804-debug-aubsan-lite
   display_name: "! {A,UB}SAN Enterprise Ubuntu 18.04 DEBUG"
+  batchtime: 60 # 1 hour
   modules:
   - enterprise
   run_on:
@@ -13019,7 +13054,6 @@ buildvariants:
   run_on:
   - ubuntu1804-build
   stepback: false
-  batchtime: 1440 # 1 day
   expansions:
     # We need llvm-symbolizer in the PATH for ASAN for clang-3.7 or later.
     variant_path_suffix: /opt/mongodbtoolchain/v3/bin
@@ -13043,7 +13077,6 @@ buildvariants:
   run_on:
   - ubuntu1804-build
   stepback: true
-  batchtime: 1440 # 1 day
   expansions:
     # We need llvm-symbolizer in the PATH for ASAN for clang-3.7 or later.
     variant_path_suffix: /opt/mongodbtoolchain/v3/bin
@@ -13090,6 +13123,7 @@ buildvariants:
 
 - name: enterprise-ubuntu-dynamic-1604-64-bit
   display_name: "* Shared Library Enterprise Ubuntu 16.04"
+  batchtime: 60 # 1 hour
   modules:
   - enterprise
   expansions:
@@ -13109,7 +13143,6 @@ buildvariants:
   display_name: "Shared SCons Cache Pruning"
   run_on:
   - ubuntu1604-test
-  batchtime: 1440 # 1 day
   stepback: false
   tasks:
   - name: shared_scons_cache_pruning
@@ -13119,7 +13152,6 @@ buildvariants:
   display_name: "Windows shared SCons Cache Pruning"
   run_on:
   - windows-64-vs2017-test
-  batchtime: 1440 # 1 day
   stepback: false
   tasks:
   - name: win_shared_scons_cache_pruning
