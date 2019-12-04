@@ -848,7 +848,7 @@ tasks:
           # --forced-workloads scale/BigUpdate.yml execution/CreateIndex.yml
           # will run all locally added/modified workloads, plus big_update and create_index
 
-          genny/genny/scripts/genny_auto_tasks.sh --output build/patch_tasks.json --variants "${build_variant}" --modified
+          genny/genny/scripts/genny_auto_tasks.sh --output build/patch_tasks.json --variants "${build_variant}" --modified --forced-workloads scale/LargeScaleModel.yml
           cat genny/genny/build/patch_tasks.json
     - command: generate.tasks
       params:
