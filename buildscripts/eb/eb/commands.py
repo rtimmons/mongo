@@ -8,7 +8,7 @@ def _create_env(env: typ.Mapping[str, str],
                 expansions: typ.Mapping[str, typ.Any]) -> typ.Mapping[str, str]:
     out = {}
     out.update(env)
-    prefix_expansions = {f"EB_X_{key}": value for (key, value) in expansions.items()}
+    prefix_expansions = {f"EB_X_{key}": f"{value}" for (key, value) in expansions.items()}
     out.update(prefix_expansions)
     return out
 
