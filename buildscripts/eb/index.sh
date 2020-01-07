@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 
-# TODO: pyenv
+if [[ -e "/opt/mongodbtoolchain/v3/bin" ]]; then
+    export PATH="/opt/mongodbtoolchain/v3/bin:$PATH"
+    # TODO: support pyenv in an `else` block.
+fi
 
 EB_REPO_ROOT=$(git rev-parse --git-dir)/..
 cd "$EB_REPO_ROOT"
