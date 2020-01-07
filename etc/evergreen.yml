@@ -1131,42 +1131,6 @@ functions:
         cd $target_dir
         tar xzf generate_tasks_config.tgz
 
-  "generate burn in tags":
-    - command: expansions.write
-      params:
-        file: src/expansions.yml
-    - *configure_evergreen_api_credentials
-    - command: shell.exec
-      type: test
-      params:
-        working_dir: src
-        shell: bash
-        script: |
-          set -o errexit
-
-          ${activate_virtualenv}
-          PATH=$PATH:$HOME $python buildscripts/burn_in_tags.py --expansion-file expansions.yml
-    - command: archive.targz_pack
-      params:
-        target: burn_in_tags_gen.tgz
-        source_dir: src/generated_burn_in_tags_config
-        include:
-          - "*"
-    - command: s3.put
-      params:
-        aws_key: ${aws_key}
-        aws_secret: ${aws_secret}
-        local_file: burn_in_tags_gen.tgz
-        remote_file: ${project}/${build_variant}/${revision}/burn_in_tags_gen/burn_in_tags_gen-${build_id}.tgz
-        bucket: mciuploads
-        permissions: public-read
-        content_type: ${content_type|application/gzip}
-        display_name: Burn_in_tags Task Config - Execution ${execution}
-    - command: generate.tasks
-      params:
-        files:
-          - src/generated_burn_in_tags_config/burn_in_tags_gen.json
-
   "generate resmoke tasks":
     - command: manifest.load
     - *git_get_project
@@ -3533,55 +3497,6 @@ tasks:
         ${activate_virtualenv}
         find buildscripts etc jstests -name '*.y*ml' -exec yamllint -c etc/yamllint_config.yml {} +
 
-- name: burn_in_tests_gen
-  commands:
-  - command: manifest.load
-  - func: "git get project"
-  - func: "set task expansion macros"
-  - func: "set up virtualenv"
-  - func: "upload pip requirements"
-  - func: "configure evergreen api credentials"
-  - command: shell.exec
-    type: test
-    params:
-      working_dir: src
-      shell: bash
-      script: |
-        set -o errexit
-        set -o verbose
-        ${activate_virtualenv}
-        # Capture a list of new and modified tests. The expansion macro burn_in_tests_build_variant
-        # is used to for finding the associated tasks from a different build varaint than the
-        # burn_in_tests_gen task executes on.
-        build_variant_opts="--build-variant=${build_variant}"
-        if [ -n "${burn_in_tests_build_variant|}" ]; then
-          build_variant_opts="--build-variant=${burn_in_tests_build_variant} --run-build-variant=${build_variant}"
-        fi
-        burn_in_args="$burn_in_args --repeat-tests-min=2 --repeat-tests-max=1000 --repeat-tests-secs=600"
-        # Evergreen executable is in $HOME.
-        PATH=$PATH:$HOME $python buildscripts/burn_in_tests.py --project=${project} $build_variant_opts --distro=${distro_id} --generate-tasks-file=burn_in_tests_gen.json $burn_in_args --verbose
-  - command: archive.targz_pack
-    params:
-      target: src/burn_in_tests_gen.tgz
-      source_dir: src
-      include:
-        - burn_in_tests_gen.json
-
-  - command: s3.put
-    params:
-      aws_key: ${aws_key}
-      aws_secret: ${aws_secret}
-      local_file: src/burn_in_tests_gen.tgz
-      remote_file: ${project}/${build_variant}/${revision}/burn_in_tests_gen/burn_in_tests_gen-${build_id}.tgz
-      bucket: mciuploads
-      permissions: public-read
-      content_type: ${content_type|application/gzip}
-      display_name: Burn_in_tests Task Config - Execution ${execution}
-  - command: generate.tasks
-    params:
-      files:
-        - src/burn_in_tests_gen.json
-
 ## initial sync multiversion fuzzer ##
 - <<: *jstestfuzz_template
   name: initial_sync_multiversion_fuzzer_gen
@@ -4290,24 +4205,6 @@ tasks:
     vars:
       resmoke_args: --storageEngine=wiredTiger
       fallback_num_sub_suites: 4
-
-- name: burn_in_tags_gen
-  depends_on:
-    - name: compile
-  commands:
-  - command: manifest.load
-  - func: "git get project"
-  - func: "set task expansion macros"
-  - func: "set up virtualenv"
-    vars:
-      pip_dir: ${workdir}/src/etc/pip
-  - func: "upload pip requirements"
-  - func: "generate burn in tags"
-    vars:
-      max_revisions: 25
-      repeat_tests_secs: 600
-      repeat_tests_min: 2
-      repeat_tests_max: 1000
 
 - name: auth_audit_gen
   tags: ["auth", "audit"]
