@@ -87,12 +87,6 @@ variables:
   commands:
   - func: "generate multiversion tasks"
 
-- &libfuzzertests
-  name: libfuzzertests!
-  execution_tasks:
-  - compile_libfuzzertests
-  - libfuzzertests
-
 - &compile_task_group_template
   name: compile_task_group_template
   max_hosts: 1
@@ -397,21 +391,6 @@ functions:
           echo "The mongo version is $mongo_ver, expected version is $bin_ver"
           exit 1
         fi
-
-  "fetch corpus": &fetch_corpus
-    command: s3.get
-    params:
-      aws_key: ${s3_access_key_id}
-      aws_secret: ${s3_secret_access_key}
-      remote_file: ${project}/corpus/mongo-${build_variant}-latest.tgz
-      bucket: fuzzer-artifacts
-      local_file: src/corpus.tgz
-
-  "extract corpus": &extract_corpus
-    command: archive.auto_extract
-    params:
-        path: src/corpus.tgz
-        destination: src/corpus
 
   "archive new corpus": &archive_new_corpus
     command: archive.targz_pack
@@ -3327,42 +3306,6 @@ tasks:
       vars:
         resmoke_args: --suites=unittests
 
-##compile_libfuzzertests - build libfuzzertests ##
-- name: compile_libfuzzertests
-  commands:
-    - func: "scons compile"
-      vars:
-        targets: libfuzzer_tests
-        task_compile_flags: >-
-          --detect-odr-violations
-        compiling_for_test: true
-    - command: shell.exec
-      params:
-        working_dir: "src"
-        script: |
-          set -o errexit
-          set -o verbose
-
-          tar cfvz libfuzzer-tests.tgz --files-from=build/libfuzzer_tests.txt
-    - command: s3.put
-      params:
-        aws_key: ${aws_key}
-        aws_secret: ${aws_secret}
-        local_file: "src/libfuzzer-tests.tgz"
-        remote_file: "${project}/libfuzzer-tests/${build_variant}/${revision}/libfuzzer-tests.tgz"
-        bucket: mciuploads
-        permissions: public-read
-        content_type: application/tar
-        display_name: "LibFuzzer Tests"
-
-## libfuzzertests - run libfuzzertests ##
-- name: libfuzzertests
-  commands:
-    - func: "fetch corpus"
-    - func: "extract corpus"
-    - func: "run tests"
-      vars:
-        resmoke_args: --suites=libfuzzer
 
 - name: server_discovery_and_monitoring_json_test
   commands:
@@ -7196,11 +7139,7 @@ task_groups:
   name: dbtest_TG
   tasks:
   - dbtest
-- <<: *compile_task_group_template
-  name: libfuzzertests_TG
-  tasks:
-  - compile_libfuzzertests
-  - libfuzzertests
+
 - <<: *compile_task_group_template
   name: compile_all_run_unittests_TG
   tasks:
