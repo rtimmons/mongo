@@ -59,18 +59,6 @@ variables:
   depends_on:
   - name: compile_all
 
-- &benchmark_template
-  name: benchmark_template
-  depends_on:
-  - name: compile_benchmarks
-  commands:
-  - func: "do benchmark setup"
-  - func: "run tests"
-    vars:
-      resmoke_args: --help
-      resmoke_jobs_max: 1
-  - func: "send benchmark results"
-
 - &jstestfuzz_config_vars
   num_files: 15
   num_tasks: 10
@@ -409,15 +397,6 @@ functions:
           echo "The mongo version is $mongo_ver, expected version is $bin_ver"
           exit 1
         fi
-
-  "fetch benchmarks": &fetch_benchmarks
-    command: s3.get
-    params:
-      aws_key: ${aws_key}
-      aws_secret: ${aws_secret}
-      remote_file: ${project}/${build_variant}/${revision}/benchmarks/${build_id}.tgz
-      bucket: mciuploads
-      extract_to: src
 
   "fetch corpus": &fetch_corpus
     command: s3.get
@@ -1015,12 +994,6 @@ functions:
       content_type: atext-plain
       display_name: Pip Requirements
 
-  "send benchmark results":
-    command: json.send
-    params:
-      name: perf
-      file: src/perf.json
-
   "do setup":
   - *fetch_artifacts
   - *update_bypass_expansions
@@ -1036,17 +1009,6 @@ functions:
   - *run_diskstats
   - *monitor_process_threads
   - *collect_system_resource_info
-
-  "do benchmark setup":
-  - command: manifest.load
-  - *git_get_project
-  - *set_task_expansion_macros
-  - *set_up_virtualenv
-  - *upload_pip_requirements
-  - *update_bypass_expansions
-  - *get_buildnumber
-  - *set_up_credentials
-  - *fetch_benchmarks
 
   "do multiversion setup": &do_multiversion_setup
     command: shell.exec
@@ -3726,46 +3688,6 @@ tasks:
 
           "build/stitch-support-lib-${version}/bin/stitch_support_test"
 
-- name: compile_benchmarks
-  depends_on: []
-  commands:
-    - command: manifest.load
-    - func: "git get project"
-    - func: "set task expansion macros"
-    - func: "set up virtualenv"
-    - func: "upload pip requirements"
-    - func: "get buildnumber"
-    - func: "set up credentials"
-    - func: "use WiredTiger develop" # noop if ${use_wt_develop} is not "true"
-    - func: "set up win mount script"
-    - func: "generate compile expansions"
-    # Then we load the generated version data into the agent so we can use it in task definitions
-    - func: "apply compile expansions"
-    - func: "scons compile"
-      vars:
-        targets: benchmarks
-        compiling_for_test: true
-    - command: archive.targz_pack
-      params:
-        target: "benchmarks.tgz"
-        source_dir: "src"
-        include:
-          - "./build/benchmarks.txt"
-          - "./build/**_bm"
-          - "./build/**_bm.gcno"
-          - "./build/**_bm.exe"
-          - "./build/**_bm.pdb"
-    - command: s3.put
-      params:
-        aws_key: ${aws_key}
-        aws_secret: ${aws_secret}
-        local_file: benchmarks.tgz
-        remote_file: ${project}/${build_variant}/${revision}/benchmarks/${build_id}.tgz
-        bucket: mciuploads
-        permissions: public-read
-        content_type: application/tar
-        display_name: Benchmarks
-
 ## lint ##
 - name: lint_pylinters
   commands:
@@ -3966,28 +3888,6 @@ tasks:
     params:
       files:
         - src/burn_in_tests_multiversion_gen.json
-
-- <<: *benchmark_template
-  name: benchmarks_orphaned
-  tags: ["benchmarks"]
-  commands:
-  - func: "do benchmark setup"
-  - func: "run tests"
-    vars:
-      resmoke_args: --suites=benchmarks
-      resmoke_jobs_max: 1
-  - func: "send benchmark results"
-
-- <<: *benchmark_template
-  name: benchmarks_sharding
-  tags: ["benchmarks"]
-  commands:
-  - func: "do benchmark setup"
-  - func: "run tests"
-    vars:
-      resmoke_args: --suites=benchmarks_sharding
-      resmoke_jobs_max: 1
-  - func: "send benchmark results"
 
 ## initial sync multiversion fuzzer ##
 - <<: *jstestfuzz_template
