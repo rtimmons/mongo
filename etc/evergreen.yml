@@ -784,23 +784,6 @@ functions:
           fi
         fi
 
-  # This function should only be called from patch-build-only tasks.
-  "get added and modified patch files":
-    command: shell.exec
-    params:
-      working_dir: src
-      shell: bash
-      script: |
-        set -o verbose
-        set -o errexit
-
-        git diff HEAD --name-only --line-prefix="${workdir}/src/" --diff-filter=d >> modified_and_created_patch_files.txt
-        if [ -d src/mongo/db/modules/enterprise ]; then
-          pushd src/mongo/db/modules/enterprise
-          git diff HEAD --name-only --line-prefix="${workdir}/src/src/mongo/db/modules/enterprise/" --diff-filter=d >> ~1/modified_and_created_patch_files.txt
-          popd
-        fi
-
   "determine resmoke jobs": &determine_resmoke_jobs
     command: shell.exec
     params:
@@ -4619,17 +4602,6 @@ tasks:
       resmoke_args: --storageEngine=wiredTiger
       task_path_suffix: /data/multiversion
       fallback_num_sub_suites: 4
-
-# Check that the mutational fuzzer can parse JS files modified in a patch build.
-- name: lint_fuzzer_sanity_patch
-  patch_only: true
-  commands:
-  - command: manifest.load
-  - func: "git get project"
-  - func: "set task expansion macros"
-  - func: "get added and modified patch files"
-  - func: "setup jstestfuzz"
-  - func: "lint fuzzer sanity patch"
 
 # Check that the mutational fuzzer can parse all JS filess.
 - name: lint_fuzzer_sanity_all
