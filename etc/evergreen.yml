@@ -182,62 +182,6 @@ variables:
   timeout:
   - func: "run hang analyzer"
 
-# Use this template for enterprise Windows testing coverage on non-pushing
-# variants
-- &enterprise-windows-nopush-template
-  name: enterprise-windows-nopush-template
-  run_on:
-  - windows-64-vs2017-test
-  modules:
-  - enterprise
-  expansions: &enterprise-windows-nopush-expansions-template
-    platform_decompress: unzip
-    exe: ".exe"
-    msi_target: msi
-    content_type: application/zip
-    compile_flags: --ssl MONGO_DISTMOD=windows CPPPATH="c:/sasl/include c:/snmp/include" LIBPATH="c:/sasl/lib c:/snmp/lib" -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) --win-version-min=win10
-    # We invoke SCons using --jobs = (# of CPUs / 4) to avoid causing out of memory errors due to
-    # spawning a large number of linker processes.
-    num_scons_link_jobs_available: $(( $(grep -c ^processor /proc/cpuinfo) / 4 ))
-    python: '/cygdrive/c/python/python37/python.exe'
-    ext: zip
-    use_scons_cache: true
-    multiversion_platform: windows
-    multiversion_edition: enterprise
-    tooltags: "ssl sasl gssapi"
-    build_mongoreplay: false
-    jstestfuzz_num_generated_files: 35
-    large_distro_name: windows-64-vs2017-compile
-  tasks:
-  - name: compile_all_run_unittests_TG
-    requires:
-    - name: burn_in_tests_gen
-    distros:
-    - windows-64-vs2017-compile
-  - name: compile_benchmarks
-    distros:
-    - windows-64-vs2017-compile
-  - name: burn_in_tests_gen
-  - name: .aggfuzzer .common
-  - name: audit
-  - name: auth_audit_gen
-  - name: .benchmarks
-  - name: buildscripts_test
-  - name: causally_consistent_jscore_txns_passthrough
-  - name: .encrypt !.aggregation !.gcm
-  - name: external_auth
-  - name: external_auth_windows
-    distros:
-    - windows-64-2016
-  - name: .jscore .common !.compat !.sharding
-  - name: .jstestfuzz .common
-  - name: .logical_session_cache
-  - name: replica_sets_auth_gen
-  - name: sasl
-  - name: sharding_auth_gen
-  - name: sharding_auth_audit_gen
-  - name: snmp
-
 - &stitch_support_task_group_template
   name: stitch_support_task_group_template
   setup_task:
@@ -295,14 +239,6 @@ variables:
   - enterprise-ubuntu1804-arm64
   - enterprise-ubuntu1804-ppc64le
   - enterprise-ubuntu1804-s390x
-  - enterprise-windows
-  - enterprise-windows-async
-  - enterprise-windows-compile-all
-  - enterprise-windows-debug-unoptimized
-  - enterprise-windows-inmem
-  - enterprise-windows-nopush-template
-  - enterprise-windows-required
-  - enterprise-windows-wtdevelop
   - ubuntu1804-debug-asan
   - ubuntu1804-debug-ubsan
   - ubuntu1804-debug-aubsan-lite
@@ -319,7 +255,6 @@ variables:
   - enterprise-rhel-70-64-bit
   - enterprise-ubuntu1604-64
   - enterprise-ubuntu1804-64
-  - enterprise-windows
 
 # List of all variants that use the packages.tgz
 - package_variants: &package_variants
@@ -3436,7 +3371,7 @@ tasks:
         display_name: Source tarball
         # We only need to upload the source tarball from one of the build variants
         # because it should be the same everywhere, so just use rhel70/windows.
-        build_variants: [rhel70, windows]
+        build_variants: [rhel70]
     - command: s3.put
       params:
         optional: true
@@ -5351,14 +5286,6 @@ tasks:
       resmoke_args: --suites=external_auth --excludeWithAnyTags=requires_domain_controller --storageEngine=wiredTiger
 
 - <<: *task_template
-  name: external_auth_windows
-  commands:
-  - func: "do setup"
-  - func: "run tests"
-    vars:
-      resmoke_args: --suites=external_auth --includeWithAnyTags=requires_domain_controller --storageEngine=wiredTiger
-
-- <<: *task_template
   name: sharding_gle_auth_basics_passthrough
   tags: ["auth", "gle"]
   depends_on:
@@ -6947,7 +6874,7 @@ tasks:
         remote_file: ${project}/${build_variant}/${revision}/sources/mongo-src-${build_id}.${ext|tgz}
         bucket: mciuploads
         local_file: src/distsrc.${ext|tgz}
-        build_variants: [rhel70, windows]
+        build_variants: [rhel70]
     - func: "apply compile expansions"
     - func: "fetch debugsymbols archive"
     - func: "set up remote credentials"
@@ -7026,7 +6953,7 @@ tasks:
         permissions: public-read
         content_type: ${content_type|application/gzip}
         remote_file: ${push_path}-STAGE/${push_name}/mongodb-src-${src_suffix}-${task_id}.${ext|tar.gz}
-        build_variants: [rhel70, windows]
+        build_variants: [rhel70]
 
     # Put the debug symbols
     - command: s3.put
@@ -7084,7 +7011,7 @@ tasks:
         permissions: public-read
         content_type: ${content_type|application/gzip}
         remote_file: ${push_path}-STAGE/${push_name}/mongodb-src-${src_suffix}-${task_id}.${ext|tar.gz}.sig
-        build_variants: [rhel70, windows]
+        build_variants: [rhel70]
 
     # Put the debug symbols signature
     - command: s3.put
@@ -7097,18 +7024,6 @@ tasks:
         content_type: ${content_type|application/gzip}
         remote_file: ${push_path}-STAGE/${push_name}/mongodb-${push_name}-${push_arch}-debugsymbols-${suffix}-${task_id}.${ext|tgz}.sig
         optional: true
-
-    # Put the signed MSI file
-    - command: s3.put
-      params:
-        aws_key: ${aws_key}
-        aws_secret: ${aws_secret}
-        permissions: public-read
-        build_variants: ["enterprise-windows", "windows"]
-        local_file: src/mongodb-${push_arch}-${suffix}-signed.msi
-        bucket: build-push-testing
-        content_type: application/x-msi
-        remote_file: ${push_path}-STAGE/${push_name}/mongodb-${push_arch}-${suffix}-${task_id}-signed.msi
 
     # Put the binaries tarball sha1
     - command: s3.put
@@ -7154,7 +7069,7 @@ tasks:
         bucket: build-push-testing
         content_type: text/plain
         remote_file: ${push_path}-STAGE/${push_name}/mongodb-src-${src_suffix}-${task_id}.${ext|tar.gz}.sha1
-        build_variants: [rhel70, windows]
+        build_variants: [rhel70]
 
     # Put the debug symbols sha1
     - command: s3.put
@@ -7167,18 +7082,6 @@ tasks:
         content_type: text/plain
         remote_file: ${push_path}-STAGE/${push_name}/mongodb-${push_name}-${push_arch}-debugsymbols-${suffix}-${task_id}.${ext|tgz}.sha1
         optional: true
-
-    # Push the signed MSI sha1
-    - command: s3.put
-      params:
-        aws_key: ${aws_key}
-        aws_secret: ${aws_secret}
-        permissions: public-read
-        build_variants: ["enterprise-windows", "windows"]
-        local_file: src/mongodb-${push_arch}-${suffix}-signed.msi.sha1
-        bucket: build-push-testing
-        content_type: text/plain
-        remote_file: ${push_path}-STAGE/${push_name}/mongodb-${push_arch}-${suffix}-${task_id}-signed.msi.sha1
 
     # Put the binaries tarball sha256
     - command: s3.put
@@ -7224,7 +7127,7 @@ tasks:
         bucket: build-push-testing
         content_type: text/plain
         remote_file: ${push_path}-STAGE/${push_name}/mongodb-src-${src_suffix}-${task_id}.${ext|tar.gz}.sha256
-        build_variants: [rhel70, windows]
+        build_variants: [rhel70]
 
     # Put the debug symbols sha256
     - command: s3.put
@@ -7237,18 +7140,6 @@ tasks:
         content_type: text/plain
         remote_file: ${push_path}-STAGE/${push_name}/mongodb-${push_name}-${push_arch}-debugsymbols-${suffix}-${task_id}.${ext|tgz}.sha256
         optional: true
-
-    # Put the signed MSI sha256
-    - command: s3.put
-      params:
-        aws_key: ${aws_key}
-        aws_secret: ${aws_secret}
-        build_variants: ["enterprise-windows", "windows"]
-        local_file: src/mongodb-${push_arch}-${suffix}-signed.msi.sha256
-        bucket: build-push-testing
-        permissions: public-read
-        remote_file: ${push_path}-STAGE/${push_name}/mongodb-${push_arch}-${suffix}-${task_id}-signed.msi.sha256
-        content_type: text/plain
 
     # Put the binaries tarball md5
     - command: s3.put
@@ -7294,7 +7185,7 @@ tasks:
         permissions: public-read
         content_type: text/plain
         remote_file: ${push_path}-STAGE/${push_name}/mongodb-src-${src_suffix}-${task_id}.${ext|tar.gz}.md5
-        build_variants: [rhel70, windows]
+        build_variants: [rhel70]
 
     # Put the debug symbols md5
     - command: s3.put
@@ -7307,18 +7198,6 @@ tasks:
         permissions: public-read
         remote_file: ${push_path}-STAGE/${push_name}/mongodb-${push_name}-${push_arch}-debugsymbols-${suffix}-${task_id}.${ext|tgz}.md5
         optional: true
-
-    # Put the signed MSI md5
-    - command: s3.put
-      params:
-        aws_key: ${aws_key}
-        aws_secret: ${aws_secret}
-        build_variants: ["enterprise-windows", "windows"]
-        local_file: src/mongodb-${push_arch}-${suffix}-signed.msi.md5
-        bucket: build-push-testing
-        permissions: public-read
-        content_type: text/plain
-        remote_file: ${push_path}-STAGE/${push_name}/mongodb-${push_arch}-${suffix}-${task_id}-signed.msi.md5
 
     - command: s3Copy.copy
       params:
@@ -7346,12 +7225,7 @@ tasks:
             #Source tarball
             - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-src-${src_suffix}-${task_id}.${ext|tar.gz}', 'bucket': 'build-push-testing'},
                'destination': {'path': 'src/mongodb-src-${src_suffix}.${ext|tar.gz}', 'bucket': '${push_bucket}'},
-               'build_variants': ['rhel70', 'windows']}
-
-            #MSI (Windows only)
-            - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-${push_arch}-${suffix}-${task_id}-signed.msi', 'bucket': 'build-push-testing'},
-               'destination': {'path': '${push_path}/mongodb-${push_arch}-${suffix}-signed.msi', 'bucket': '${push_bucket}'},
-               'build_variants': ['enterprise-windows', 'windows']}
+               'build_variants': ['rhel70']}
 
             #Binaries Signature
             - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-${push_name}-${push_arch}-${suffix}-${task_id}.${ext|tgz}.sig', 'bucket': 'build-push-testing'},
@@ -7369,7 +7243,7 @@ tasks:
             #Source tarball signature
             - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-src-${src_suffix}-${task_id}.${ext|tar.gz}.sig', 'bucket': 'build-push-testing'},
                'destination': {'path': 'src/mongodb-src-${src_suffix}.${ext|tar.gz}.sig', 'bucket': '${push_bucket}'},
-               'build_variants': ['rhel70', 'windows']}
+               'build_variants': ['rhel70']}
 
             #SHA1 for binaries
             - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-${push_name}-${push_arch}-${suffix}-${task_id}.${ext|tgz}.sha1', 'bucket': 'build-push-testing'},
@@ -7387,12 +7261,7 @@ tasks:
             #SHA1 for source tarball
             - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-src-${src_suffix}-${task_id}.${ext|tar.gz}.sha1', 'bucket': 'build-push-testing'},
                'destination': {'path': 'src/mongodb-src-${src_suffix}.${ext|tar.gz}.sha1', 'bucket': '${push_bucket}'},
-               'build_variants': ['rhel70', 'windows']}
-
-            #SHA1 for MSI
-            - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-${push_arch}-${suffix}-${task_id}-signed.msi.sha1', 'bucket': 'build-push-testing'},
-               'destination': {'path': '${push_path}/mongodb-${push_arch}-${suffix}-signed.msi.sha1', 'bucket': '${push_bucket}'},
-               'build_variants': ['enterprise-windows', 'windows']}
+               'build_variants': ['rhel70']}
 
             #SHA256 for binaries
             - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-${push_name}-${push_arch}-${suffix}-${task_id}.${ext|tgz}.sha256', 'bucket': 'build-push-testing'},
@@ -7410,12 +7279,7 @@ tasks:
             #SHA256 for source tarball
             - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-src-${src_suffix}-${task_id}.${ext|tar.gz}.sha256', 'bucket': 'build-push-testing'},
                'destination': {'path': 'src/mongodb-src-${src_suffix}.${ext|tar.gz}.sha256', 'bucket': '${push_bucket}'},
-               'build_variants': ['rhel70', 'windows']}
-
-            #SHA256 for MSI files
-            - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-${push_arch}-${suffix}-${task_id}-signed.msi.sha256', 'bucket': 'build-push-testing'},
-               'destination': {'path': '${push_path}/mongodb-${push_arch}-${suffix}-signed.msi.sha256', 'bucket': '${push_bucket}'},
-               'build_variants': ['enterprise-windows', 'windows']}
+               'build_variants': ['rhel70']}
 
             #MD5 for binaries
             - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-${push_name}-${push_arch}-${suffix}-${task_id}.${ext|tgz}.md5', 'bucket': 'build-push-testing'},
@@ -7433,12 +7297,7 @@ tasks:
             #MD5 for source tarball
             - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-src-${src_suffix}-${task_id}.${ext|tar.gz}.md5', 'bucket': 'build-push-testing'},
                'destination': {'path': 'src/mongodb-src-${src_suffix}.${ext|tar.gz}.md5', 'bucket': '${push_bucket}'},
-               'build_variants': ['rhel70', 'windows']}
-
-            #MD5 for MSIs
-            - {'source': {'path': '${push_path}-STAGE/${push_name}/mongodb-${push_arch}-${suffix}-${task_id}-signed.msi.md5', 'bucket': 'build-push-testing'},
-               'destination': {'path': '${push_path}/mongodb-${push_arch}-${suffix}-signed.msi.md5', 'bucket': '${push_bucket}'},
-               'build_variants': ['enterprise-windows', 'windows']}
+               'build_variants': ['rhel70']}
 
     # Debug symbols are not created for all variants and the copy is optional.
     - command: s3Copy.copy
@@ -8467,376 +8326,6 @@ buildvariants:
   stepback: false
   tasks:
   - name: lint_fuzzer_sanity_all
-
-###########################################
-#         Windows buildvariants           #
-###########################################
-
-- name: enterprise-windows-required
-  display_name: "! Enterprise Windows"
-  batchtime: 60 # 1 hour
-  modules:
-    - enterprise
-  run_on:
-    - windows-64-vs2017-test
-  expansions: &enterprise_windows_expansions
-    burn_in_tests_build_variant: enterprise-windows
-    platform_decompress: unzip
-    exe: ".exe"
-    msi_target: msi
-    mh_target: archive-mh archive-mh-debug
-    content_type: application/zip
-    compile_flags: --ssl MONGO_DISTMOD=windows CPPPATH="c:/sasl/include c:/snmp/include" LIBPATH="c:/sasl/lib c:/snmp/lib" -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) --win-version-min=win10
-    # We invoke SCons using --jobs = (# of CPUs / 4) to avoid causing out of memory errors due to
-    # spawning a large number of linker processes.
-    num_scons_link_jobs_available: $(( $(grep -c ^processor /proc/cpuinfo) / 4 ))
-    python: '/cygdrive/c/python/python37/python.exe'
-    ext: zip
-    scons_cache_scope: shared
-    multiversion_platform: windows
-    multiversion_edition: enterprise
-    tooltags: "ssl sasl gssapi"
-    build_mongoreplay: false
-    jstestfuzz_num_generated_files: 35
-    target_resmoke_time: 20
-    large_distro_name: windows-64-vs2017-compile
-  tasks:
-    - name: compile_TG
-      requires:
-        - name: burn_in_tests_gen
-      distros:
-        - windows-64-vs2017-compile
-    - name: burn_in_tests_gen
-    - name: buildscripts_test
-    - name: unittest_shell_hang_analyzer_gen
-    - name: server_discovery_and_monitoring_json_test_TG
-    - name: dbtest_TG
-      distros:
-        - windows-64-vs2017-compile
-    - name: noPassthrough_gen
-
-- name: windows-debug
-  display_name: "* Windows DEBUG"
-  batchtime: 60 # 1 hour
-  run_on:
-  - windows-64-vs2017-test
-  expansions:
-    platform_decompress: unzip
-    exe: ".exe"
-    content_type: application/zip
-    compile_flags: --dbg=on --opt=on --win-version-min=win10 -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) MONGO_DISTMOD=windows
-    # We invoke SCons using --jobs = (# of CPUs / 4) to avoid causing out of memory errors due to
-    # spawning a large number of linker processes.
-    num_scons_link_jobs_available: $(( $(grep -c ^processor /proc/cpuinfo) / 4 ))
-    python: '/cygdrive/c/python/python37/python.exe'
-    ext: zip
-    scons_cache_scope: shared
-    multiversion_platform: windows
-    multiversion_edition: enterprise
-    tooltags: ""
-    build_mongoreplay: false
-    large_distro_name: windows-64-vs2017-compile
-  tasks:
-  - name: compile_all_run_unittests_TG
-    distros:
-    - windows-64-vs2017-compile
-  - name: .aggregation !.auth !.encrypt
-  - name: aggregation_expression_multiversion_fuzzer_gen
-  - name: aggregation_expression_optimization_fuzzer_gen
-  - name: auth_gen
-  - name: bulk_gle_passthrough
-  - name: .causally_consistent !.sharding
-  - name: .change_streams !.secondary_reads
-  - name: .misc_js !.non_win_dbg
-    # Some concurrency workloads require a lot of memory, so we use machines
-    # with more RAM for these suites.
-  - name: .concurrency !.ubsan !.no_txns !.kill_terminate
-    distros:
-      - windows-64-vs2017-compile
-  - name: disk_wiredtiger
-  - name: free_monitoring
-  - name: initial_sync_fuzzer_gen
-  - name: .integration !.audit
-    distros:
-    - windows-64-vs2017-compile
-  - name: .jscore .common !.auth !.sharding
-  - name: jsCore_txns_large_txns_format
-  - name: jsonSchema
-  - name: .logical_session_cache .one_sec
-  - name: multi_shard_multi_stmt_txn_jscore_passthrough_gen
-  - name: multi_stmt_txn_jscore_passthrough_with_migration_gen
-  - name: .read_write_concern !.large
-  - name: .read_write_concern .large
-    distros:
-    - windows-64-vs2017-compile
-  - name: .read_only
-  - name: .rollbackfuzzer
-  - name: .replica_sets !.large !.encrypt !.auth
-  - name: .replica_sets .large
-    distros:
-    - windows-64-vs2017-compile
-  - name: retryable_writes_jscore_passthrough_gen
-  - name: retryable_writes_jscore_stepdown_passthrough
-    distros:
-    - windows-64-vs2017-compile
-  - name: session_jscore_passthrough
-  - name: sharding_gen
-  - name: .stitch
-  - name: server_discovery_and_monitoring_json_test_TG
-
-- name: enterprise-windows
-  display_name: "* Enterprise Windows"
-  batchtime: 60 # 1 hour
-  modules:
-  - enterprise
-  run_on:
-  - windows-64-vs2017-test
-  expansions:
-    <<: *enterprise_windows_expansions
-    push_path: windows
-    push_bucket: downloads.10gen.com
-    push_name: windows
-    push_arch: x86-enterprise
-  tasks:
-  - name: compile_TG
-    requires:
-    - name: burn_in_tests_gen
-    distros:
-    - windows-64-vs2017-compile
-  - name: compile_benchmarks
-    distros:
-    - windows-64-vs2017-compile
-  - name: burn_in_tests_gen
-  - name: .aggfuzzer
-  - name: audit
-  - name: auth_audit_gen
-  - name: .benchmarks
-  - name: buildscripts_test
-  - name: causally_consistent_jscore_txns_passthrough
-  - name: dbtest_TG
-    distros:
-    - windows-64-vs2017-compile
-  - name: .encrypt !.aggregation !.replica_sets !.sharding !.jscore
-  - name: external_auth
-  - name: external_auth_windows
-    distros:
-    - windows-64-2016
-  - name: .jscore .common !.compat !.sharding
-  - name: jsCore_auth
-  - name: jsCore_ese
-  - name: jsCore_txns_large_txns_format
-  - name: .jstestfuzz .common
-  - name: noPassthrough_gen
-  - name: noPassthroughWithMongod_gen
-  - name: .replica_sets .common
-  - name: .replica_sets .multi_oplog
-  - name: replica_sets_ese_gen
-  - name: sasl
-  - name: .sharding .txns
-  - name: sharding_auth_gen
-  - name: sharding_auth_audit_gen
-  - name: sharding_ese_gen
-  - name: snmp
-  - name: push
-    distros:
-    - rhel70-small
-
-- <<: *enterprise-windows-nopush-template
-  name: enterprise-windows-wtdevelop
-  display_name: "~ Enterprise Windows WiredTiger develop"
-  modules:
-  - enterprise
-  - wtdevelop
-  expansions:
-    <<: *enterprise-windows-nopush-expansions-template
-    use_wt_develop: true
-
-- <<: *enterprise-windows-nopush-template
-  name: enterprise-windows-compile-all
-  display_name: "* Enterprise Windows compile_all"
-  batchtime: 60 # 1 hour
-  run_on:
-  - windows-64-vs2017-test
-  tasks:
-  - name: compile_all_run_unittests_TG
-    distros:
-    - windows-64-vs2017-compile
-  # Do not add more tasks to this list.
-
-- name: enterprise-windows-async
-  display_name: "~ Enterprise Windows async"
-  modules:
-  - enterprise
-  run_on:
-  - windows-64-vs2017-test
-  stepback: true
-  batchtime: 10080 # 7 days
-  expansions:
-    platform_decompress: unzip
-    exe: ".exe"
-    msi_target: msi
-    content_type: application/zip
-    compile_flags: --ssl MONGO_DISTMOD=windows CPPPATH="c:/sasl/include c:/snmp/include" LIBPATH="c:/sasl/lib c:/snmp/lib" -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) --win-version-min=win10
-    # We invoke SCons using --jobs = (# of CPUs / 4) to avoid causing out of memory errors due to
-    # spawning a large number of linker processes.
-    num_scons_link_jobs_available: $(( $(grep -c ^processor /proc/cpuinfo) / 4 ))
-    python: '/cygdrive/c/python/python37/python.exe'
-    ext: zip
-    scons_cache_scope: shared
-    test_flags: |- # Use the ServiceExecutorAdaptive with a reasonable number of starting threads
-        --serviceExecutor=adaptive \
-        --mongodSetParameters="adaptiveServiceExecutorReservedThreads: 8" \
-        --mongosSetParameters="adaptiveServiceExecutorReservedThreads: 8"
-    tooltags: "ssl sasl gssapi"
-    build_mongoreplay: false
-  tasks:
-  - name: compile_TG
-    distros:
-    - windows-64-vs2017-compile
-  - name: jsCore
-  - name: replica_sets
-  - name: sharding_gen
-
-- name: enterprise-windows-inmem
-  display_name: Enterprise Windows (inMemory)
-  modules:
-  - enterprise
-  run_on:
-  - windows-64-vs2017-test
-  expansions:
-    platform_decompress: unzip
-    exe: ".exe"
-    msi_target: msi
-    content_type: application/zip
-    compile_flags: --ssl MONGO_DISTMOD=windows CPPPATH="c:/sasl/include c:/snmp/include" LIBPATH="c:/sasl/lib c:/snmp/lib" -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) --win-version-min=win10
-    # We invoke SCons using --jobs = (# of CPUs / 4) to avoid causing out of memory errors due to
-    # spawning a large number of linker processes.
-    num_scons_link_jobs_available: $(( $(grep -c ^processor /proc/cpuinfo) / 4 ))
-    python: '/cygdrive/c/python/python37/python.exe'
-    test_flags: --storageEngine=inMemory --excludeWithAnyTags=requires_persistence,requires_journaling
-    ext: zip
-    scons_cache_scope: shared
-    multiversion_platform: windows
-    multiversion_edition: enterprise
-    tooltags: "ssl sasl gssapi"
-    build_mongoreplay: false
-    large_distro_name: windows-64-vs2017-compile
-  tasks:
-  - name: compile_all_run_unittests_TG
-    distros:
-    - windows-64-vs2017-compile
-  - name: .aggfuzzer .common
-  - name: audit
-  - name: auth_audit_gen
-  - name: causally_consistent_jscore_txns_passthrough
-  - name: .concurrency .common
-  - name: concurrency_replication_causal_consistency
-    distros:
-    - windows-64-vs2017-compile
-  - name: initial_sync_fuzzer_gen
-  - name: .jscore .common !.decimal !.compat !.sharding
-  - name: .jstestfuzz .common
-  - name: .logical_session_cache .one_sec
-  - name: .read_write_concern .linearize
-  - name: replica_sets_auth_gen
-  - name: replica_sets_jscore_passthrough
-  - name: replica_sets_multi_stmt_txn_jscore_passthrough
-  - name: sasl
-  - name: .sharding .txns
-  - name: sharding_auth_gen
-  - name: sharding_auth_audit_gen
-  - name: snmp
-  - name: .ssl
-
-- name: windows
-  display_name: Windows
-  run_on:
-  - windows-64-vs2017-test
-  expansions:
-    platform_decompress: unzip
-    exe: ".exe"
-    push_path: windows
-    push_bucket: downloads.mongodb.org
-    push_name: windows
-    push_arch: x64
-    multiversion_platform: windows_x86_64-2008plus-ssl
-    multiversion_platform_42_or_later: windows_x86_64-2012plus
-    msi_target: msi
-    content_type: application/zip
-    compile_flags: --ssl MONGO_DISTMOD=windows -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) --win-version-min=win10
-    # We invoke SCons using --jobs = (# of CPUs / 4) to avoid causing out of memory errors due to
-    # spawning a large number of linker processes.
-    num_scons_link_jobs_available: $(( $(grep -c ^processor /proc/cpuinfo) / 4 ))
-    python: '/cygdrive/c/python/python37/python.exe'
-    ext: zip
-    scons_cache_scope: shared
-    tooltags: "ssl"
-    build_mongoreplay: false
-    large_distro_name: windows-64-vs2017-compile
-  tasks:
-  - name: compile_all_run_unittests_TG
-    distros:
-    - windows-64-vs2017-compile
-  - name: .aggfuzzer .common
-  - name: .aggregation !.auth !.encrypt !.unwind
-  - name: auth_gen
-  - name: .auth .gle
-  - name: causally_consistent_jscore_txns_passthrough
-  - name: .misc_js
-  - name: .concurrency .common !.txn
-  - name: concurrency_replication_causal_consistency
-    distros:
-    - windows-64-vs2017-compile
-  - name: disk_wiredtiger
-  - name: free_monitoring
-  - name: .jscore .common !.auth
-  - name: jsonSchema
-  - name: .jstestfuzz !.initsync
-  - name: .logical_session_cache .one_sec
-  - name: multiversion
-  - name: multiversion_auth
-  - name: .query_fuzzer
-  - name: .read_write_concern
-  - name: replica_sets
-  - name: replica_sets_jscore_passthrough
-  - name: .sharding .jscore !.wo_snapshot !.multi_stmt
-  - name: .sharding .txns
-  - name: .sharding .common !.op_query !.csrs
-  - name: .ssl
-  - name: .stitch
-  - name: .updatefuzzer
-  - name: push
-    distros:
-    - rhel70-small
-
-- name: enterprise-windows-debug-unoptimized
-  display_name: Enterprise Windows DEBUG (Unoptimized)
-  modules:
-  - enterprise
-  run_on:
-  - windows-64-vs2017-test
-  expansions:
-    platform_decompress: unzip
-    exe: ".exe"
-    content_type: application/zip
-    compile_flags: --dbg=on --opt=off --ssl MONGO_DISTMOD=windows CPPPATH="c:/sasl/include c:/snmp/include" LIBPATH="c:/sasl/lib c:/snmp/lib" -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) --win-version-min=win10
-    # We invoke SCons using --jobs = (# of CPUs / 4) to avoid causing out of memory errors due to
-    # spawning a large number of linker processes.
-    num_scons_link_jobs_available: $(( $(grep -c ^processor /proc/cpuinfo) / 4 ))
-    python: '/cygdrive/c/python/python37/python.exe'
-    ext: zip
-    scons_cache_scope: shared
-    tooltags: "ssl sasl gssapi"
-    build_mongoreplay: false
-  tasks:
-  # This variant tests that unoptimized, DEBUG mongos and mongod binaries can run on Windows.
-  # It has a minimal amount of tasks because unoptimized builds are slow, which causes
-  # timing-sensitive tests to fail.
-  - name: compile_TG
-    distros:
-    - windows-64-vs2017-compile
-  - name: audit
-  # Do not add more tasks to this list.
 
 ###########################################
 #             OSX buildvariants           #
@@ -11301,15 +10790,6 @@ buildvariants:
   stepback: false
   tasks:
   - name: shared_scons_cache_pruning
-
-
-- name: windows-shared-scons-cache-pruning
-  display_name: "Windows shared SCons Cache Pruning"
-  run_on:
-  - windows-64-vs2017-test
-  stepback: false
-  tasks:
-  - name: win_shared_scons_cache_pruning
 
 - name: commit-queue
   display_name: "~ Commit Queue"
