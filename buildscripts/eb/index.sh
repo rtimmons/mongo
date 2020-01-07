@@ -8,7 +8,7 @@ export EB_REPO_ROOT=$(pwd -P)
 
 if [[ ! -d ./build/eb_venv ]]; then
     python3 -m pip install virtualenv
-    virtualenv ./build/eb_venv
+    python3 -m virtualenv ./build/eb_venv
     source ./build/eb_venv/bin/activate
     pushd ./buildscripts/eb >/dev/null
         python3 setup.py develop
