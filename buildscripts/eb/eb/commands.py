@@ -13,6 +13,37 @@ def _create_env(env: typ.Mapping[str, str],
     return out
 
 
+def _run_sh(args: typ.List[str],  env: typ.Mapping[str, str], cwd:str):
+    subprocess.run(args,
+                   env=env,
+                   shell=False,
+                   check=True,
+                   stdin=sys.stdin,
+                   stdout=sys.stdout,
+                   cwd=cwd)
+
+
+# lol idk if this really needs to be a different function versus _run_sh
+def _run_py(args: typ.List[str],  env: typ.Mapping[str, str], cwd:str):
+    subprocess.run(args,
+                   env=env,
+                   shell=False,
+                   check=True,
+                   stdin=sys.stdin,
+                   stdout=sys.stdout,
+                   cwd=cwd)
+
+
+def _runner_and_fname(dirname: str, command_no_suffix: str):
+    sh = os.path.join(dirname, f"{command_no_suffix}.sh")
+    py = os.path.join(dirname, f"{command_no_suffix}.py")
+    sh_exists = os.path.exists(sh)
+    py_exists = os.path.exists(py)
+    if not sh_exists ^ py_exists:
+        raise Exception(f"Need exactly one of {sh} xor {py}")
+    return (sh, _run_sh) if sh_exists else (py, _run_py)
+
+
 def dispatch(args: typ.List[str],
              env: typ.Mapping[str, str],
              repo_root: str,
@@ -24,17 +55,9 @@ def dispatch(args: typ.List[str],
     scripts_dir = os.path.join(repo_root, 'buildscripts', 'eb', 'eb', 'scripts')
     if not os.path.isdir(scripts_dir):
         raise Exception(f"Cannot find scripts_dir {scripts_dir}")
-    to_run = os.path.join(scripts_dir, command) + ".sh"
-    if not os.path.isfile(to_run):
-        raise Exception(f"Command script {to_run} doesn't exist.")
     subp_env = _create_env(env, expansions)
-    subprocess.run([to_run],
-                   env=subp_env,
-                   shell=False,
-                   check=True,
-                   stdin=sys.stdin,
-                   stdout=sys.stdout,
-                   cwd=repo_root)
+    (script, runner) = _runner_and_fname(scripts_dir, command)
+    runner([script], subp_env, repo_root)
 
 
 
