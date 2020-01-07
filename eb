@@ -1,3 +1,5 @@
 #!/usr/bin/env bash
 
-source ./buildscripts/eb/index.sh
+pushd $(dirname "$0") >/dev/null
+    source ./buildscripts/eb/index.sh
+popd >/dev/null

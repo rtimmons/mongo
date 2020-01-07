@@ -7,6 +7,7 @@ setup(name='eb',
       ],
       install_requires=[
           'nose==1.3.7',
+          'pyyaml==5.3'
       ],
       setup_requires=[
           'nose==1.3.7'
