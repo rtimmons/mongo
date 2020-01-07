@@ -1729,6 +1729,11 @@ functions:
 
           ${compile_env|} python3 ./buildscripts/scons.py ${compile_flags|} $extra_flags --stack-size=1024 GITDIFFFLAGS="--cached" ${targets}
 
+  "write eb expansions":
+    command: expansions.write
+    params:
+      file: build/Expansions.yml
+
   "scons compile":
     command: shell.exec
     type: test
@@ -1736,58 +1741,7 @@ functions:
       working_dir: src
       shell: bash
       script: |
-        set -o errexit
-        set -o verbose
-
-        if [ "${is_patch}" = "true" ] && [ "${bypass_compile|false}" = "true" ]; then
-          exit 0
-        fi
-        rm -rf ${install_directory|/data/mongo-install-directory}
-
-        extra_args=""
-        if [ -n "${num_scons_link_jobs_available|}" ]; then
-          echo "Changing SCons to run with --jlink=${num_scons_link_jobs_available|}"
-          extra_args="$extra_args --jlink=${num_scons_link_jobs_available|}"
-        fi
-
-        if [ "${scons_cache_scope|}" = "shared" ]; then
-          extra_args="$extra_args --cache-debug=scons_cache.log"
-        fi
-
-        # Enable performance debugging
-        extra_args="$extra_args --debug=time"
-
-        # If we are doing a patch build or we are building a non-push
-        # build on the waterfall, then we don't need the --release
-        # flag. Otherwise, this is potentially a build that "leaves
-        # the building", so we do want that flag. The non --release
-        # case should auto enale the faster decider when
-        # applicable. Furthermore, for the non --release cases we can
-        # accelerate the build slightly for situations where we invoke
-        # SCons multiple times on the same machine by allowing SCons
-        # to assume that implicit dependencies are cacheable across
-        # runs.
-        if [ "${is_patch|false}" = "true" ] || [ -z "${push_bucket|}" ] || [ "${compiling_for_test|false}" = "true" ]; then
-          extra_args="$extra_args --implicit-cache --build-fast-and-loose=on"
-        else
-          extra_args="$extra_args --release"
-        fi
-
-        ${activate_virtualenv}
-
-        ${compile_env|} $python ./buildscripts/scons.py                                     \
-            ${compile_flags|} ${task_compile_flags|} ${task_compile_flags_extra|}           \
-            ${scons_cache_args|} $extra_args                                                \
-            ${targets} ${additional_targets|} MONGO_VERSION=${version} || exit_status=$?
-        # If compile fails we do not run any tests
-        if [[ $exit_status -ne 0 ]]; then
-          if [[ "${dump_scons_config_on_failure}" == true ]]; then
-            echo "Dumping build/scons/config.log"
-            cat build/scons/config.log
-          fi
-          touch ${skip_tests}
-        fi
-        exit $exit_status
+        ./eb scons_compile
 
   "generate compile expansions":
     command: shell.exec
@@ -3650,6 +3604,7 @@ tasks:
   depends_on: []
   commands:
     - func: "build new tools"
+    - func: "write eb expansions"
     - func: "scons compile"
       vars:
         targets: >-
