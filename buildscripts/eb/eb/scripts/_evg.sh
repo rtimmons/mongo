@@ -10,3 +10,7 @@ function save_artifact() {
     echo "Copying $artifact to $repo_root/build/Artifacts/$artifact"
 }
 
+# TODO: _sudo
+# TODO: _zip/_unzip/_tar_cfz/_tar_xfz
+# TODO: _run_python
+# TODO:
