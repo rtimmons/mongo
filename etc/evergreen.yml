@@ -80,13 +80,6 @@ variables:
   commands:
   - func: "generate fuzzer tasks"
 
-- &multiversion_template
-  name: multiversion_template
-  exec_timeout_secs: 14400 # Time out the task if it runs for more than 4 hours.
-  depends_on: []
-  commands:
-  - func: "generate multiversion tasks"
-
 - &compile_task_group_template
   name: compile_task_group_template
   max_hosts: 1
@@ -975,55 +968,6 @@ functions:
   - *monitor_process_threads
   - *collect_system_resource_info
 
-  "do multiversion setup": &do_multiversion_setup
-    command: shell.exec
-    params:
-      working_dir: src
-      script: |
-        set -o errexit
-        set -o verbose
-
-        ${activate_virtualenv}
-
-        rm -rf /data/install /data/multiversion
-
-        edition="${multiversion_edition|base}"
-        platform="${multiversion_platform|linux}"
-        architecture="${multiversion_architecture|x86_64}"
-
-        $python buildscripts/setup_multiversion_mongodb.py   \
-          --installDir /data/install                         \
-          --linkDir /data/multiversion                       \
-          --edition $edition                                 \
-          --platform $platform                               \
-          --architecture $architecture                       \
-          --useLatest 3.2 3.4 3.6 4.0
-
-        # The platform and architecture for how some of the binaries are reported in
-        # https://downloads.mongodb.org/full.json changed between MongoDB 4.0 and MongoDB 4.2.
-        # Certain build variants define additional multiversion_*_42_or_later expansions in order to
-        # be able to fetch a complete set of versions.
-
-        if [ ! -z "${multiversion_edition_42_or_later}" ]; then
-          edition="${multiversion_edition_42_or_later}"
-        fi
-
-        if [ ! -z "${multiversion_platform_42_or_later}" ]; then
-          platform="${multiversion_platform_42_or_later}"
-        fi
-
-        if [ ! -z "${multiversion_architecture_42_or_later}" ]; then
-          architecture="${multiversion_architecture_42_or_later}"
-        fi
-
-        $python buildscripts/setup_multiversion_mongodb.py   \
-          --installDir /data/install                         \
-          --linkDir /data/multiversion                       \
-          --edition $edition                                 \
-          --platform $platform                               \
-          --architecture $architecture                       \
-          --useLatest 4.2 4.2.1
-
   "execute resmoke tests": &execute_resmoke_tests
     command: shell.exec
     type: test
@@ -1222,61 +1166,6 @@ functions:
       params:
         files:
           - src/generated_burn_in_tags_config/burn_in_tags_gen.json
-
-  "generate randomized multiversion tasks":
-    - command: manifest.load
-    - *git_get_project
-    - *set_task_expansion_macros
-    - *set_up_virtualenv
-    - *upload_pip_requirements
-    - *configure_evergreen_api_credentials
-    - command: expansions.write
-      params:
-        file: src/expansions.yml
-
-    - command: shell.exec
-      type: test
-      params:
-        working_dir: src
-        script: |
-          set -o errexit
-
-          ${activate_virtualenv}
-          $python buildscripts/evergreen_generate_resmoke_tasks.py --expansion-file expansions.yml --verbose
-    - *do_multiversion_setup
-    - command: shell.exec
-      params:
-        working_dir: src
-        script: |
-          set -o errexit
-          set -o verbose
-
-          ${activate_virtualenv}
-          $python buildscripts/evergreen_gen_multiversion_tests.py generate-exclude-files --suite=${suite} --task-path-suffix=${use_multiversion} --is-generated-suite=true
-    - command: archive.targz_pack
-      params:
-        target: generate_tasks_config.tgz
-        source_dir: src/generated_resmoke_config
-        include:
-          - "*"
-
-    - command: s3.put
-      params:
-        aws_key: ${aws_key}
-        aws_secret: ${aws_secret}
-        local_file: generate_tasks_config.tgz
-        remote_file: ${project}/${build_variant}/${revision}/generate_tasks/${task_name}-${build_id}.tgz
-        bucket: mciuploads
-        permissions: public-read
-        content_type: ${content_type|application/gzip}
-        display_name: Generated Task Config - Execution ${execution}
-        optional: true
-
-    - command: generate.tasks
-      params:
-        optional: true
-        files:
-          - src/generated_resmoke_config/*.json
 
   "generate resmoke tasks":
     - command: manifest.load
@@ -1548,59 +1437,6 @@ functions:
           set -o errexit
           echo "const AWS_KMS_SECRET_ID = '${aws_kms_access_key_id}';" >> src/mongo/db/modules/enterprise/jstests/fle/lib/aws_secrets.js
           echo "const AWS_KMS_SECRET_KEY = '${aws_kms_secret_access_key}';" >> src/mongo/db/modules/enterprise/jstests/fle/lib/aws_secrets.js
-
-  "generate multiversion tasks":
-    - command: manifest.load
-    - *git_get_project
-    - *set_task_expansion_macros
-    - *set_up_virtualenv
-    - *configure_evergreen_api_credentials
-    - command: expansions.write
-      params:
-        file: src/expansions.yml
-    - *do_multiversion_setup
-    - command: shell.exec
-      params:
-        working_dir: src
-        script: |
-          set -o errexit
-          set -o verbose
-
-          ${activate_virtualenv}
-          $python buildscripts/evergreen_gen_multiversion_tests.py run --expansion-file expansions.yml
-
-    - command: shell.exec
-      params:
-        working_dir: src
-        script: |
-          set -o errexit
-          set -o verbose
-
-          ${activate_virtualenv}
-          $python buildscripts/evergreen_gen_multiversion_tests.py generate-exclude-files --suite=${task_name} --task-path-suffix=${task_path_suffix} --is-generated-suite=true
-
-    - command: archive.targz_pack
-      params:
-        target: generate_tasks_config.tgz
-        source_dir: src/generated_resmoke_config
-        include:
-          - "*"
-
-    - command: s3.put
-      params:
-        aws_key: ${aws_key}
-        aws_secret: ${aws_secret}
-        local_file: generate_tasks_config.tgz
-        remote_file: ${project}/${build_variant}/${revision}/generate_tasks/${task_name}-${build_id}.tgz
-        bucket: mciuploads
-        permissions: public-read
-        content_type: ${content_type|application/gzip}
-        display_name: Generated Task Config - Execution ${execution}
-
-    - command: generate.tasks
-      params:
-        files:
-          - src/generated_resmoke_config/*.json
 
   "generate fuzzer tasks":
     - command: manifest.load
@@ -3746,78 +3582,6 @@ tasks:
       files:
         - src/burn_in_tests_gen.json
 
-- name: burn_in_tests_multiversion_gen
-  commands:
-  - command: manifest.load
-  - func: "git get project"
-  - func: "set task expansion macros"
-  - func: "set up virtualenv"
-  - func: "upload pip requirements"
-  - func: "configure evergreen api credentials"
-  - command: shell.exec
-    type: test
-    params:
-      working_dir: src
-      shell: bash
-      script: |
-        set -o errexit
-        set -o verbose
-
-        ${activate_virtualenv}
-        # Capture a list of new and modified tests. The expansion macro burn_in_tests_build_variant
-        # is used for finding the associated tasks from a different build variant than the
-        # burn_in_tests_multiversion_gen task executes on.
-        build_variant_opts="--build-variant=${build_variant}"
-        if [ -n "${burn_in_tests_build_variant|}" ]; then
-          build_variant_opts="--build-variant=${burn_in_tests_build_variant} --run-build-variant=${build_variant}"
-        fi
-
-        burn_in_args="$burn_in_args"
-        # Evergreen executable is in $HOME.
-        PATH=$PATH:$HOME $python buildscripts/burn_in_tests.py --task_id=${task_id} --project=${project} $build_variant_opts --distro=${distro_id} --generate-tasks-file=burn_in_tests_multiversion_gen.json $burn_in_args --use-multiversion --verbose
-
-  - command: archive.targz_pack
-    params:
-      target: src/burn_in_tests_multiversion_gen.tgz
-      source_dir: src
-      include:
-        - burn_in_tests_multiversion_gen.json
-
-  - command: archive.targz_pack
-    params:
-      target: generate_tasks_config.tgz
-      source_dir: src/generated_resmoke_config
-      include:
-        - "*"
-
-  - command: s3.put
-    params:
-      aws_key: ${aws_key}
-      aws_secret: ${aws_secret}
-      local_file: generate_tasks_config.tgz
-      remote_file: ${project}/${build_variant}/${revision}/generate_tasks/burn_in_tests_multiversion_gen-${build_id}.tgz
-      bucket: mciuploads
-      permissions: public-read
-      content_type: ${content_type|application/gzip}
-      optional: true
-      display_name: Generated Multiversion Resmoke.py Suite Config - Execution ${execution}
-
-  - command: s3.put
-    params:
-      aws_key: ${aws_key}
-      aws_secret: ${aws_secret}
-      local_file: src/burn_in_tests_multiversion_gen.tgz
-      remote_file: ${project}/${build_variant}/${revision}/generate_tasks/burn_in_tests_multiversion_gen_config-${build_id}.tgz
-      bucket: mciuploads
-      permissions: public-read
-      content_type: ${content_type|application/gzip}
-      display_name: Burn_in_tests Task Config - Execution ${execution}
-
-  - command: generate.tasks
-    params:
-      files:
-        - src/burn_in_tests_multiversion_gen.json
-
 ## initial sync multiversion fuzzer ##
 - <<: *jstestfuzz_template
   name: initial_sync_multiversion_fuzzer_gen
@@ -4310,21 +4074,6 @@ tasks:
       resmoke_args: "--storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: jstestfuzz_replication
 
-## jstestfuzz replica set ##
-- <<: *jstestfuzz_template
-  name: jstestfuzz_replication_multiversion_gen
-  tags: ["jstestfuzz_multiversion_gen"]
-  commands:
-  - func: "generate multiversion tasks"
-    vars:
-      <<: *jstestfuzz_config_vars
-      jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: "--storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
-      suite: jstestfuzz_replication
-      is_jstestfuzz: true
-      use_multiversion: /data/multiversion
-      npm_command: jstestfuzz
-
 ## jstestfuzz initial sync replica set ##
 - <<: *jstestfuzz_template
   name: jstestfuzz_replication_initsync_gen
@@ -4366,21 +4115,6 @@ tasks:
       resmoke_args: "--storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: jstestfuzz_sharded
 
-## jstestfuzz sharded multiversion cluster ##
-- <<: *jstestfuzz_template
-  name: jstestfuzz_sharded_multiversion_gen
-  tags: [jstestfuzz_multiversion_gen]
-  commands:
-  - func: "generate multiversion tasks"
-    vars:
-      <<: *jstestfuzz_config_vars
-      jstestfuzz_vars: --jsTestsDir ../jstests
-      resmoke_args: "--storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
-      suite: jstestfuzz_sharded
-      is_jstestfuzz: true
-      use_multiversion: /data/multiversion
-      npm_command: jstestfuzz
-
 ## jstestfuzz sharded cluster causal consistency ##
 - <<: *jstestfuzz_template
   name: jstestfuzz_sharded_causal_consistency_gen
@@ -4421,16 +4155,6 @@ tasks:
       suite: jstestfuzz_sharded_session
       resmoke_args: "--storageEngine=wiredTiger --mongodSetParameters='{logComponentVerbosity: {command: 2}}'"
       name: jstestfuzz_sharded_session
-
-- name: replica_sets_jscore_multiversion_passthrough_gen
-  tags: ["multiversion_passthrough"]
-  commands:
-  - func: "generate multiversion tasks"
-    vars:
-      suite: replica_sets_jscore_passthrough
-      resmoke_args: --storageEngine=wiredTiger
-      task_path_suffix: /data/multiversion
-      fallback_num_sub_suites: 4
 
 # Check that the mutational fuzzer can parse all JS filess.
 - name: lint_fuzzer_sanity_all
@@ -4603,17 +4327,6 @@ tasks:
       resmoke_args: --suites=change_streams --storageEngine=wiredTiger
 
 - <<: *task_template
-  name: change_streams_multiversion_gen
-  tags: ["multiversion_passthrough"]
-  commands:
-  - func: "generate multiversion tasks"
-    vars:
-      suite: change_streams
-      resmoke_args: --storageEngine=wiredTiger
-      task_path_suffix: /data/multiversion
-      fallback_num_sub_suites: 4
-
-- <<: *task_template
   name: change_streams_mongos_sessions_passthrough
   tags: ["change_streams"]
   depends_on:
@@ -4656,19 +4369,6 @@ tasks:
   - func: "run tests"
     vars:
       resmoke_args: --suites=change_streams_sharded_collections_passthrough --storageEngine=wiredTiger
-
-- <<: *task_template
-  name: change_streams_sharded_collections_multiversion_passthrough_gen
-  tags: ["multiversion_passthrough"]
-  depends_on:
-  - name: change_streams_multiversion_gen
-  commands:
-  - func: "generate multiversion tasks"
-    vars:
-      suite: change_streams_sharded_collections_passthrough
-      resmoke_args: --storageEngine=wiredTiger
-      task_path_suffix: /data/multiversion
-      fallback_num_sub_suites: 4
 
 - <<: *task_template
   name: change_streams_whole_db_passthrough
@@ -5303,27 +5003,6 @@ tasks:
     vars:
       resmoke_args: --suites=mongos_test
 
-- <<: *task_template
-  name: multiversion_auth
-  tags: ["auth", "multiversion"]
-  commands:
-  - func: "do setup"
-  - func: "do multiversion setup"
-  - func: "run tests"
-    vars:
-      task_path_suffix: /data/multiversion
-      resmoke_args: --suites=multiversion_auth --storageEngine=wiredTiger
-
-- <<: *task_template
-  name: multiversion
-  commands:
-  - func: "do setup"
-  - func: "do multiversion setup"
-  - func: "run tests"
-    vars:
-      task_path_suffix: /data/multiversion
-      resmoke_args: --suites=multiversion --storageEngine=wiredTiger
-
 - name: unittest_shell_hang_analyzer_gen
   tags: ["misc_js", "sharded"]
   commands:
@@ -5391,17 +5070,6 @@ tasks:
       resmoke_args: --suites=sharded_collections_jscore_passthrough --storageEngine=wiredTiger
 
 - <<: *task_template
-  name: sharded_collections_jscore_multiversion_passthrough_gen
-  tags: ["multiversion_passthrough"]
-  commands:
-  - func: "generate multiversion tasks"
-    vars:
-      suite: sharded_collections_jscore_passthrough
-      resmoke_args: --storageEngine=wiredTiger
-      task_path_suffix: /data/multiversion
-      fallback_num_sub_suites: 4
-
-- <<: *task_template
   name: sharding_jscore_passthrough
   tags: ["sharding", "jscore", "common"]
   depends_on:
@@ -5411,17 +5079,6 @@ tasks:
   - func: "run tests"
     vars:
       resmoke_args: --suites=sharding_jscore_passthrough --storageEngine=wiredTiger
-
-- <<: *task_template
-  name: sharding_jscore_multiversion_passthrough_gen
-  tags: ["multiversion_passthrough"]
-  commands:
-  - func: "generate multiversion tasks"
-    vars:
-      suite: sharding_jscore_passthrough
-      resmoke_args: --storageEngine=wiredTiger
-      task_path_suffix: /data/multiversion
-      fallback_num_sub_suites: 4
 
 - <<: *task_template
   name: sharding_jscore_op_query_passthrough
@@ -5562,17 +5219,6 @@ tasks:
       resmoke_jobs_max: 1
 
 - <<: *task_template
-  name: concurrency_replication_multiversion_gen
-  tags: [multiversion_passthrough]
-  commands:
-  - func: "generate multiversion tasks"
-    vars:
-      suite: concurrency_replication
-      resmoke_args: --storageEngine=wiredTiger
-      task_path_suffix: /data/multiversion
-      fallback_num_sub_suites: 4
-
-- <<: *task_template
   name: concurrency_replication_causal_consistency
   tags: ["concurrency", "repl", "large"]
   commands:
@@ -5652,17 +5298,6 @@ tasks:
     vars:
       resmoke_args: --suites=concurrency_sharded_replication --storageEngine=wiredTiger
       resmoke_jobs_max: 1
-
-- <<: *task_template
-  name: concurrency_sharded_replication_multiversion_gen
-  tags: [multiversion_passthrough]
-  commands:
-  - func: "generate multiversion tasks"
-    vars:
-      suite: concurrency_sharded_replication
-      resmoke_args: --storageEngine=wiredTiger
-      task_path_suffix: /data/multiversion
-      fallback_num_sub_suites: 4
 
 - <<: *task_template
   name: concurrency_sharded_replication_with_balancer
@@ -5998,27 +5633,6 @@ tasks:
       fallback_num_sub_suites: 15
 
 - <<: *task_template
-  name: replica_sets_multiversion
-  tags: ["random_multiversion_replica_sets"]
-  commands:
-  - func: "git get project"
-  - func: "do setup"
-  - func: "do multiversion setup"
-  - command: shell.exec
-    params:
-      working_dir: src
-      script: |
-        set -o errexit
-        set -o verbose
-
-        ${activate_virtualenv}
-        $python buildscripts/evergreen_gen_multiversion_tests.py generate-exclude-files --suite=replica_sets_multiversion --task-path-suffix=/data/multiversion --is-generated-suite=false
-  - func: "run tests"
-    vars:
-      task_path_suffix: /data/multiversion
-      resmoke_args: --suites=replica_sets_multiversion --storageEngine=wiredTiger
-
-- <<: *task_template
   name: sasl
   commands:
   - func: "do setup"
@@ -6034,17 +5648,6 @@ tasks:
       use_large_distro: "true"
       resmoke_args: --storageEngine=wiredTiger
       fallback_num_sub_suites: 32
-
-- name: sharding_multiversion_gen
-  tags: ["random_multiversion_replica_sets"]
-  commands:
-  - func: "generate randomized multiversion tasks"
-    vars:
-      use_large_distro: "true"
-      resmoke_args: --storageEngine=wiredTiger
-      fallback_num_sub_suites: 32
-      use_multiversion: /data/multiversion
-      suite: sharding_multiversion
 
 - name: sharding_rs_matching_disabled_gen
   tags: ["sharding", "common"]
