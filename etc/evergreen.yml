@@ -3603,10 +3603,15 @@ tasks:
   depends_on: []
   commands:
     - func: "build new tools"
+
     - command: expansions.write
       params:
         file: build/Expansions.yml
     - func: "scons compile"
+    - func: "tasks.generate"
+      params:
+        file: build/Tasks.json
+
     - command: shell.exec
       type: test
       params:

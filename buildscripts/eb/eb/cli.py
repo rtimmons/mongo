@@ -18,6 +18,11 @@ def _trim_env(env: typ.Mapping[str,str]):
     return {key: value for (key, value) in env.items() if key.startswith("EB_") or key == "PATH"}
 
 
+def create_task_json():
+    # create one task for each build/Tasks/* whatever
+    pass
+
+
 def main(args: typ.List[str] = None, env: typ.Mapping[str,str] = None):
     if args is None:
         args = sys.argv
@@ -32,5 +37,8 @@ def main(args: typ.List[str] = None, env: typ.Mapping[str,str] = None):
     print(f"Loaded expansions {expansions}")
 
     commands.dispatch(args, env, repo_root, expansions)
+
+    create_task_json()
+
 
 
