@@ -4,8 +4,9 @@ import platform
 import os
 import sys
 
-print(sys.path)
-print(platform.platform())
-print(os.environ)
-print(sys.implementation)
+print(f"sys.executable={sys.executable}")
+print(f"sys.path={sys.path}")
+print(f"platform.platform()={platform.platform()}")
+print(f"os.environ[\"PATH\"]={os.environ['PATH']}")
+print(f"sys.implementation={sys.implementation}")
 
