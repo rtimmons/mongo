@@ -6,16 +6,21 @@ if [[ -e "/opt/mongodbtoolchain/v3/bin" ]]; then
 fi
 
 EB_REPO_ROOT=$(git rev-parse --git-dir)/..
-cd "$EB_REPO_ROOT"
-export EB_REPO_ROOT=$(pwd -P)
+cd "$EB_REPO_ROOT" || exit 1
+
+EB_REPO_ROOT=$(pwd -P)
+export EB_REPO_ROOT
 
 if [[ ! -d ./build/eb_venv ]]; then
-    python3 -m pip install virtualenv
+    python3 -m pip install virtualenv --isolated -q -q
     python3 -m virtualenv ./build/eb_venv
     source ./build/eb_venv/bin/activate
-    pushd ./buildscripts/eb >/dev/null
-        python3 setup.py develop
-    popd >/dev/null
+    pushd ./buildscripts/eb || exit 1 >/dev/null
+        if ! python3 setup.py --no-user-cfg -q -q install > ./build/eb_setup.log 2>&1; then
+            cat ./build/eb_setup.log 2>&1
+            exit 2
+        fi
+    popd >/dev/null || exit 1
 else
     source ./build/eb_venv/bin/activate
 fi

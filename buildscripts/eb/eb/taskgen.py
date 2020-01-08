@@ -40,6 +40,13 @@ Output:
 Note there are a few "preamble" things before/after
 that will be added to e.g. write `build/Expansions.yml`
 if needed, etc.
+
+This format is intentionally easy for even shell scripts
+to write. Future versions of "eb" could easily re-run
+itself with generated tasks allowing a build to be done
+fully locally even though on evergreen it would be run
+as multiple distinct tasks.
+
 """
 
 import copy
