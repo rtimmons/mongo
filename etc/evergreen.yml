@@ -3603,8 +3603,9 @@ tasks:
     #       much as possible.
     - command: shell.exec
       type: test
-      working_dir: src
-      script: pwd; ls; mkdir -p build; ls; ls build
+      params:
+        working_dir: src
+        script: "mkdir -p build"
     - command: expansions.write
       params:
         file: src/build/Expansions.yml
