@@ -1,13 +1,7 @@
 #!/usr/bin/env bash
 
-targets=(
+_scons_compile_targets=(
   all
-)
-
-compile_flags=(
-  --use-new-tools
-  "--build-mongoreplay=${EB_X_build_mongoreplay}"
-  --detect-odr-violations
 )
 
 # TODO setup python virtualenv for Server

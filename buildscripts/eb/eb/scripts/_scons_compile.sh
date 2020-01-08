@@ -48,7 +48,7 @@ fi
 
 set -x
 ${EB_X_compile_env:-} python3 ./buildscripts/scons.py                                     \
-    "${_scons_compile_compile_flags[@]}" ${EB_X_task_compile_flags:-} ${EB_X_task_compile_flags_extra:-}           \
+    ${EB_X_compile_flags} ${EB_X_task_compile_flags:-} ${EB_X_task_compile_flags_extra:-}           \
     $extra_args                                                \
     "${_scons_compile_targets[@]}" ${EB_X_additional_targets:-} MONGO_VERSION=${EB_X_version:-}
 exit_status=$?

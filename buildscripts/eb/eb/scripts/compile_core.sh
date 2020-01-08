@@ -8,15 +8,6 @@ _scons_compile_targets=(
   "${EB_X_mh_target:-}"
 )
 
-_scons_compile_compile_flags=(
-  --use-new-tools
-  "--build-mongoreplay=${EB_X_build_mongoreplay}"
-  --detect-odr-violations
-  "--install-mode=hygienic"
-  --separate-debug
-  --legacy-tarball
-)
-
 # TODO setup python virtualenv for Server
 python3 -m pip install -r etc/pip/dev-requirements.txt -q -q
 
