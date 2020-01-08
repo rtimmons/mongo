@@ -1729,11 +1729,6 @@ functions:
 
           ${compile_env|} python3 ./buildscripts/scons.py ${compile_flags|} $extra_flags --stack-size=1024 GITDIFFFLAGS="--cached" ${targets}
 
-  "write eb expansions":
-    command: expansions.write
-    params:
-      file: build/Expansions.yml
-
   "scons compile":
     command: shell.exec
     type: test
@@ -3604,13 +3599,15 @@ tasks:
   commands:
     - func: "build new tools"
 
+    # TODO: This should be refactored to a single "eb" function as
+    #       much as possible.
     - command: expansions.write
       params:
         file: build/Expansions.yml
     - func: "scons compile"
-    - func: "tasks.generate"
+    - command: "generate.tasks"
       params:
-        file: build/Tasks.json
+        files: [build/Tasks.json]
 
     - command: shell.exec
       type: test
