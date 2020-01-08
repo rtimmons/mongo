@@ -38,11 +38,9 @@ else
 fi
 
 # TODO:
-${EB_X_activate_virtualenv}
+# ${EB_X_activate_virtualenv}
 
-echo "python=${python}"
-
-${EB_X_compile_env:-} $python ./buildscripts/scons.py                                     \
+${EB_X_compile_env:-} python3 ./buildscripts/scons.py                                     \
     "${_scons_compile_compile_flags[@]}" ${EB_X_task_compile_flags:-} ${EB_X_task_compile_flags_extra:-}           \
     ${EB_X_scons_cache_args:-} $extra_args                                                \
     "${_scons_compile_targets[@]}" ${EB_X_additional_targets:-} MONGO_VERSION=${EB_X_version:-} || exit_status=$?
