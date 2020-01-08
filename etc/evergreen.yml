@@ -3601,13 +3601,17 @@ tasks:
 
     # TODO: This should be refactored to a single "eb" function as
     #       much as possible.
+    - command: shell.exec
+      type: test
+      working_dir: src
+      script: mkdir -p build
     - command: expansions.write
       params:
-        file: build/Expansions.yml
+        file: src/build/Expansions.yml
     - func: "scons compile"
     - command: "generate.tasks"
       params:
-        files: [build/Tasks.json]
+        files: [src/build/Tasks.json]
 
     - command: shell.exec
       type: test
