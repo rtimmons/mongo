@@ -1729,7 +1729,11 @@ functions:
 
           ${compile_env|} python3 ./buildscripts/scons.py ${compile_flags|} $extra_flags --stack-size=1024 GITDIFFFLAGS="--cached" ${targets}
 
-  "run eb":
+  "run eb": # DEFINED
+  - command: shell.exec
+    params:
+      working_dir: src
+      script: "mkdir -p build"
   - command: expansions.write
     params:
       file: ./src/build/Expansions.yml
