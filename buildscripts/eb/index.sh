@@ -16,10 +16,7 @@ if [[ ! -d ./build/eb_venv ]]; then
     python3 -m virtualenv ./build/eb_venv
     source ./build/eb_venv/bin/activate
     pushd ./buildscripts/eb || exit 1 >/dev/null
-        if ! python3 setup.py --no-user-cfg -q -q install > ./build/eb_setup.log 2>&1; then
-            cat ./build/eb_setup.log 2>&1
-            exit 2
-        fi
+        python3 setup.py --no-user-cfg -q -q install > ./build/eb_setup.log 2>&1
     popd >/dev/null || exit 1
 else
     source ./build/eb_venv/bin/activate
