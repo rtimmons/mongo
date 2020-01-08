@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# TODO
+# set -eou pipefail
+
 if [[ -e "/opt/mongodbtoolchain/v3/bin" ]]; then
     export PATH="/opt/mongodbtoolchain/v3/bin:$PATH"
     # TODO: support pyenv in an `else` block.

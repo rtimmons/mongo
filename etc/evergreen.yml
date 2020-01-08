@@ -1729,13 +1729,26 @@ functions:
 
           ${compile_env|} python3 ./buildscripts/scons.py ${compile_flags|} $extra_flags --stack-size=1024 GITDIFFFLAGS="--cached" ${targets}
 
+  "run eb":
+  - command: expansions.write
+    params:
+      file: ./src/build/Expansions.yml
+  - command: shell.exec
+    params:
+      working_dir: src
+      script: |
+        ./eb "${EB_command}"
+  - command: "generate.tasks"
+    params:
+      files: [src/build/Tasks.json]
+
   "scons compile":
     command: shell.exec
     type: test
     params:
       working_dir: src
       shell: bash
-      script: ./eb compile_core
+      script: echo "EBTODO__move_to_eb"
 
   "generate compile expansions":
     command: shell.exec
@@ -3599,20 +3612,9 @@ tasks:
   commands:
     # - func: "build new tools"
 
-    # TODO: This should be refactored to a single "eb" function as
-    #       much as possible.
-    - command: shell.exec
-      type: test
-      params:
-        working_dir: src
-        script: "mkdir -p build"
-    - command: expansions.write
-      params:
-        file: src/build/Expansions.yml
-    - func: "scons compile"
-    - command: "generate.tasks"
-      params:
-        files: [src/build/Tasks.json]
+    - func: "run eb"
+      vars:
+        EB_command: compile_core
 
     - command: shell.exec
       type: test
@@ -3864,18 +3866,10 @@ tasks:
 ## compile_all - build all scons targets ##
 - name: compile_all
   commands:
-    - func: "build new tools"
-    - command: expansions.write
-      params:
-        file: build/Expansions.yml
-    - func: "scons compile"
+    # - func: "build new tools"
+    - func: "run eb"
       vars:
-        targets: all
-        compiling_for_test: true
-        task_compile_flags: >-
-          --use-new-tools
-          --build-mongoreplay="${build_mongoreplay}"
-          --detect-odr-violations
+        EB_command: compile_all
     - command: s3.put
       params:
         aws_key: ${aws_key}

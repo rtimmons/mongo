@@ -43,15 +43,15 @@ fi
 ${EB_X_activate_virtualenv}
 
 ${EB_X_compile_env:-} $python ./buildscripts/scons.py                                     \
-    ${EB_X_compile_flags:-} ${EB_X_task_compile_flags:-} ${EB_X_task_compile_flags_extra:-}           \
+    "${_scons_compile_compile_flags[@]}" ${EB_X_task_compile_flags:-} ${EB_X_task_compile_flags_extra:-}           \
     ${EB_X_scons_cache_args:-} $extra_args                                                \
-    ${EB_X_targets} ${EB_X_additional_targets:-} MONGO_VERSION=${EB_X_version:-} || exit_status=$?
+    "${_scons_compile_targets[@]}" ${EB_X_additional_targets:-} MONGO_VERSION=${EB_X_version:-} || exit_status=$?
 # If compile fails we do not run any tests
 if [[ $exit_status -ne 0 ]]; then
   if [[ "${EB_X_dump_scons_config_on_failure}" == true ]]; then
     echo "Dumping build/scons/config.log"
     cat build/scons/config.log
   fi
-  touch ${EB_X_skip_tests}
+  touch "${EB_X_skip_tests}"
 fi
 exit $exit_status

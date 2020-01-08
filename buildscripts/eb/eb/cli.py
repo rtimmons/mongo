@@ -31,6 +31,8 @@ def main(args: typ.List[str] = None, env: typ.Mapping[str,str] = None):
     repo_root = env["EB_REPO_ROOT"]
     expansions = _expansions(repo_root)
 
+    print(f'Have expansions as env vars: {", ".join(expansions.keys())}')
+
     commands.dispatch(args, env, repo_root, expansions)
 
     taskgen.gen_tasks(repo_root)
