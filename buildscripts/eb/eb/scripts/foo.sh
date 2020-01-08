@@ -7,3 +7,5 @@ python --version
 env
 
 save_artifact foo
+
+_schedule_task somepy

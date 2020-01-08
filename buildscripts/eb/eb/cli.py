@@ -4,6 +4,7 @@ import typing as typ
 import yaml
 
 from eb import commands
+from eb import taskgen
 
 
 def _expansions(repo_root: str) -> typ.Mapping[str, typ.Any]:
@@ -16,11 +17,6 @@ def _expansions(repo_root: str) -> typ.Mapping[str, typ.Any]:
 
 def _trim_env(env: typ.Mapping[str,str]):
     return {key: value for (key, value) in env.items() if key.startswith("EB_") or key == "PATH"}
-
-
-def create_task_json():
-    # create one task for each build/Tasks/* whatever
-    pass
 
 
 def main(args: typ.List[str] = None, env: typ.Mapping[str,str] = None):
@@ -38,7 +34,5 @@ def main(args: typ.List[str] = None, env: typ.Mapping[str,str] = None):
 
     commands.dispatch(args, env, repo_root, expansions)
 
-    create_task_json()
-
-
+    taskgen.gen_tasks(repo_root)
 
