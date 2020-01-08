@@ -37,19 +37,12 @@ fi
 # TODO:
 # ${EB_X_activate_virtualenv}
 
-#
-# TODO: include $EB_X_scons_cache_args before $extra_args
-# This is causing a quoting issue-the env var is set to
-#     --cache-dir='/efs/32f148b7-2a9e-588e-baab-28067a28d3f4/scons-cache'
-# but this isn't being interpolated so scons gets cache-dir starting with single-quotes
-# This goes away if we do the cache expansion generation here within eb like it
-# should have been all along.
-#
-
 set -x
-${EB_X_compile_env:-} python3 ./buildscripts/scons.py                                     \
+# The eval gets around the fact that we've got real shell quoting but expansions
+# weren't designed with that in mind.
+eval ${EB_X_compile_env:-} python3 ./buildscripts/scons.py                                     \
     ${EB_X_compile_flags} ${EB_X_task_compile_flags:-} ${EB_X_task_compile_flags_extra:-}           \
-    $extra_args                                                \
+    ${EB_X_scons_cache_args} $extra_args                                                \
     "${_scons_compile_targets[@]}" ${EB_X_additional_targets:-} MONGO_VERSION=${EB_X_version:-}
 exit_status=$?
 set +x
