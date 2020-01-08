@@ -3597,14 +3597,14 @@ tasks:
 - name: compile
   depends_on: []
   commands:
-    - func: "build new tools"
+    # - func: "build new tools"
 
     # TODO: This should be refactored to a single "eb" function as
     #       much as possible.
     - command: shell.exec
       type: test
       working_dir: src
-      script: mkdir -p build
+      script: pwd; ls; mkdir -p build; ls; ls build
     - command: expansions.write
       params:
         file: src/build/Expansions.yml
