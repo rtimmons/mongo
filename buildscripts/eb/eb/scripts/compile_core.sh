@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
 _scons_compile_targets=(
-  core archive-dist archive-dist-debug install-core install-tools
+  core
+  # TODO: not working yet for some reason
+  # archive-dist archive-dist-debug install-core install-tools
   "distsrc-${EB_X_ext:-tgz}"
   ${EB_X_additional_targets:-}
   "${EB_X_msi_target:-}"
