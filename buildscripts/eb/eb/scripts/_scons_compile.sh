@@ -3,8 +3,6 @@
 set -o errexit
 set -o verbose
 
-env
-
 if [ "${EB_X_is_patch}" = "true" ] && [ "${EB_X_bypass_compile:-false}" = "true" ]; then
   exit 0
 fi
@@ -41,6 +39,8 @@ fi
 
 # TODO:
 ${EB_X_activate_virtualenv}
+
+echo "python=${python}"
 
 ${EB_X_compile_env:-} $python ./buildscripts/scons.py                                     \
     "${_scons_compile_compile_flags[@]}" ${EB_X_task_compile_flags:-} ${EB_X_task_compile_flags_extra:-}           \
