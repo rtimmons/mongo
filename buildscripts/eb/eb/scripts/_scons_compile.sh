@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
-set -o errexit
-set -o verbose
+set -eou pipefail
 
 if [ "${EB_X_is_patch}" = "true" ] && [ "${EB_X_bypass_compile:-false}" = "true" ]; then
   exit 0
@@ -40,10 +39,14 @@ fi
 # TODO:
 # ${EB_X_activate_virtualenv}
 
+set -x
 ${EB_X_compile_env:-} python3 ./buildscripts/scons.py                                     \
     "${_scons_compile_compile_flags[@]}" ${EB_X_task_compile_flags:-} ${EB_X_task_compile_flags_extra:-}           \
     ${EB_X_scons_cache_args:-} $extra_args                                                \
-    "${_scons_compile_targets[@]}" ${EB_X_additional_targets:-} MONGO_VERSION=${EB_X_version:-} || exit_status=$?
+    "${_scons_compile_targets[@]}" ${EB_X_additional_targets:-} MONGO_VERSION=${EB_X_version:-}
+exit_status=$?
+set +x
+
 # If compile fails we do not run any tests
 if [[ $exit_status -ne 0 ]]; then
   if [[ "${EB_X_dump_scons_config_on_failure}" == true ]]; then
