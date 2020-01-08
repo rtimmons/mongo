@@ -40,6 +40,7 @@ fi
 # ${EB_X_activate_virtualenv}
 
 set -x
+echo bb${EB_X_scons_cache_args}dd
 ${EB_X_compile_env:-} python3 ./buildscripts/scons.py                                     \
     "${_scons_compile_compile_flags[@]}" ${EB_X_task_compile_flags:-} ${EB_X_task_compile_flags_extra:-}           \
     ${EB_X_scons_cache_args:-} $extra_args                                                \
