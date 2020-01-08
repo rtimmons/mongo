@@ -30,7 +30,6 @@ def main(args: typ.List[str] = None, env: typ.Mapping[str,str] = None):
         raise Exception("Need to define the EB_REPO_ROOT env var.")
     repo_root = env["EB_REPO_ROOT"]
     expansions = _expansions(repo_root)
-    print(f"Loaded expansions {expansions}")
 
     commands.dispatch(args, env, repo_root, expansions)
 
