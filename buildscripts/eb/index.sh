@@ -11,6 +11,8 @@ cd "$EB_REPO_ROOT" || exit 1
 EB_REPO_ROOT=$(pwd -P)
 export EB_REPO_ROOT
 
+mkdir -p ./build
+
 if [[ ! -d ./build/eb_venv ]]; then
     python3 -m pip install virtualenv --isolated -q -q
     python3 -m virtualenv ./build/eb_venv
