@@ -26,16 +26,6 @@ function stopServerReplication(conn) {
         return;
     }
 
-    // We set the election timeout to 24 hours to prevent unplanned elections, but this has the
-    // side-effect of causing getMore() in replication to wait up 30 seconds prior to returning
-    // and allowing replication configs to change.
-    //
-    // The setSmallOplogGetMoreMaxTimeMS failpoint causes the getMore() calls to block for a
-    // maximum of 50 milliseconds. For more context, see SERVER-45400.
-    assert.commandWorked(
-        conn.adminCommand({configureFailPoint: 'setSmallOplogGetMoreMaxTimeMS', mode: 'alwaysOn'}),
-        'Failed to enable setSmallOplogGetMoreMaxTimeMS failpoint.');
-
     // Clear ramlog so checkLog can't find log messages from previous times this fail point was
     // enabled.
     assert.commandWorked(conn.adminCommand({clearLog: 'global'}));

@@ -168,6 +168,21 @@ function RollbackTest(name = "RollbackTest", replSet) {
     }
 
     /**
+     * We set the election timeout to 24 hours to prevent unplanned elections, but this has the
+     * side-effect of causing `getMore()` in replication to wait up 30 seconds prior to returning
+     * and allowing replication configs to change.
+     *
+     * The `setSmallOplogGetMoreMaxTimeMS` failpoint causes the `getMore()` calls to block for a
+     * maximum of 50 milliseconds. For more context, see SERVER-45400.
+     */
+    function setFastGetMoreEnabled(node) {
+        assert.commandWorked(
+            node.adminCommand({
+                configureFailPoint: 'setSmallOplogGetMoreMaxTimeMS', mode: 'alwaysOn'}),
+                `Failed to enable setSmallOplogGetMoreMaxTimeMS failpoint.`);
+    }
+
+    /**
      * Return an instance of ReplSetTest initialized with a standard
      * three-node replica set running with the latest version.
      *
@@ -186,6 +201,8 @@ function RollbackTest(name = "RollbackTest", replSet) {
 
         let replSet = new ReplSetTest({name, nodes: 3, useBridge: true, nodeOptions: nodeOptions});
         replSet.startSet();
+        // Must be after startSet because startSet does a restart which may clear the fail-point.
+        replSet.nodes.forEach(node => setFastGetMoreEnabled(node));
 
         let config = replSet.getReplSetConfig();
         config.members[2].priority = 0;
@@ -195,7 +212,6 @@ function RollbackTest(name = "RollbackTest", replSet) {
         assert.eq(replSet.nodes.length,
                   kNumDataBearingNodes,
                   "Mismatch between number of data bearing nodes and test configuration.");
-
         return replSet;
     }
 
@@ -518,6 +534,9 @@ function RollbackTest(name = "RollbackTest", replSet) {
         rst.stop(nodeId, signal, opts, {forRestart: true});
         log(`Restarting node ${hostName}`);
         rst.start(nodeId, startOptions, true /* restart */);
+
+        // Fail-point may clear on restart so do post-start.
+        setFastGetMoreEnabled(rst.nodes[nodeId]);
 
         // Step up if the restarted node is the current primary.
         if (rst.getNodeId(curPrimary) === nodeId) {
