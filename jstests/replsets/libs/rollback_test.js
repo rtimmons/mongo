@@ -484,7 +484,10 @@ function RollbackTest(name = "RollbackTest", replSet) {
         rst.awaitReplication();
         checkDataConsistency(checkDataConsistencyOptions);
         transitionIfAllowed(State.kStopped);
-        return rst.stopSet();
+        return rst.stopSet(undefined /* signal */, undefined /* forRestart */, {
+            skipCheckDBHashes: true,
+            skipValidation: true
+        });
     };
 
     this.getPrimary = function() {
