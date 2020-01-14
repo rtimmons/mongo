@@ -169,11 +169,10 @@ function RollbackTest(name = "RollbackTest", replSet) {
 
     /**
      * We set the election timeout to 24 hours to prevent unplanned elections, but this has the
-     * side-effect of causing `getMore()` in replication to wait up 30 seconds prior to returning
-     * and allowing replication configs to change.
+     * side-effect of causing `getMore` in replication to wait up 30 seconds prior to returning.
      *
-     * The `setSmallOplogGetMoreMaxTimeMS` failpoint causes the `getMore()` calls to block for a
-     * maximum of 50 milliseconds. For more context, see SERVER-45400.
+     * The `setSmallOplogGetMoreMaxTimeMS` failpoint causes the `getMore` calls to block for a
+     * maximum of 50 milliseconds.
      */
     function setFastGetMoreEnabled(node) {
         assert.commandWorked(
