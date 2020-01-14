@@ -2933,14 +2933,17 @@ var ReplSetTest = function(opts) {
      */
     this.stopSet = function(signal, forRestart, opts) {
         // Check to make sure data is the same on all nodes.
-        if (!jsTest.options().skipCheckDBHashes) {
+        const skipChecks = jsTest.options().skipCheckDBHashes || (opts && opts.skipCheckDBHashes);
+        if (!skipChecks) {
             let startTime = new Date();  // Measure the execution time of consistency checks.
             print("ReplSetTest stopSet going to run data consistency checks.");
-            // To skip this check add TestData.skipCheckDBHashes = true;
+            // To skip this check add TestData.skipCheckDBHashes = true or pass in {opts: skipCheckDBHashes}
             // Reasons to skip this test include:
             // - the primary goes down and none can be elected (so fsync lock/unlock commands fail)
             // - the replica set is in an unrecoverable inconsistent state. E.g. the replica set
             //   is partitioned.
+            // - Equivalent checks are being done in other places and doing them again
+            //   here would be redundant.
             //
             let master = _callIsMaster();
             if (master && this._liveNodes.length > 1) {  // skip for sets with 1 live node
