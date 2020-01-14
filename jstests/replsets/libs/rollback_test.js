@@ -200,8 +200,7 @@ function RollbackTest(name = "RollbackTest", replSet) {
 
         let replSet = new ReplSetTest({name, nodes: 3, useBridge: true, nodeOptions: nodeOptions});
         replSet.startSet();
-        // Must be after startSet because startSet does a restart which may clear the fail-point.
-        replSet.nodes.forEach(node => setFastGetMoreEnabled(node));
+        replSet.nodes.forEach(setFastGetMoreEnabled);
 
         let config = replSet.getReplSetConfig();
         config.members[2].priority = 0;
