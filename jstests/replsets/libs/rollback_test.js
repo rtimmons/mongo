@@ -177,9 +177,9 @@ function RollbackTest(name = "RollbackTest", replSet) {
      */
     function setFastGetMoreEnabled(node) {
         assert.commandWorked(
-            node.adminCommand({
-                configureFailPoint: 'setSmallOplogGetMoreMaxTimeMS', mode: 'alwaysOn'}),
-                `Failed to enable setSmallOplogGetMoreMaxTimeMS failpoint.`);
+            node.adminCommand(
+                {configureFailPoint: 'setSmallOplogGetMoreMaxTimeMS', mode: 'alwaysOn'}),
+            `Failed to enable setSmallOplogGetMoreMaxTimeMS failpoint.`);
     }
 
     /**
