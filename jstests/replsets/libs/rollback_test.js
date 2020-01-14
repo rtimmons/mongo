@@ -499,10 +499,9 @@ function RollbackTest(name = "RollbackTest", replSet) {
             checkDataConsistency(checkDataConsistencyOptions);
         }
         transitionIfAllowed(State.kStopped);
-        return rst.stopSet(undefined /* signal */, undefined /* forRestart */, {
-            skipCheckDBHashes: true,
-            skipValidation: true
-        });
+        return rst.stopSet(undefined /* signal */,
+                           undefined /* forRestart */,
+                           {skipCheckDBHashes: true, skipValidation: true});
     };
 
     this.getPrimary = function() {
