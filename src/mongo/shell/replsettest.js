@@ -2931,8 +2931,8 @@ var ReplSetTest = function(opts) {
         if (!skipChecks) {
             let startTime = new Date();  // Measure the execution time of consistency checks.
             print("ReplSetTest stopSet going to run data consistency checks.");
-            // To skip this check add TestData.skipCheckDBHashes = true or pass in {opts: skipCheckDBHashes}
-            // Reasons to skip this test include:
+            // To skip this check add TestData.skipCheckDBHashes = true or pass in {opts:
+            // skipCheckDBHashes} Reasons to skip this test include:
             // - the primary goes down and none can be elected (so fsync lock/unlock commands fail)
             // - the replica set is in an unrecoverable inconsistent state. E.g. the replica set
             //   is partitioned.
