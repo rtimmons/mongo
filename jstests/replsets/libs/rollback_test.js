@@ -214,6 +214,10 @@ function RollbackTest(name = "RollbackTest", replSet) {
         return replSet;
     }
 
+    // Track if we've done consistency checks.
+    // Pessimistically set back to false every time we transition states.
+    let doneConsistencyChecks = false;
+
     function checkDataConsistency(
         {skipCheckCollectionCounts: skipCheckCollectionCounts = false} = {}) {
         assert.eq(curState,
@@ -234,6 +238,9 @@ function RollbackTest(name = "RollbackTest", replSet) {
         rst.checkOplogs(name);
         rst.checkReplicatedDataHashes(name);
         collectionValidator.validateNodes(rst.nodeList());
+
+        // If we skipped collectionCounts this time we still need to do them later.
+        doneConsistencyChecks = !skipCheckCollectionCounts;
     }
 
     function log(msg, important = false) {
@@ -249,6 +256,7 @@ function RollbackTest(name = "RollbackTest", replSet) {
      * @private
      */
     function transitionIfAllowed(newState) {
+        doneConsistencyChecks = false;
         if (AcceptableTransitions[curState].includes(newState)) {
             log(`Transitioning to: "${newState}"`, true);
             curState = newState;
@@ -280,6 +288,8 @@ function RollbackTest(name = "RollbackTest", replSet) {
         if (reInitiate) {
             rst.reInitiate();
         }
+        // New node to do consistency checks on.
+        doneConsistencyChecks = false;
         return node;
     };
 
@@ -482,7 +492,9 @@ function RollbackTest(name = "RollbackTest", replSet) {
     this.stop = function(checkDataConsistencyOptions) {
         restartServerReplication(tiebreakerNode);
         rst.awaitReplication();
-        checkDataConsistency(checkDataConsistencyOptions);
+        if (!doneConsistencyChecks) {
+            checkDataConsistency(checkDataConsistencyOptions);
+        }
         transitionIfAllowed(State.kStopped);
         return rst.stopSet(undefined /* signal */, undefined /* forRestart */, {
             skipCheckDBHashes: true,
