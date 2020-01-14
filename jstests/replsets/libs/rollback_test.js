@@ -210,6 +210,7 @@ function RollbackTest(name = "RollbackTest", replSet) {
         assert.eq(replSet.nodes.length,
                   kNumDataBearingNodes,
                   "Mismatch between number of data bearing nodes and test configuration.");
+
         return replSet;
     }
 
@@ -533,7 +534,7 @@ function RollbackTest(name = "RollbackTest", replSet) {
         log(`Restarting node ${hostName}`);
         rst.start(nodeId, startOptions, true /* restart */);
 
-        // Fail-point may clear on restart so do post-start.
+        // Fail-point will clear on restart so do post-start.
         setFastGetMoreEnabled(rst.nodes[nodeId]);
 
         // Step up if the restarted node is the current primary.
