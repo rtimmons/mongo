@@ -199,8 +199,11 @@ function RollbackTest(name = "RollbackTest", replSet) {
         return replSet;
     }
 
-    function checkDataConsistency(
-        {skipCheckCollectionCounts: skipCheckCollectionCounts = false} = {}) {
+    function checkDataConsistency({
+        skipCheckCollectionCounts: skipCheckCollectionCounts = false,
+        skipCheckOplogs: skipCheckOplogs = false,
+        skipCheckReplicatedDataHashes: skipCheckReplicatedDataHashes = false
+    } = {}) {
         assert.eq(curState,
                   State.kSteadyStateOps,
                   "Not in kSteadyStateOps state, cannot check data consistency");
@@ -216,8 +219,12 @@ function RollbackTest(name = "RollbackTest", replSet) {
             !skipCheckCollectionCounts) {
             rst.checkCollectionCounts(name);
         }
-        rst.checkOplogs(name);
-        rst.checkReplicatedDataHashes(name);
+        if (!skipCheckOplogs) {
+            rst.checkOplogs(name);
+        }
+        if (!skipCheckReplicatedDataHashes) {
+            rst.checkReplicatedDataHashes(name);
+        }
         collectionValidator.validateNodes(rst.nodeList());
     }
 
@@ -465,9 +472,21 @@ function RollbackTest(name = "RollbackTest", replSet) {
     };
 
     this.stop = function(checkDataConsistencyOptions) {
+        // The call to rst.stopSet() internally calls
+        // checkOpLogs and checkReplicatedDataHashes
+        // so no need to do it twice. The user can
+        // still pass in these params to force the
+        // double-check.
+        const computedOptions = Object.assign({},
+                                              {
+                                                  skipCheckOplogs: true,
+                                                  skipCheckReplicatedDataHashes: true,
+                                              },
+                                              checkDataConsistencyOptions);
+
         restartServerReplication(tiebreakerNode);
         rst.awaitReplication();
-        checkDataConsistency(checkDataConsistencyOptions);
+        checkDataConsistency(computedOptions);
         transitionIfAllowed(State.kStopped);
         return rst.stopSet();
     };
