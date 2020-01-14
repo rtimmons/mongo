@@ -45,7 +45,6 @@
 #include "mongo/logv2/bson_formatter.h"
 #include "mongo/logv2/component_settings_filter.h"
 #include "mongo/logv2/constants.h"
-#include "mongo/logv2/formatter_base.h"
 #include "mongo/logv2/json_formatter.h"
 #include "mongo/logv2/log.h"
 #include "mongo/logv2/log_component.h"
@@ -145,6 +144,24 @@ struct TypeWithBSONArray {
     }
 };
 
+enum UnscopedEnumWithToString { UnscopedEntryWithToString };
+
+std::string toString(UnscopedEnumWithToString val) {
+    return "UnscopedEntryWithToString";
+}
+
+struct TypeWithNonMemberFormatting {};
+
+std::string toString(const TypeWithNonMemberFormatting&) {
+    return "TypeWithNonMemberFormatting";
+}
+
+BSONObj toBSON(const TypeWithNonMemberFormatting&) {
+    BSONObjBuilder builder;
+    builder.append("first"_sd, "TypeWithNonMemberFormatting");
+    return builder.obj();
+}
+
 class LogTestBackend
     : public boost::log::sinks::
           basic_formatted_sink_backend<char, boost::log::sinks::synchronized_feeding> {
@@ -176,7 +193,7 @@ public:
         sink->set_formatter(PlainFormatter());
         boost::log::core::get()->add_sink(sink);
 
-        LOGV2("log during init");
+        LOGV2(20001, "log during init");
         ASSERT(lines.back() == "log during init");
 
         boost::log::core::get()->remove_sink(sink);
@@ -196,47 +213,47 @@ TEST_F(LogTestV2, Basic) {
     BSONObjBuilder builder;
     fmt::memory_buffer buffer;
 
-    LOGV2("test");
+    LOGV2(20002, "test");
     ASSERT_EQUALS(lines.back(), "test");
 
-    LOGV2_DEBUG(-2, "test debug");
+    LOGV2_DEBUG(20063, -2, "test debug");
     ASSERT_EQUALS(lines.back(), "test debug");
 
-    LOGV2("test {}", "name"_attr = 1);
+    LOGV2(20003, "test {}", "name"_attr = 1);
     ASSERT_EQUALS(lines.back(), "test 1");
 
-    LOGV2("test {:d}", "name"_attr = 2);
+    LOGV2(20004, "test {:d}", "name"_attr = 2);
     ASSERT_EQUALS(lines.back(), "test 2");
 
-    LOGV2("test {}", "name"_attr = "char*");
+    LOGV2(20005, "test {}", "name"_attr = "char*");
     ASSERT_EQUALS(lines.back(), "test char*");
 
-    LOGV2("test {}", "name"_attr = std::string("std::string"));
+    LOGV2(20006, "test {}", "name"_attr = std::string("std::string"));
     ASSERT_EQUALS(lines.back(), "test std::string");
 
-    LOGV2("test {}", "name"_attr = "StringData"_sd);
+    LOGV2(20007, "test {}", "name"_attr = "StringData"_sd);
     ASSERT_EQUALS(lines.back(), "test StringData");
 
-    LOGV2_OPTIONS({LogTag::kStartupWarnings}, "test");
+    LOGV2_OPTIONS(20064, {LogTag::kStartupWarnings}, "test");
     ASSERT_EQUALS(lines.back(), "test");
 
     TypeWithBSON t(1.0, 2.0);
-    LOGV2("{} custom formatting", "name"_attr = t);
+    LOGV2(20008, "{} custom formatting", "name"_attr = t);
     ASSERT_EQUALS(lines.back(), t.toString() + " custom formatting");
 
     TypeWithoutBSON t2(1.0, 2.0);
-    LOGV2("{} custom formatting, no bson", "name"_attr = t2);
+    LOGV2(20009, "{} custom formatting, no bson", "name"_attr = t2);
     ASSERT_EQUALS(lines.back(), t.toString() + " custom formatting, no bson");
 
     TypeWithOnlyStringSerialize t3(1.0, 2.0);
-    LOGV2("{}", "name"_attr = t3);
+    LOGV2(20010, "{}", "name"_attr = t3);
     buffer.clear();
     t3.serialize(buffer);
     ASSERT_EQUALS(lines.back(), fmt::to_string(buffer));
 
     // Serialize should be preferred when both are available
     TypeWithBothStringFormatters t4;
-    LOGV2("{}", "name"_attr = t4);
+    LOGV2(20011, "{}", "name"_attr = t4);
     buffer.clear();
     t4.serialize(buffer);
     ASSERT_EQUALS(lines.back(), fmt::to_string(buffer));
@@ -286,7 +303,7 @@ TEST_F(LogTestV2, Types) {
 
         auto test = [&](auto value) {
             text.clear();
-            LOGV2("{}", "name"_attr = value);
+            LOGV2(20012, "{}", "name"_attr = value);
             ASSERT_EQUALS(text.back(), fmt::format("{}", value));
             validateJSON(value);
 
@@ -319,7 +336,7 @@ TEST_F(LogTestV2, Types) {
 
         auto test = [&](auto value) {
             text.clear();
-            LOGV2("{}", "name"_attr = value);
+            LOGV2(20013, "{}", "name"_attr = value);
             // Floats are formatted as double
             ASSERT_EQUALS(text.back(), fmt::format("{}", static_cast<double>(value)));
             validateJSON(value);
@@ -339,13 +356,13 @@ TEST_F(LogTestV2, Types) {
     };
 
     bool b = true;
-    LOGV2("bool {}", "name"_attr = b);
+    LOGV2(20014, "bool {}", "name"_attr = b);
     ASSERT_EQUALS(text.back(), "bool true");
     validateJSON(b);
     ASSERT(lastBSONElement().Bool() == b);
 
     char c = 1;
-    LOGV2("char {}", "name"_attr = c);
+    LOGV2(20015, "char {}", "name"_attr = c);
     ASSERT_EQUALS(text.back(), "char 1");
     validateJSON(static_cast<uint8_t>(
         c));  // cast, boost property_tree will try and parse as ascii otherwise
@@ -369,27 +386,49 @@ TEST_F(LogTestV2, Types) {
 
     // long double is prohibited, we don't use this type and favors Decimal128 instead.
 
+    // enums
+
+    enum UnscopedEnum { UnscopedEntry };
+    LOGV2(20076, "{}", "name"_attr = UnscopedEntry);
+    auto expectedUnscoped = static_cast<std::underlying_type_t<UnscopedEnum>>(UnscopedEntry);
+    ASSERT_EQUALS(text.back(), std::to_string(expectedUnscoped));
+    validateJSON(expectedUnscoped);
+    ASSERT_EQUALS(lastBSONElement().Number(), expectedUnscoped);
+
+    enum class ScopedEnum { Entry = -1 };
+    LOGV2(20077, "{}", "name"_attr = ScopedEnum::Entry);
+    auto expectedScoped = static_cast<std::underlying_type_t<ScopedEnum>>(ScopedEnum::Entry);
+    ASSERT_EQUALS(text.back(), std::to_string(expectedScoped));
+    validateJSON(expectedScoped);
+    ASSERT_EQUALS(lastBSONElement().Number(), expectedScoped);
+
+    LOGV2(20078, "{}", "name"_attr = UnscopedEntryWithToString);
+    ASSERT_EQUALS(text.back(), toString(UnscopedEntryWithToString));
+    validateJSON(toString(UnscopedEntryWithToString));
+    ASSERT_EQUALS(lastBSONElement().String(), toString(UnscopedEntryWithToString));
+
+
     // string types
     const char* c_str = "a c string";
-    LOGV2("c string {}", "name"_attr = c_str);
+    LOGV2(20016, "c string {}", "name"_attr = c_str);
     ASSERT_EQUALS(text.back(), "c string a c string");
     validateJSON(std::string(c_str));
     ASSERT_EQUALS(lastBSONElement().String(), c_str);
 
     char* c_str2 = const_cast<char*>("non-const");
-    LOGV2("c string {}", "name"_attr = c_str2);
+    LOGV2(20017, "c string {}", "name"_attr = c_str2);
     ASSERT_EQUALS(text.back(), "c string non-const");
     validateJSON(std::string(c_str2));
     ASSERT_EQUALS(lastBSONElement().String(), c_str2);
 
     std::string str = "a std::string";
-    LOGV2("std::string {}", "name"_attr = str);
+    LOGV2(20018, "std::string {}", "name"_attr = str);
     ASSERT_EQUALS(text.back(), "std::string a std::string");
     validateJSON(str);
     ASSERT_EQUALS(lastBSONElement().String(), str);
 
     StringData str_data = "a StringData"_sd;
-    LOGV2("StringData {}", "name"_attr = str_data);
+    LOGV2(20019, "StringData {}", "name"_attr = str_data);
     ASSERT_EQUALS(text.back(), "StringData a StringData");
     validateJSON(str_data.toString());
     ASSERT_EQUALS(lastBSONElement().String(), str_data);
@@ -401,7 +440,7 @@ TEST_F(LogTestV2, Types) {
     builder.append("double"_sd, 1.0);
     builder.append("str"_sd, str_data);
     BSONObj bsonObj = builder.obj();
-    LOGV2("bson {}", "name"_attr = bsonObj);
+    LOGV2(20020, "bson {}", "name"_attr = bsonObj);
     ASSERT(text.back() ==
            std::string("bson ") + bsonObj.jsonString(JsonStringFormat::ExtendedRelaxedV2_0_0));
     ASSERT(mongo::fromjson(json.back())
@@ -418,7 +457,7 @@ TEST_F(LogTestV2, Types) {
     arrBuilder.append("second"_sd);
     arrBuilder.append("third"_sd);
     BSONArray bsonArr = arrBuilder.arr();
-    LOGV2("{}", "name"_attr = bsonArr);
+    LOGV2(20021, "{}", "name"_attr = bsonArr);
     ASSERT_EQUALS(text.back(),
                   bsonArr.jsonString(JsonStringFormat::ExtendedRelaxedV2_0_0, 0, true));
     ASSERT(mongo::fromjson(json.back())
@@ -430,7 +469,7 @@ TEST_F(LogTestV2, Types) {
     ASSERT(lastBSONElement().Obj().woCompare(bsonArr) == 0);
 
     // BSONElement
-    LOGV2("bson element {}", "name"_attr = bsonObj.getField("int32"_sd));
+    LOGV2(20022, "bson element {}", "name"_attr = bsonObj.getField("int32"_sd));
     ASSERT(text.back() == std::string("bson element ") + bsonObj.getField("int32"_sd).toString());
     ASSERT(mongo::fromjson(json.back())
                .getField(kAttributesFieldName)
@@ -444,7 +483,7 @@ TEST_F(LogTestV2, Types) {
 
     // Date_t
     Date_t date = Date_t::now();
-    LOGV2("Date_t {}", "name"_attr = date);
+    LOGV2(20023, "Date_t {}", "name"_attr = date);
     ASSERT_EQUALS(text.back(), std::string("Date_t ") + date.toString());
     ASSERT_EQUALS(
         mongo::fromjson(json.back()).getField(kAttributesFieldName).Obj().getField("name").Date(),
@@ -452,7 +491,7 @@ TEST_F(LogTestV2, Types) {
     ASSERT_EQUALS(lastBSONElement().Date(), date);
 
     // Decimal128
-    LOGV2("Decimal128 {}", "name"_attr = Decimal128::kPi);
+    LOGV2(20024, "Decimal128 {}", "name"_attr = Decimal128::kPi);
     ASSERT_EQUALS(text.back(), std::string("Decimal128 ") + Decimal128::kPi.toString());
     ASSERT(mongo::fromjson(json.back())
                .getField(kAttributesFieldName)
@@ -464,7 +503,7 @@ TEST_F(LogTestV2, Types) {
 
     // OID
     OID oid = OID::gen();
-    LOGV2("OID {}", "name"_attr = oid);
+    LOGV2(20025, "OID {}", "name"_attr = oid);
     ASSERT_EQUALS(text.back(), std::string("OID ") + oid.toString());
     ASSERT_EQUALS(
         mongo::fromjson(json.back()).getField(kAttributesFieldName).Obj().getField("name").OID(),
@@ -473,7 +512,7 @@ TEST_F(LogTestV2, Types) {
 
     // Timestamp
     Timestamp ts = Timestamp::max();
-    LOGV2("Timestamp {}", "name"_attr = ts);
+    LOGV2(20026, "Timestamp {}", "name"_attr = ts);
     ASSERT_EQUALS(text.back(), std::string("Timestamp ") + ts.toString());
     ASSERT_EQUALS(mongo::fromjson(json.back())
                       .getField(kAttributesFieldName)
@@ -485,7 +524,7 @@ TEST_F(LogTestV2, Types) {
 
     // UUID
     UUID uuid = UUID::gen();
-    LOGV2("UUID {}", "name"_attr = uuid);
+    LOGV2(20027, "UUID {}", "name"_attr = uuid);
     ASSERT_EQUALS(text.back(), std::string("UUID ") + uuid.toString());
     ASSERT_EQUALS(UUID::parse(mongo::fromjson(json.back())
                                   .getField(kAttributesFieldName)
@@ -496,7 +535,7 @@ TEST_F(LogTestV2, Types) {
     ASSERT_EQUALS(UUID::parse(lastBSONElement().Obj()), uuid);
 
     // boost::optional
-    LOGV2("boost::optional empty {}", "name"_attr = boost::optional<bool>());
+    LOGV2(20028, "boost::optional empty {}", "name"_attr = boost::optional<bool>());
     ASSERT_EQUALS(text.back(),
                   std::string("boost::optional empty ") +
                       constants::kNullOptionalString.toString());
@@ -507,14 +546,15 @@ TEST_F(LogTestV2, Types) {
                .isNull());
     ASSERT(lastBSONElement().isNull());
 
-    LOGV2("boost::optional<bool> {}", "name"_attr = boost::optional<bool>(true));
+    LOGV2(20029, "boost::optional<bool> {}", "name"_attr = boost::optional<bool>(true));
     ASSERT_EQUALS(text.back(), std::string("boost::optional<bool> true"));
     ASSERT_EQUALS(
         mongo::fromjson(json.back()).getField(kAttributesFieldName).Obj().getField("name").Bool(),
         true);
     ASSERT_EQUALS(lastBSONElement().Bool(), true);
 
-    LOGV2("boost::optional<boost::optional<bool>> {}",
+    LOGV2(20030,
+          "boost::optional<boost::optional<bool>> {}",
           "name"_attr = boost::optional<boost::optional<bool>>(boost::optional<bool>(true)));
     ASSERT_EQUALS(text.back(), std::string("boost::optional<boost::optional<bool>> true"));
     ASSERT_EQUALS(
@@ -523,7 +563,8 @@ TEST_F(LogTestV2, Types) {
     ASSERT_EQUALS(lastBSONElement().Bool(), true);
 
     TypeWithBSON withBSON(1.0, 2.0);
-    LOGV2("boost::optional<TypeWithBSON> {}",
+    LOGV2(20031,
+          "boost::optional<TypeWithBSON> {}",
           "name"_attr = boost::optional<TypeWithBSON>(withBSON));
     ASSERT_EQUALS(text.back(), std::string("boost::optional<TypeWithBSON> ") + withBSON.toString());
     ASSERT(mongo::fromjson(json.back())
@@ -535,7 +576,8 @@ TEST_F(LogTestV2, Types) {
     ASSERT(lastBSONElement().Obj().woCompare(withBSON.toBSON()) == 0);
 
     TypeWithoutBSON withoutBSON(1.0, 2.0);
-    LOGV2("boost::optional<TypeWithBSON> {}",
+    LOGV2(20032,
+          "boost::optional<TypeWithBSON> {}",
           "name"_attr = boost::optional<TypeWithoutBSON>(withoutBSON));
     ASSERT_EQUALS(text.back(),
                   std::string("boost::optional<TypeWithBSON> ") + withoutBSON.toString());
@@ -546,7 +588,7 @@ TEST_F(LogTestV2, Types) {
 
     // Duration
     Milliseconds ms{12345};
-    LOGV2("Duration {}", "name"_attr = ms);
+    LOGV2(20033, "Duration {}", "name"_attr = ms);
     ASSERT_EQUALS(text.back(), std::string("Duration ") + ms.toString());
     ASSERT_EQUALS(mongo::fromjson(json.back())
                       .getField(kAttributesFieldName)
@@ -566,27 +608,32 @@ TEST_F(LogTestV2, TextFormat) {
     sink->set_formatter(TextFormatter());
     attach(sink);
 
-    LOGV2_OPTIONS({LogTag::kNone}, "warning");
+    LOGV2_OPTIONS(20065, {LogTag::kNone}, "warning");
     ASSERT(lines.back().rfind("** WARNING: warning") == std::string::npos);
 
-    LOGV2_OPTIONS({LogTag::kStartupWarnings}, "warning");
+    LOGV2_OPTIONS(20066, {LogTag::kStartupWarnings}, "warning");
     ASSERT(lines.back().rfind("** WARNING: warning") != std::string::npos);
 
-    LOGV2_OPTIONS({static_cast<LogTag::Value>(LogTag::kStartupWarnings | LogTag::kPlainShell)},
+    LOGV2_OPTIONS(20067,
+                  {static_cast<LogTag::Value>(LogTag::kStartupWarnings | LogTag::kPlainShell)},
                   "warning");
     ASSERT(lines.back().rfind("** WARNING: warning") != std::string::npos);
 
     TypeWithBSON t(1.0, 2.0);
-    LOGV2("{} custom formatting", "name"_attr = t);
+    LOGV2(20034, "{} custom formatting", "name"_attr = t);
     ASSERT(lines.back().rfind(t.toString() + " custom formatting") != std::string::npos);
 
-    LOGV2("{} bson", "name"_attr = t.toBSON());
+    LOGV2(20035, "{} bson", "name"_attr = t.toBSON());
     ASSERT(lines.back().rfind(t.toBSON().jsonString(JsonStringFormat::ExtendedRelaxedV2_0_0) +
                               " bson") != std::string::npos);
 
     TypeWithoutBSON t2(1.0, 2.0);
-    LOGV2("{} custom formatting, no bson", "name"_attr = t2);
+    LOGV2(20036, "{} custom formatting, no bson", "name"_attr = t2);
     ASSERT(lines.back().rfind(t.toString() + " custom formatting, no bson") != std::string::npos);
+
+    TypeWithNonMemberFormatting t3;
+    LOGV2(20079, "{}", "name"_attr = t3);
+    ASSERT(lines.back().rfind(toString(t3)) != std::string::npos);
 }
 
 TEST_F(LogTestV2, JsonBsonFormat) {
@@ -608,15 +655,15 @@ TEST_F(LogTestV2, JsonBsonFormat) {
 
     BSONObj log;
 
-    LOGV2("test");
+    LOGV2(20037, "test");
     auto validateRoot = [](const BSONObj& obj) {
         ASSERT_EQUALS(obj.getField(kTimestampFieldName).Date(), Date_t::lastNowForTest());
         ASSERT_EQUALS(obj.getField(kSeverityFieldName).String(),
                       LogSeverity::Info().toStringDataCompact());
         ASSERT_EQUALS(obj.getField(kComponentFieldName).String(),
                       LogComponent(MONGO_LOGV2_DEFAULT_COMPONENT).getNameForLog());
-        ASSERT(obj.getField(kContextFieldName).String() == getThreadName());
-        ASSERT(!obj.hasField(kStableIdFieldName));
+        ASSERT_EQUALS(obj.getField(kContextFieldName).String(), getThreadName());
+        ASSERT_EQUALS(obj.getField(kIdFieldName).Int(), 20037);
         ASSERT_EQUALS(obj.getField(kMessageFieldName).String(), "test");
         ASSERT(!obj.hasField(kAttributesFieldName));
         ASSERT(!obj.hasField(kTagsFieldName));
@@ -625,7 +672,7 @@ TEST_F(LogTestV2, JsonBsonFormat) {
     validateRoot(BSONObj(linesBson.back().data()));
 
 
-    LOGV2("test {}", "name"_attr = 1);
+    LOGV2(20038, "test {}", "name"_attr = 1);
     auto validateAttr = [](const BSONObj& obj) {
         ASSERT_EQUALS(obj.getField(kMessageFieldName).String(), "test {name}");
         ASSERT_EQUALS(obj.getField(kAttributesFieldName).Obj().nFields(), 1);
@@ -635,7 +682,7 @@ TEST_F(LogTestV2, JsonBsonFormat) {
     validateAttr(BSONObj(linesBson.back().data()));
 
 
-    LOGV2("test {:d}", "name"_attr = 2);
+    LOGV2(20039, "test {:d}", "name"_attr = 2);
     auto validateMsgReconstruction = [](const BSONObj& obj) {
         ASSERT_EQUALS(obj.getField(kMessageFieldName).String(), "test {name:d}");
         ASSERT_EQUALS(obj.getField(kAttributesFieldName).Obj().nFields(), 1);
@@ -644,7 +691,7 @@ TEST_F(LogTestV2, JsonBsonFormat) {
     validateMsgReconstruction(mongo::fromjson(lines.back()));
     validateMsgReconstruction(BSONObj(linesBson.back().data()));
 
-    LOGV2("test {: <4}", "name"_attr = 2);
+    LOGV2(20040, "test {: <4}", "name"_attr = 2);
     auto validateMsgReconstruction2 = [](const BSONObj& obj) {
         ASSERT_EQUALS(obj.getField(kMessageFieldName).String(), "test {name: <4}");
         ASSERT_EQUALS(obj.getField(kAttributesFieldName).Obj().nFields(), 1);
@@ -654,7 +701,7 @@ TEST_F(LogTestV2, JsonBsonFormat) {
     validateMsgReconstruction2(BSONObj(linesBson.back().data()));
 
 
-    LOGV2_OPTIONS({LogTag::kStartupWarnings}, "warning");
+    LOGV2_OPTIONS(20068, {LogTag::kStartupWarnings}, "warning");
     auto validateTags = [](const BSONObj& obj) {
         ASSERT_EQUALS(obj.getField(kMessageFieldName).String(), "warning");
         ASSERT_EQUALS(
@@ -664,7 +711,7 @@ TEST_F(LogTestV2, JsonBsonFormat) {
     validateTags(mongo::fromjson(lines.back()));
     validateTags(BSONObj(linesBson.back().data()));
 
-    LOGV2_OPTIONS({LogComponent::kControl}, "different component");
+    LOGV2_OPTIONS(20069, {LogComponent::kControl}, "different component");
     auto validateComponent = [](const BSONObj& obj) {
         ASSERT_EQUALS(obj.getField("c"_sd).String(),
                       LogComponent(LogComponent::kControl).getNameForLog());
@@ -675,7 +722,7 @@ TEST_F(LogTestV2, JsonBsonFormat) {
 
 
     TypeWithBSON t(1.0, 2.0);
-    LOGV2("{} custom formatting", "name"_attr = t);
+    LOGV2(20041, "{} custom formatting", "name"_attr = t);
     auto validateCustomAttr = [&t](const BSONObj& obj) {
         ASSERT_EQUALS(obj.getField(kMessageFieldName).String(), "{name} custom formatting");
         ASSERT_EQUALS(obj.getField(kAttributesFieldName).Obj().nFields(), 1);
@@ -687,7 +734,7 @@ TEST_F(LogTestV2, JsonBsonFormat) {
     validateCustomAttr(BSONObj(linesBson.back().data()));
 
 
-    LOGV2("{} bson", "name"_attr = t.toBSON());
+    LOGV2(20042, "{} bson", "name"_attr = t.toBSON());
     auto validateBsonAttr = [&t](const BSONObj& obj) {
         ASSERT_EQUALS(obj.getField(kMessageFieldName).String(), "{name} bson");
         ASSERT_EQUALS(obj.getField(kAttributesFieldName).Obj().nFields(), 1);
@@ -700,7 +747,7 @@ TEST_F(LogTestV2, JsonBsonFormat) {
 
 
     TypeWithoutBSON t2(1.0, 2.0);
-    LOGV2("{} custom formatting", "name"_attr = t2);
+    LOGV2(20043, "{} custom formatting", "name"_attr = t2);
     auto validateCustomAttrWithoutBSON = [&t2](const BSONObj& obj) {
         ASSERT_EQUALS(obj.getField(kMessageFieldName).String(), "{name} custom formatting");
         ASSERT_EQUALS(obj.getField(kAttributesFieldName).Obj().nFields(), 1);
@@ -711,7 +758,7 @@ TEST_F(LogTestV2, JsonBsonFormat) {
     validateCustomAttrWithoutBSON(BSONObj(linesBson.back().data()));
 
     TypeWithBSONSerialize t3(1.0, 2.0);
-    LOGV2("{}", "name"_attr = t3);
+    LOGV2(20044, "{}", "name"_attr = t3);
     auto validateCustomAttrBSONSerialize = [&t3](const BSONObj& obj) {
         BSONObjBuilder builder;
         t3.serialize(&builder);
@@ -726,7 +773,7 @@ TEST_F(LogTestV2, JsonBsonFormat) {
 
 
     TypeWithBothBSONFormatters t4(1.0, 2.0);
-    LOGV2("{}", "name"_attr = t4);
+    LOGV2(20045, "{}", "name"_attr = t4);
     auto validateCustomAttrBSONBothFormatters = [&t4](const BSONObj& obj) {
         BSONObjBuilder builder;
         t4.serialize(&builder);
@@ -740,7 +787,7 @@ TEST_F(LogTestV2, JsonBsonFormat) {
     validateCustomAttrBSONBothFormatters(BSONObj(linesBson.back().data()));
 
     TypeWithBSONArray t5;
-    LOGV2("{}", "name"_attr = t5);
+    LOGV2(20046, "{}", "name"_attr = t5);
     auto validateCustomAttrBSONArray = [&t5](const BSONObj& obj) {
         ASSERT_EQUALS(obj.getField(kAttributesFieldName).Obj().getField("name").type(),
                       BSONType::Array);
@@ -752,6 +799,16 @@ TEST_F(LogTestV2, JsonBsonFormat) {
     };
     validateCustomAttrBSONArray(mongo::fromjson(lines.back()));
     validateCustomAttrBSONArray(BSONObj(linesBson.back().data()));
+
+    TypeWithNonMemberFormatting t6;
+    LOGV2(20080, "{}", "name"_attr = t6);
+    auto validateNonMemberToBSON = [&t6](const BSONObj& obj) {
+        ASSERT(
+            obj.getField(kAttributesFieldName).Obj().getField("name").Obj().woCompare(toBSON(t6)) ==
+            0);
+    };
+    validateNonMemberToBSON(mongo::fromjson(lines.back()));
+    validateNonMemberToBSON(BSONObj(linesBson.back().data()));
 }
 
 TEST_F(LogTestV2, Containers) {
@@ -799,7 +856,7 @@ TEST_F(LogTestV2, Containers) {
 
     // All standard sequential containers are supported
     std::vector<std::string> vectorStrings = {"str1", "str2", "str3"};
-    LOGV2("{}", "name"_attr = vectorStrings);
+    LOGV2(20047, "{}", "name"_attr = vectorStrings);
     ASSERT_EQUALS(text.back(),
                   text_join(vectorStrings.begin(), vectorStrings.end(), [](const std::string& str) {
                       return str;
@@ -817,7 +874,7 @@ TEST_F(LogTestV2, Containers) {
     // Elements can require custom formatting
     std::list<TypeWithBSON> listCustom = {
         TypeWithBSON(0.0, 1.0), TypeWithBSON(2.0, 3.0), TypeWithBSON(4.0, 5.0)};
-    LOGV2("{}", "name"_attr = listCustom);
+    LOGV2(20048, "{}", "name"_attr = listCustom);
     ASSERT_EQUALS(text.back(),
                   text_join(listCustom.begin(), listCustom.end(), [](const auto& item) {
                       return item.toString();
@@ -837,7 +894,7 @@ TEST_F(LogTestV2, Containers) {
 
     // Optionals are also allowed as elements
     std::forward_list<boost::optional<bool>> listOptionalBool = {true, boost::none, false};
-    LOGV2("{}", "name"_attr = listOptionalBool);
+    LOGV2(20049, "{}", "name"_attr = listOptionalBool);
     ASSERT_EQUALS(text.back(),
                   text_join(listOptionalBool.begin(),
                             listOptionalBool.end(),
@@ -868,7 +925,7 @@ TEST_F(LogTestV2, Containers) {
 
     // Containers can be nested
     std::array<std::deque<int>, 4> arrayOfDeques = {{{0, 1}, {2, 3}, {4, 5}, {6, 7}}};
-    LOGV2("{}", "name"_attr = arrayOfDeques);
+    LOGV2(20050, "{}", "name"_attr = arrayOfDeques);
     ASSERT_EQUALS(text.back(),
                   text_join(arrayOfDeques.begin(),
                             arrayOfDeques.end(),
@@ -900,7 +957,7 @@ TEST_F(LogTestV2, Containers) {
 
     // Associative containers are also supported
     std::map<std::string, std::string> mapStrStr = {{"key1", "val1"}, {"key2", "val2"}};
-    LOGV2("{}", "name"_attr = mapStrStr);
+    LOGV2(20051, "{}", "name"_attr = mapStrStr);
     ASSERT_EQUALS(text.back(), text_join(mapStrStr.begin(), mapStrStr.end(), [](const auto& item) {
                       return fmt::format("{}: {}", item.first, item.second);
                   }));
@@ -919,7 +976,7 @@ TEST_F(LogTestV2, Containers) {
         {"key1", boost::optional<std::vector<int>>{{1, 2, 3}}},
         {"key2", boost::optional<std::vector<int>>{boost::none}}};
 
-    LOGV2("{}", "name"_attr = mapOptionalVector);
+    LOGV2(20052, "{}", "name"_attr = mapOptionalVector);
     ASSERT_EQUALS(
         text.back(),
         text_join(mapOptionalVector.begin(),
@@ -960,45 +1017,69 @@ TEST_F(LogTestV2, Unicode) {
     auto sink = LogTestBackend::create(lines);
     sink->set_filter(ComponentSettingsFilter(LogManager::global().getGlobalDomain(),
                                              LogManager::global().getGlobalSettings()));
-    sink->set_formatter(PlainFormatter());
+    sink->set_formatter(JSONFormatter());
     attach(sink);
 
+    // JSON requires strings to be valid UTF-8 and control characters escaped.
+    // JSON parsers decode escape sequences so control characters should be round-trippable.
+    // Invalid UTF-8 encoded data is replaced by the Unicode Replacement Character (U+FFFD).
+    // There is no way to preserve the data without introducing special semantics in how to parse.
     std::pair<StringData, StringData> strs[] = {
         // Single byte characters that needs to be escaped
-        {"\a\b\f\n\r\t\v\\\0\x7f\x1b"_sd, "\\a\\b\\f\\n\\r\\t\\v\\\\\\0\\x7f\\e"_sd},
+        {"\a\b\f\n\r\t\v\\\0\x7f\x1b"_sd, "\a\b\f\n\r\t\v\\\0\x7f\x1b"_sd},
         // multi byte characters that needs to be escaped (unicode control characters)
-        {"\u0080\u009f"_sd, "\\xc2\\x80\\xc2\\x9f"_sd},
+        {"\u0080\u009f"_sd, "\u0080\u009f"_sd},
         // Valid 2 Octet sequence, LATIN SMALL LETTER N WITH TILDE
         {"\u00f1"_sd, "\u00f1"_sd},
         // Invalid 2 Octet Sequence, result is escaped
-        {"\xc3\x28"_sd, "\\xc3\x28"_sd},
+        {"\xc3\x28"_sd, "\ufffd\x28"_sd},
         // Invalid Sequence Identifier, result is escaped
-        {"\xa0\xa1"_sd, "\\xa0\\xa1"_sd},
+        {"\xa0\xa1"_sd, "\ufffd\ufffd"_sd},
         // Valid 3 Octet sequence, RUNIC LETTER TIWAZ TIR TYR T
         {"\u16cf"_sd, "\u16cf"_sd},
         // Invalid 3 Octet Sequence (in 2nd Octet), result is escaped
-        {"\xe2\x28\xa1"_sd, "\\xe2\x28\\xa1"_sd},
+        {"\xe2\x28\xa1"_sd, "\ufffd\x28\ufffd"_sd},
         // Invalid 3 Octet Sequence (in 3rd Octet), result is escaped
-        {"\xe2\x82\x28"_sd, "\\xe2\\x82\x28"_sd},
+        {"\xe2\x82\x28"_sd, "\ufffd\ufffd\x28"_sd},
         // Valid 4 Octet sequence, GOTHIC LETTER MANNA
         {"\U0001033c"_sd, "\U0001033c"_sd},
         // Invalid 4 Octet Sequence (in 2nd Octet), result is escaped
-        {"\xf0\x28\x8c\xbc"_sd, "\\xf0\x28\\x8c\\xbc"_sd},
+        {"\xf0\x28\x8c\xbc"_sd, "\ufffd\x28\ufffd\ufffd"_sd},
         // Invalid 4 Octet Sequence (in 3rd Octet), result is escaped
-        {"\xf0\x90\x28\xbc"_sd, "\\xf0\\x90\x28\\xbc"_sd},
+        {"\xf0\x90\x28\xbc"_sd, "\ufffd\ufffd\x28\ufffd"_sd},
         // Invalid 4 Octet Sequence (in 4th Octet), result is escaped
-        {"\xf0\x28\x8c\x28"_sd, "\\xf0\x28\\x8c\x28"_sd},
+        {"\xf0\x28\x8c\x28"_sd, "\ufffd\x28\ufffd\x28"_sd},
         // Valid 5 Octet Sequence (but not Unicode!), result is escaped
-        {"\xf8\xa1\xa1\xa1\xa1"_sd, "\\xf8\\xa1\\xa1\\xa1\\xa1"_sd},
+        {"\xf8\xa1\xa1\xa1\xa1"_sd, "\ufffd\ufffd\ufffd\ufffd\ufffd"_sd},
         // Valid 6 Octet Sequence (but not Unicode!), result is escaped
-        {"\xfc\xa1\xa1\xa1\xa1\xa1"_sd, "\\xfc\\xa1\\xa1\\xa1\\xa1\\xa1"_sd},
+        {"\xfc\xa1\xa1\xa1\xa1\xa1"_sd, "\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd"_sd},
         // Invalid 3 Octet sequence, buffer ends prematurely, result is escaped
-        {"\xe2\x82"_sd, "\\xe2\\x82"_sd},
+        {"\xe2\x82"_sd, "\ufffd\ufffd"_sd},
+    };
+
+    auto getLastMongo = [&]() {
+        return mongo::fromjson(lines.back())
+            .getField(constants::kAttributesFieldName)
+            .Obj()
+            .getField("name")
+            .String();
+    };
+
+    auto getLastPtree = [&]() {
+        namespace pt = boost::property_tree;
+
+        std::istringstream json_stream(lines.back());
+        pt::ptree ptree;
+        pt::json_parser::read_json(json_stream, ptree);
+        return ptree.get<std::string>(std::string(constants::kAttributesFieldName) + ".name");
     };
 
     for (const auto& pair : strs) {
-        LOGV2("{}", "name"_attr = pair.first);
-        ASSERT_EQUALS(lines.back(), pair.second);
+        LOGV2(20053, "{}", "name"_attr = pair.first);
+
+        // Verify with both our parser and boost::property_tree
+        ASSERT_EQUALS(pair.second, getLastMongo());
+        ASSERT_EQUALS(pair.second, getLastPtree());
     }
 }
 
@@ -1029,22 +1110,22 @@ TEST_F(LogTestV2, Threads) {
 
     threads.emplace_back([&]() {
         for (int i = 0; i < kNumPerThread; ++i)
-            LOGV2("thread1");
+            LOGV2(20054, "thread1");
     });
 
     threads.emplace_back([&]() {
         for (int i = 0; i < kNumPerThread; ++i)
-            LOGV2("thread2");
+            LOGV2(20055, "thread2");
     });
 
     threads.emplace_back([&]() {
         for (int i = 0; i < kNumPerThread; ++i)
-            LOGV2("thread3");
+            LOGV2(20056, "thread3");
     });
 
     threads.emplace_back([&]() {
         for (int i = 0; i < kNumPerThread; ++i)
-            LOGV2("thread4");
+            LOGV2(20057, "thread4");
     });
 
     for (auto&& thread : threads) {
@@ -1080,9 +1161,9 @@ TEST_F(LogTestV2, Ramlog) {
         });
     };
 
-    LOGV2("test");
+    LOGV2(20058, "test");
     ASSERT(verifyRamLog());
-    LOGV2("test2");
+    LOGV2(20059, "test2");
     ASSERT(verifyRamLog());
 }
 
@@ -1113,11 +1194,11 @@ TEST_F(LogTestV2, MultipleDomains) {
     other_sink->set_formatter(PlainFormatter());
     attach(other_sink);
 
-    LOGV2_OPTIONS({&other_domain}, "test");
+    LOGV2_OPTIONS(20070, {&other_domain}, "test");
     ASSERT(global_lines.empty());
     ASSERT(other_lines.back() == "test");
 
-    LOGV2("global domain log");
+    LOGV2(20060, "global domain log");
     ASSERT(global_lines.back() == "global domain log");
     ASSERT(other_lines.back() == "test");
 }
@@ -1160,10 +1241,10 @@ TEST_F(LogTestV2, FileLogging) {
         return lines;
     };
 
-    LOGV2("test");
+    LOGV2(20061, "test");
     ASSERT(readFile(file_name).back() == "test");
 
-    LOGV2("test2");
+    LOGV2(20062, "test2");
     ASSERT(readFile(file_name).back() == "test2");
 
     auto before_rotation = readFile(file_name);

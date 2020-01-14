@@ -44,6 +44,7 @@
 #include "mongo/logv2/log_tag.h"
 #include "mongo/logv2/name_extractor.h"
 #include "mongo/logv2/named_arg_formatter.h"
+#include "mongo/util/str_escape.h"
 #include "mongo/util/time_support.h"
 
 #include <fmt/format.h>
@@ -76,10 +77,9 @@ struct JSONValueExtractor {
             val.toBSONArray().jsonStringBuffer(
                 JsonStringFormat::ExtendedRelaxedV2_0_0, 0, true, _buffer);
         } else if (val.stringSerialize) {
-            storeUnquoted(name);
-            _buffer.push_back('"');
-            val.stringSerialize(_buffer);
-            _buffer.push_back('"');
+            fmt::memory_buffer intermediate;
+            val.stringSerialize(intermediate);
+            storeQuoted(name, StringData(intermediate.data(), intermediate.size()));
         } else {
             // This is a string, surround value with quotes
             storeQuoted(name, val.toString());
@@ -122,7 +122,9 @@ private:
 
     template <typename T>
     void storeQuoted(StringData name, const T& value) {
-        fmt::format_to(_buffer, R"({}"{}":"{}")", _separator, name, value);
+        fmt::format_to(_buffer, R"({}"{}":")", _separator, name);
+        str::escapeForJSON(_buffer, value);
+        _buffer.push_back('"');
         _separator = ","_sd;
     }
 
@@ -137,12 +139,6 @@ void JSONFormatter::operator()(boost::log::record_view const& rec,
 
     // Build a JSON object for the user attributes.
     const auto& attrs = extract<TypeErasedAttributeStorage>(attributes::attributes(), rec).get();
-
-    std::string id;
-    auto stable_id = extract<StringData>(attributes::stableId(), rec).get();
-    if (!stable_id.empty()) {
-        id = fmt::format("\"{}\":\"{}\",", constants::kStableIdFieldName, stable_id);
-    }
 
     StringData severity =
         extract<LogSeverity>(attributes::severity(), rec).get().toStringDataCompact();
@@ -166,7 +162,7 @@ void JSONFormatter::operator()(boost::log::record_view const& rec,
                    R"("{}":"{}"{: <{}})"        // severity with padding for the comma
                    R"("{}":"{}"{: <{}})"        // component with padding for the comma
                    R"("{}":"{}",)"              // context
-                   R"({})"                      // optional stable id
+                   R"("{}":{},)"                // id
                    R"("{}":")",                 // message
                                                 // timestamp
                    constants::kTimestampFieldName,
@@ -184,8 +180,9 @@ void JSONFormatter::operator()(boost::log::record_view const& rec,
                    // context
                    constants::kContextFieldName,
                    extract<StringData>(attributes::threadName(), rec).get(),
-                   // stable id
-                   id,
+                   // id
+                   constants::kIdFieldName,
+                   extract<int32_t>(attributes::id(), rec).get(),
                    // message
                    constants::kMessageFieldName);
 

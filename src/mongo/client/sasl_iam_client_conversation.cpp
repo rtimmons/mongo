@@ -92,6 +92,22 @@ iam::AWSCredentials SaslIAMClientConversation::_getUserCredentials() const {
 }
 
 iam::AWSCredentials SaslIAMClientConversation::_getLocalAWSCredentials() const {
+    // Check the environment variables
+    // These are set by AWS Lambda to pass in credentials and can be set by users.
+    StringData awsAccessKeyId = getenv("AWS_ACCESS_KEY_ID");
+    StringData awsSecretAccessKey = getenv("AWS_SECRET_ACCESS_KEY");
+    StringData awsSessionToken = getenv("AWS_SESSION_TOKEN");
+
+    if (!awsAccessKeyId.empty() && !awsSecretAccessKey.empty()) {
+        if (!awsSessionToken.empty()) {
+            return iam::AWSCredentials(awsAccessKeyId.toString(),
+                                       awsSecretAccessKey.toString(),
+                                       awsSessionToken.toString());
+        }
+
+        return iam::AWSCredentials(awsAccessKeyId.toString(), awsSecretAccessKey.toString());
+    }
+
     StringData ecsMetadata = getenv("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI");
     if (!ecsMetadata.empty()) {
         return _getEcsCredentials(ecsMetadata);
@@ -112,7 +128,7 @@ iam::AWSCredentials SaslIAMClientConversation::_getEc2Credentials() const {
         // Get the token for authenticating with Instance Metadata Version 2
         // Set a lifetime of 30 seconds since we are only going to use this token for one set of
         // requests.
-        std::vector<std::string> headers{"X-aws-ec2-metadata-token-ttl-seconds: 30"};
+        std::vector<std::string> headers{"X-aws-ec2-metadata-token-ttl-seconds: 30", "Expect:"};
         httpClient->setHeaders(headers);
         DataBuilder getToken = httpClient->put(getDefaultEC2Host() + "/latest/api/token",
                                                ConstDataRange(nullptr, nullptr));

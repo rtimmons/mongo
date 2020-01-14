@@ -233,8 +233,15 @@ public:
         MONGO_UNREACHABLE;
     }
 
+    virtual Status disableIncrementalBackup(OperationContext* opCtx) {
+        MONGO_UNREACHABLE;
+    }
+
     virtual StatusWith<std::vector<StorageEngine::BackupBlock>> beginNonBlockingBackup(
-        OperationContext* opCtx) {
+        OperationContext* opCtx,
+        bool incrementalBackup,
+        boost::optional<std::string> thisBackupName,
+        boost::optional<std::string> srcBackupName) {
         return Status(ErrorCodes::CommandNotSupported,
                       "The current storage engine doesn't support backup mode");
     }
