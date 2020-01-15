@@ -500,6 +500,7 @@ function RollbackTest(name = "RollbackTest", replSet) {
             this.checkDataConsistency(checkDataConsistencyOptions);
         }
         transitionIfAllowed(State.kStopped);
+        print("@ Calling rst.stopSet");
         return rst.stopSet(undefined /* signal */,
                            undefined /* forRestart */,
                            {skipCheckDBHashes: true, skipValidation: true});
