@@ -10,25 +10,21 @@ load("jstests/replsets/libs/rollback_test.js");
 "use strict";
 
     // callback is type f: RollbackTest -> void
-    const testCase = function(msg, requiredCallCount, callback) {
-        let rollbackTest = new RollbackTest("rollbacktest_unittest");
-        let callCount = 0;
+    const testCase = function(callback) {
+        const context = {checkDataConsistencyCalls: 0};
+
+        const rollbackTest = new RollbackTest("rollbacktest_unittest");
+
         rollbackTest.checkDataConsistency = function() {
-            ++callCount;
+            ++context.checkDataConsistencyCalls;
         };
-        try {
-            callback(rollbackTest);
-        } finally {
-            assert.eq(callCount, requiredCallCount, msg);
-        }
+        callback(rollbackTest, context);
     };
 
-    testCase("single stop call only calls once", 1, rbt => {
+    testCase((rbt, ctx) => {
+        assert.eq(ctx.checkDataConsistencyCalls, 0);
         rbt.stop();
-    });
-
-    testCase("single stop call only calls once", 1, rbt => {
-
+        assert.eq(ctx.checkDataConsistencyCalls, 1);
     });
 
 })();
