@@ -219,7 +219,7 @@ function RollbackTest(name = "RollbackTest", replSet) {
     let doneConsistencyChecks = false;
 
     // This is an instance method primarily so it can be overridden in testing.
-    this.checkDataConsistency = function(
+    this._checkDataConsistencyImpl = function(
         {skipCheckCollectionCounts: skipCheckCollectionCounts = false} = {}) {
         assert.eq(curState,
                   State.kSteadyStateOps,
@@ -239,9 +239,13 @@ function RollbackTest(name = "RollbackTest", replSet) {
         rst.checkOplogs(name);
         rst.checkReplicatedDataHashes(name);
         collectionValidator.validateNodes(rst.nodeList());
+    };
 
+    this.checkDataConsistency = function(
+        {skipCheckCollectionCounts: skipCheckCollectionCounts = false} = {}) {
         // If we skipped collectionCounts this time we still need to do them later.
         doneConsistencyChecks = !skipCheckCollectionCounts;
+        this._checkDataConsistencyImpl({skipCheckCollectionCounts: skipCheckCollectionCounts});
     };
 
     function log(msg, important = false) {
@@ -500,7 +504,6 @@ function RollbackTest(name = "RollbackTest", replSet) {
             this.checkDataConsistency(checkDataConsistencyOptions);
         }
         transitionIfAllowed(State.kStopped);
-        print("@ Calling rst.stopSet");
         return rst.stopSet(undefined /* signal */,
                            undefined /* forRestart */,
                            {skipCheckDBHashes: true, skipValidation: true});
