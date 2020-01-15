@@ -218,7 +218,8 @@ function RollbackTest(name = "RollbackTest", replSet) {
     // Pessimistically set back to false every time we transition states.
     let doneConsistencyChecks = false;
 
-    function checkDataConsistency(
+    // This is an instance method primarily so it can be overridden in testing.
+    this.checkDataConsistency = function(
         {skipCheckCollectionCounts: skipCheckCollectionCounts = false} = {}) {
         assert.eq(curState,
                   State.kSteadyStateOps,
@@ -241,7 +242,7 @@ function RollbackTest(name = "RollbackTest", replSet) {
 
         // If we skipped collectionCounts this time we still need to do them later.
         doneConsistencyChecks = !skipCheckCollectionCounts;
-    }
+    };
 
     function log(msg, important = false) {
         if (important) {
@@ -363,7 +364,7 @@ function RollbackTest(name = "RollbackTest", replSet) {
         if (skipDataConsistencyChecks) {
             print('Skipping data consistency checks');
         } else {
-            checkDataConsistency();
+            this.checkDataConsistency();
         }
 
         // Now that awaitReplication and checkDataConsistency are done, stop replication again so
@@ -496,7 +497,7 @@ function RollbackTest(name = "RollbackTest", replSet) {
         restartServerReplication(tiebreakerNode);
         rst.awaitReplication();
         if (!doneConsistencyChecks) {
-            checkDataConsistency(checkDataConsistencyOptions);
+            this.checkDataConsistency(checkDataConsistencyOptions);
         }
         transitionIfAllowed(State.kStopped);
         return rst.stopSet(undefined /* signal */,
