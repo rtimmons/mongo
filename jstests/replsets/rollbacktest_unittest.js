@@ -73,4 +73,21 @@ testCase((rbt, ctx) => {
     assert.eq(ctx.checkDataConsistencyCallCount, 2);
     assert.eq(ctx.stopSetCallCount, 1);
 });
+
+testCase((rbt, ctx) => {
+    // Force it.
+    rbt.checkDataConsistency();
+
+    // Add a node. It may not be consistent so we'll need to run checks at time of stop().
+    rbt.add({
+        config: {
+            rsConfig: {priority: 0, votes: 0},
+        },
+    });
+
+    rbt.stop();
+
+    assert.eq(ctx.checkDataConsistencyCallCount, 2);
+    assert.eq(ctx.stopSetCallCount, 1);
+});
 })();
