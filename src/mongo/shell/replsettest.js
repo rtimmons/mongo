@@ -2942,7 +2942,6 @@ var ReplSetTest = function(opts) {
             // - the primary goes down and none can be elected (so fsync lock/unlock commands fail)
             // - the replica set is in an unrecoverable inconsistent state. E.g. the replica set
             //   is partitioned.
-            //
             let master = _callIsMaster();
             if (master && this._liveNodes.length > 1) {  // skip for sets with 1 live node
                 // Auth only on live nodes because authutil.assertAuthenticate
