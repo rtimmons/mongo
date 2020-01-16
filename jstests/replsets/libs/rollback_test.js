@@ -219,8 +219,7 @@ function RollbackTest(name = "RollbackTest", replSet) {
     let doneConsistencyChecks = false;
 
     // This is an instance method primarily so it can be overridden in testing.
-    this._checkDataConsistencyImpl = function(
-        {skipCheckCollectionCounts: skipCheckCollectionCounts = false} = {}) {
+    this._checkDataConsistencyImpl = function() {
         assert.eq(curState,
                   State.kSteadyStateOps,
                   "Not in kSteadyStateOps state, cannot check data consistency");
@@ -232,8 +231,7 @@ function RollbackTest(name = "RollbackTest", replSet) {
         const name = rst.name;
         // We must check counts before we validate since validate fixes counts. We cannot check
         // counts if unclean shutdowns occur.
-        if ((!TestData.allowUncleanShutdowns || !TestData.rollbackShutdowns) &&
-            !skipCheckCollectionCounts) {
+        if (!TestData.allowUncleanShutdowns || !TestData.rollbackShutdowns) {
             rst.checkCollectionCounts(name);
         }
         rst.checkOplogs(name);
@@ -241,11 +239,9 @@ function RollbackTest(name = "RollbackTest", replSet) {
         collectionValidator.validateNodes(rst.nodeList());
     };
 
-    this.checkDataConsistency = function(
-        {skipCheckCollectionCounts: skipCheckCollectionCounts = false} = {}) {
-        // If we skipped collectionCounts this time we still need to do them later.
-        doneConsistencyChecks = !skipCheckCollectionCounts;
-        this._checkDataConsistencyImpl({skipCheckCollectionCounts: skipCheckCollectionCounts});
+    this.checkDataConsistency = function() {
+        doneConsistencyChecks = true;
+        this._checkDataConsistencyImpl();
     };
 
     function log(msg, important = false) {
