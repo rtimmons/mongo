@@ -1,6 +1,6 @@
 
 /**
- * Test of the RollbackTest helper lib.
+ * Test of the RollbackTest helper library.
  */
 
 load("jstests/replsets/rslib.js");
