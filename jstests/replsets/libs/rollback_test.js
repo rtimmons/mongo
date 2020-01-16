@@ -214,11 +214,8 @@ function RollbackTest(name = "RollbackTest", replSet) {
         return replSet;
     }
 
-    // Track if we've done consistency checks.
-    let doneConsistencyChecks = false;
-
-    // This is an instance method primarily so it can be overridden in testing.
-    this._checkDataConsistencyImpl = function() {
+    function checkDataConsistency(
+        {skipCheckCollectionCounts: skipCheckCollectionCounts = false} = {}) {
         assert.eq(curState,
                   State.kSteadyStateOps,
                   "Not in kSteadyStateOps state, cannot check data consistency");
@@ -230,18 +227,14 @@ function RollbackTest(name = "RollbackTest", replSet) {
         const name = rst.name;
         // We must check counts before we validate since validate fixes counts. We cannot check
         // counts if unclean shutdowns occur.
-        if (!TestData.allowUncleanShutdowns || !TestData.rollbackShutdowns) {
+        if ((!TestData.allowUncleanShutdowns || !TestData.rollbackShutdowns) &&
+            !skipCheckCollectionCounts) {
             rst.checkCollectionCounts(name);
         }
         rst.checkOplogs(name);
         rst.checkReplicatedDataHashes(name);
         collectionValidator.validateNodes(rst.nodeList());
-    };
-
-    this.checkDataConsistency = function() {
-        doneConsistencyChecks = true;
-        this._checkDataConsistencyImpl();
-    };
+    }
 
     function log(msg, important = false) {
         if (important) {
@@ -287,8 +280,6 @@ function RollbackTest(name = "RollbackTest", replSet) {
         if (reInitiate) {
             rst.reInitiate();
         }
-        // New node to do consistency checks on.
-        doneConsistencyChecks = false;
         return node;
     };
 
@@ -362,7 +353,7 @@ function RollbackTest(name = "RollbackTest", replSet) {
         if (skipDataConsistencyChecks) {
             print('Skipping data consistency checks');
         } else {
-            this.checkDataConsistency();
+            checkDataConsistency();
         }
 
         // Now that awaitReplication and checkDataConsistency are done, stop replication again so
@@ -403,9 +394,6 @@ function RollbackTest(name = "RollbackTest", replSet) {
         // We do not disconnect the primary from the tiebreaker node so that it remains primary.
         log(`Isolating the primary ${curPrimary.host} from the secondary ${curSecondary.host}`);
         curPrimary.disconnect([curSecondary]);
-
-        // We go through this phase every time a rollback occurs.
-        doneConsistencyChecks = false;
 
         return curPrimary;
     };
@@ -497,13 +485,9 @@ function RollbackTest(name = "RollbackTest", replSet) {
     this.stop = function(checkDataConsistencyOptions) {
         restartServerReplication(tiebreakerNode);
         rst.awaitReplication();
-        if (!doneConsistencyChecks) {
-            this.checkDataConsistency(checkDataConsistencyOptions);
-        }
+        checkDataConsistency(checkDataConsistencyOptions);
         transitionIfAllowed(State.kStopped);
-        return rst.stopSet(undefined /* signal */,
-                           undefined /* forRestart */,
-                           {skipCheckDBHashes: true, skipValidation: true});
+        return rst.stopSet();
     };
 
     this.getPrimary = function() {
