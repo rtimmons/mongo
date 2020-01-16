@@ -215,7 +215,6 @@ function RollbackTest(name = "RollbackTest", replSet) {
     }
 
     // Track if we've done consistency checks.
-    // Pessimistically set back to false every time we transition states.
     let doneConsistencyChecks = false;
 
     // This is an instance method primarily so it can be overridden in testing.
@@ -257,7 +256,6 @@ function RollbackTest(name = "RollbackTest", replSet) {
      * @private
      */
     function transitionIfAllowed(newState) {
-        doneConsistencyChecks = false;
         if (AcceptableTransitions[curState].includes(newState)) {
             log(`Transitioning to: "${newState}"`, true);
             curState = newState;
@@ -405,6 +403,9 @@ function RollbackTest(name = "RollbackTest", replSet) {
         // We do not disconnect the primary from the tiebreaker node so that it remains primary.
         log(`Isolating the primary ${curPrimary.host} from the secondary ${curSecondary.host}`);
         curPrimary.disconnect([curSecondary]);
+
+        // We go through this phase every time a rollback occurs.
+        doneConsistencyChecks = false;
 
         return curPrimary;
     };
