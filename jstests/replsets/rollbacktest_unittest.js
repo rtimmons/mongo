@@ -1,13 +1,11 @@
-
 /**
  * Test of the RollbackTest helper library.
  */
+(function() {
+"use strict";
 
 load("jstests/replsets/rslib.js");
 load("jstests/replsets/libs/rollback_test.js");
-
-(function() {
-"use strict";
 
 let checkDataConsistencyCallCount = 0;
 let stopSetCallCount = 0;
