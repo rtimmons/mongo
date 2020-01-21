@@ -1027,7 +1027,7 @@ Status applyOperation_inlock(OperationContext* opCtx,
               str::stream() << "Oplog entry did not have 'ts' field when expected: "
                             << redact(opOrGroupedInserts.toBSON()));
 
-    switch (opType) {
+    switch (opType) { // XXX
         case OpTypeEnum::kInsert: {
             uassert(ErrorCodes::NamespaceNotFound,
                     str::stream() << "Failed to apply insert due to missing collection: "

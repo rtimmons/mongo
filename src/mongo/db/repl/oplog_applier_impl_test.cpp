@@ -589,6 +589,8 @@ TEST_F(MultiOplogEntryOplogApplierImplTest, MultiApplyUnpreparedTransactionAllAt
                   DurableTxnStateEnum::kCommitted);
 }
 
+// InitialSyncer -> CollectionCloner has fps to pause on sync source etc
+
 TEST_F(MultiOplogEntryOplogApplierImplTest, MultiApplyUnpreparedTransactionTwoBatches) {
     // Tests an unprepared transaction with ops both in the batch with the commit and prior
     // batches.
@@ -1855,6 +1857,7 @@ TEST_F(OplogApplierImplTest,
     // 'badNss' collection should not be implicitly created while attempting to create an index.
     ASSERT_FALSE(AutoGetCollectionForReadCommand(_opCtx.get(), badNss).getCollection());
 }
+///////
 
 TEST_F(IdempotencyTest, Geo2dsphereIndexFailedOnUpdate) {
     ASSERT_OK(
