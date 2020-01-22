@@ -1,0 +1,25 @@
+os:
+- ubuntu-1804
+
+compile_options:
+- enterprise
+- asan
+- ubsan
+- aubsan
+- debug
+
+# Special build variants that don't compile the server and run tests.
+explicit_buildvariants:
+  name: ubuntu1804-debug-aubsan-lite # TODO: remove explicit name and display name in favor of auto-generated one.
+  display_name: "! {A,UB}SAN Enterprise Ubuntu 18.04 DEBUG"
+  required: false
+  os: ubuntu-1804 # Generate distro from this.
+  compile_flags:
+  - "--variables-files=etc/scons/mongodbtoolchain_v3_clang.vars"
+  - "--dbg=on"
+  - "--opt=on"
+  - "--allocator=system"
+  - "--sanitize=undefined,address"
+  - "--ssl"
+  - "-j$(grep -c ^processor /proc/cpuinfo)"
+  - "--nostrip"

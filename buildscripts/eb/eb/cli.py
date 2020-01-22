@@ -26,6 +26,7 @@ def main(args: typ.List[str] = None, env: typ.Mapping[str,str] = None):
     if env is None:
         env = os.environ
     env = _trim_env(env)
+    print(env)
     if "EB_REPO_ROOT" not in env.keys():
         raise Exception("Need to define the EB_REPO_ROOT env var.")
     repo_root = env["EB_REPO_ROOT"]

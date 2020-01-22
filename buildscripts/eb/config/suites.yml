@@ -1,0 +1,27 @@
+# "Features" are the smallest unit of things to be tested together in Evergreen. They map roughly to PM projects but
+# can be split up even further if necessary. This list can be trivially divided up as needed if it gets too large
+# to fit into one file.
+features:
+- name: txns
+  desription: |
+    mechanisms of distributed transactions
+- name: jsCore
+  description: |
+    deprecated definition "core" MongoDB features. New projects should not be added to this.
+
+# "Modules" is a level of abstraction above "features" and map roughly to Server teams. modules have a many-to-many
+# relationship with features.
+modules:
+- name: sharding
+  features:
+  - txns
+- name: replication
+  features:
+  - txns
+- service-arch
+- execution
+- storage-engine
+- security
+- query-execution
+- realm
+- dummy-new-team
