@@ -1713,7 +1713,7 @@ functions:
             extra_flags="--lint-scope=changed"
           fi
 
-          ${compile_env|} python3 ./buildscripts/scons.py ${compile_flags|} $extra_flags --stack-size=1024 GITDIFFFLAGS="--cached" ${targets}
+          ${compile_env|} python3 ./buildscripts/scons.py ${compile_flags|} $extra_flags --stack-size=1024 GITDIFFFLAGS="${revision}" ${targets}
 
   "scons compile":
     command: shell.exec
@@ -9955,6 +9955,7 @@ buildvariants:
     tooltags: "ssl sasl gssapi"
     build_mongoreplay: true
     large_distro_name: rhel62-large
+    resmoke_jobs_factor: 0.25
   tasks:
   - name: compile_all_run_unittests_TG
     distros:
@@ -10829,6 +10830,8 @@ buildvariants:
     compile_flags: --link-model=dynamic --allocator=system -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_v3_clang.vars
     scons_cache_scope: shared
     scons_cache_mode: all
+    multiversion_platform: ubuntu1604
+    multiversion_edition: enterprise
   tasks:
   - name: compile_all_run_unittests_TG
     distros:

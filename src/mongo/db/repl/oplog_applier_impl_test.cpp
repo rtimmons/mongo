@@ -2249,7 +2249,7 @@ TEST_F(OplogApplierImplTest, LogSlowOpApplicationWhenSuccessful) {
                 "wall: new Date(0), o: "
                 "{ _id: 0 } }, took "
              << applyDuration << "ms";
-    ASSERT_EQUALS(1, countLogLinesContaining(expected.str()));
+    ASSERT_EQUALS(1, countTextFormatLogLinesContaining(expected.str()));
 }
 
 TEST_F(OplogApplierImplTest, DoNotLogSlowOpApplicationWhenFailed) {
@@ -2273,7 +2273,7 @@ TEST_F(OplogApplierImplTest, DoNotLogSlowOpApplicationWhenFailed) {
     expected << "applied op: CRUD { op: \"i\", ns: \"test.t\", o: { _id: 0 }, ts: Timestamp(1, 1), "
                 "t: 1, h: 1, v: 2 }, took "
              << applyDuration << "ms";
-    ASSERT_EQUALS(0, countLogLinesContaining(expected.str()));
+    ASSERT_EQUALS(0, countTextFormatLogLinesContaining(expected.str()));
 }
 
 TEST_F(OplogApplierImplTest, DoNotLogNonSlowOpApplicationWhenSuccessful) {
@@ -2297,7 +2297,7 @@ TEST_F(OplogApplierImplTest, DoNotLogNonSlowOpApplicationWhenSuccessful) {
     expected << "applied op: CRUD { op: \"i\", ns: \"test.t\", o: { _id: 0 }, ts: Timestamp(1, 1), "
                 "t: 1, h: 1, v: 2 }, took "
              << applyDuration << "ms";
-    ASSERT_EQUALS(0, countLogLinesContaining(expected.str()));
+    ASSERT_EQUALS(0, countTextFormatLogLinesContaining(expected.str()));
 }
 class OplogApplierImplTxnTableTest : public OplogApplierImplTest {
 public:

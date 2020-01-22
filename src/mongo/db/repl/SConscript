@@ -631,6 +631,7 @@ env.Library('topology_coordinator',
                 '$BUILD_DIR/mongo/db/audit',
                 '$BUILD_DIR/mongo/rpc/metadata',
                 '$BUILD_DIR/mongo/util/fail_point',
+                'isself',
                 'replica_set_messages',
                 'repl_settings',
                 'rslog',
@@ -639,7 +640,6 @@ env.Library('topology_coordinator',
             LIBDEPS_PRIVATE=[
                 '$BUILD_DIR/mongo/db/catalog/commit_quorum_options',
                 '$BUILD_DIR/mongo/idl/server_parameter',
-                'isself',
             ])
 
 env.Library(
@@ -892,6 +892,7 @@ env.Library(
         '$BUILD_DIR/mongo/db/stats/timer_stats',
     ],
     LIBDEPS_PRIVATE=[
+        'repl_server_parameters',
         '$BUILD_DIR/mongo/db/matcher/expressions',
         '$BUILD_DIR/mongo/db/commands/server_status_core',
     ],
