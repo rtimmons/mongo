@@ -22,8 +22,8 @@ replSet.startSet();
 replSet.initiate();
 const primary = replSet.getPrimary();
 
-const coll = primary.getDB('test').getCollection(name);
-assert.writeOK(coll.insert({_id: 0, a: 0}));
+const primaryColl = primary.getDB('test').getCollection(name);
+assert.writeOK(primaryColl.insert({_id: 0, a: 0}));
 
 // Restart the secondary as a standalone node.
 replSet.stop(1);
@@ -33,23 +33,22 @@ const options = replSet.getSecondary().savedOptions;
 options.noCleanData = true;
 const originalOptions = Object.merge({}, options);
 delete options.replSet;
+let secondary = MongoRunner.runMongod(options);
+assert.neq(null, secondary, "secondary failed to start");
 
-let conn = MongoRunner.runMongod(options);
-assert.neq(null, conn, "secondary failed to start");
 // Add index on secondary and restart
-assert.commandWorked(conn.getDB("test").getCollection(name).createIndex({"a": 1}, {unique:true}));
+assert.commandWorked(secondary.getDB("test").getCollection(name).createIndex({"a.0": 1}));
 print("==================================== Created Index");
-MongoRunner.stopMongod(conn);
+MongoRunner.stopMongod(secondary);
+
+assert.writeOK(primaryColl.insert({_id: 1, a: [{0:1}]}));
 
 // Add secondary back (now with replset config)
 // It will now have to catch up to the primary.
 // It should ignore index violations.
-conn = MongoRunner.runMongod(originalOptions);
-
-print("========================= restarted secondary");
+secondary = MongoRunner.runMongod(originalOptions);
 
 
-assert.writeOK(replSet.getPrimary().getDB('test').getCollection(name).insert({_id: 1, a: 0}));
 replSet.awaitReplication();
 
 replSet.stopSet();
