@@ -1,14 +1,3 @@
-/**
- * Initial sync runs in several phases - the first 3 are as follows:
- * 1) fetches the last oplog entry (op_start1) on the source;
- * 2) copies all non-local databases from the source and fetches operations from sync source; and
- * 3) applies operations from the source after op_start1.
- *
- * This test renames a collection on the source between phases 1 and 2, but renameCollection is not
- * supported in initial sync. The secondary will initially fail to apply the command in phase 3
- * and subsequently have to retry the initial sync.
- */
-
 (function() {
 "use strict";
 
@@ -38,7 +27,6 @@ assert.neq(null, secondary, "secondary failed to start");
 
 // Add index on secondary and restart
 assert.commandWorked(secondary.getDB("test").getCollection(name).createIndex({"a.0": 1}));
-print("==================================== Created Index");
 MongoRunner.stopMongod(secondary);
 
 assert.writeOK(primaryColl.insert({_id: 1, a: [{0:1}]}));
@@ -51,6 +39,7 @@ secondary = MongoRunner.runMongod(originalOptions);
 
 replSet.awaitReplication();
 
-replSet.stopSet();
+// There are different indexes on secondary and primary.
+replSet.stopSet(undefined, undefined, {skipCheckDBHashes: true, skipValidation: true});
 
 })();
