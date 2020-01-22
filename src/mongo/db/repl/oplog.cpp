@@ -1128,6 +1128,7 @@ Status applyOperation_inlock(OperationContext* opCtx,
                     }
 
                     OpDebug* const nullOpDebug = nullptr;
+                    // TODO: here
                     Status status = collection->insertDocument(
                         opCtx, InsertStatement(o, timestamp, term), nullOpDebug, true);
 
@@ -1169,6 +1170,7 @@ Status applyOperation_inlock(OperationContext* opCtx,
                             uassertStatusOK(opCtx->recoveryUnit()->setTimestamp(timestamp));
                         }
 
+                        // TODO: here we have _fromOplogApplication = true
                         UpdateResult res = update(opCtx, db, request);
                         if (res.numMatched == 0 && res.upserted.isEmpty()) {
                             error() << "No document was updated even though we got a DuplicateKey "

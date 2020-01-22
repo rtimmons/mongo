@@ -27,20 +27,27 @@ assert.writeOK(coll.insert({_id: 0, content: "hi"}));
 
 // Restart the secondary as a standalone node.
 replSet.stop(1);
+print("==================== Stopped replSet.stop(1);");
 
 const options = replSet.getSecondary().savedOptions;
 options.noCleanData = true;
 const originalOptions = Object.merge({}, options);
 delete options.replSet;
+print("========================= Options");
+printjson(options);
 
 let conn = MongoRunner.runMongod(options);
 assert.neq(null, conn, "secondary failed to start");
 assert.commandWorked(conn.getDB("test").getCollection(name).createIndex({"a.0": 1}));
 MongoRunner.stopMongod(conn);
 
+print("==================== MongoRunner.stopMongod(conn)");
+
 conn = MongoRunner.runMongod(originalOptions);
 
 assert.writeOK(coll.insert({_id: 1, a: [{0: 1}]}));
 replSet.awaitReplication();
+
+replSet.stopSet();
 
 })();
