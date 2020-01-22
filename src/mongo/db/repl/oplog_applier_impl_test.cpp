@@ -172,6 +172,7 @@ auto parseFromOplogEntryArray(const BSONObj& obj, int elem) {
     return OpTime(tsArray.Array()[elem].timestamp(), termArray.Array()[elem].Long());
 };
 
+#if 0
 TEST_F(OplogApplierImplTest, applyOplogEntryOrGroupedInsertsInsertDocumentDatabaseMissing) {
     NamespaceString nss("test.t");
     auto op = makeOplogEntry(OpTypeEnum::kInsert, nss, {});
@@ -1925,7 +1926,29 @@ TEST_F(IdempotencyTest, UniqueKeyIndex) {
     auto status = runOpsInitialSync(ops);
     ASSERT_EQ(status.code(), ErrorCodes::DuplicateKey);
 }
+#endif
 
+TEST_F(IdempotencyTest, AmbiguousIndexFieldName) {
+    ASSERT_OK(
+            ReplicationCoordinator::get(_opCtx.get())->setFollowerMode(MemberState::RS_RECOVERING));
+    ASSERT_OK(runOpInitialSync(createCollection(kUuid)));
+    BSONObjBuilder bob;
+
+    auto insertOp = insert(fromjson("{_id: 1, a: 0}"));
+    auto indexOp = buildIndex(fromjson("{\"a.0\": 1}"), BSONObj(), kUuid);
+    auto insertOp2 = insert(fromjson("{ _id: 2, a: [{\"0\": 1}] }"));
+
+    auto ops = {insertOp, indexOp, insertOp2};
+    testOpsAreIdempotent(ops);
+
+    ASSERT_OK(ReplicationCoordinator::get(_opCtx.get())->setFollowerMode(MemberState::RS_PRIMARY));
+    // TODO: is this right?
+    // Fails with
+    //    Expected: validateResults.valid @src/mongo/db/repl/idempotency_test_fixture.cpp:603 in test AmbiguousIndexFieldName
+    ASSERT_OK(runOpsInitialSync(ops));
+}
+
+#if 0
 TEST_F(IdempotencyTest, ParallelArrayError) {
     ASSERT_OK(
         ReplicationCoordinator::get(_opCtx.get())->setFollowerMode(MemberState::RS_RECOVERING));
@@ -3581,6 +3604,8 @@ TEST_F(IdempotencyTestTxns, CommitPreparedTransactionIgnoresNamespaceNotFoundErr
     // operation has no effect.
     ASSERT_FALSE(docExists(_opCtx.get(), nss, doc));
 }
+
+#endif
 }  // namespace
 }  // namespace repl
 }  // namespace mongo
