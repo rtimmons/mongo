@@ -8,6 +8,9 @@ compile_options:
 - aubsan
 - debug
 
+runtime_options:
+- logv2
+
 # Special build variants that don't compile the server and run tests.
 explicit_buildvariants:
   name: ubuntu1804-debug-aubsan-lite # TODO: remove explicit name and display name in favor of auto-generated one.

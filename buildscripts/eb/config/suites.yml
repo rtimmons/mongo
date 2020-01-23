@@ -1,6 +1,7 @@
-# "Features" are the smallest unit of things to be tested together in Evergreen. They map roughly to PM projects but
-# can be split up even further if necessary. This list can be trivially divided up as needed if it gets too large
-# to fit into one file.
+# "feature" is the smallest logical grouping of test/test suites. Each feature maps roughly to a
+# PM project but can be split up further if needed. This list can be trivially divided up as needed
+# if it gets too large to fit into one file.
+# Tests for features are defined in Python and can be arbitrarily
 features:
 - name: txns
   desription: |
@@ -15,6 +16,7 @@ modules:
 - name: sharding
   features:
   - txns
+  - jsCore
 - name: replication
   features:
   - txns

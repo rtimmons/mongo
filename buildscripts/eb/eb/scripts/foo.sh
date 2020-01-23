@@ -13,4 +13,4 @@ env
 save_artifact foo
 
 # TODO fix multiline replace.
-#schedule_tasks somepy
+schedule_tasks somepy
