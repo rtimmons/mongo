@@ -526,16 +526,13 @@ TEST(OpMsg, ServerHandlesExhaustIsMasterCorrectly) {
     auto fixtureConn = std::unique_ptr<DBClientBase>(
         unittest::getFixtureConnectionString().connect("integration_test", errMsg));
     uassert(ErrorCodes::SocketException, errMsg, fixtureConn);
+    DBClientBase* conn = fixtureConn.get();
 
-    // TODO SERVER-44813: Run this test on standalone.
-    // TODO SERVER-44521: Run this test on mongos.
-    if (!fixtureConn->isReplicaSetMember()) {
-        return;
+    if (fixtureConn->isReplicaSetMember()) {
+        // Connect directly to the primary.
+        conn = &static_cast<DBClientReplicaSet*>(fixtureConn.get())->masterConn();
+        ASSERT(conn);
     }
-
-    // Connect directly to the primary.
-    DBClientBase* conn = &static_cast<DBClientReplicaSet*>(fixtureConn.get())->masterConn();
-    ASSERT(conn);
 
     auto tickSource = getGlobalServiceContext()->getTickSource();
 
@@ -592,16 +589,13 @@ TEST(OpMsg, ServerHandlesExhaustIsMasterWithTopologyChange) {
     auto fixtureConn = std::unique_ptr<DBClientBase>(
         unittest::getFixtureConnectionString().connect("integration_test", errMsg));
     uassert(ErrorCodes::SocketException, errMsg, fixtureConn);
+    DBClientBase* conn = fixtureConn.get();
 
-    // TODO SERVER-44813: Run this test on standalone.
-    // TODO SERVER-44521: Run this test on mongos.
-    if (!fixtureConn->isReplicaSetMember()) {
-        return;
+    if (fixtureConn->isReplicaSetMember()) {
+        // Connect directly to the primary.
+        conn = &static_cast<DBClientReplicaSet*>(fixtureConn.get())->masterConn();
+        ASSERT(conn);
     }
-
-    // Connect directly to the primary.
-    DBClientBase* conn = &static_cast<DBClientReplicaSet*>(fixtureConn.get())->masterConn();
-    ASSERT(conn);
 
     auto tickSource = getGlobalServiceContext()->getTickSource();
 
@@ -661,16 +655,13 @@ TEST(OpMsg, ServerRejectsExhaustIsMasterWithoutMaxAwaitTimeMS) {
     auto fixtureConn = std::unique_ptr<DBClientBase>(
         unittest::getFixtureConnectionString().connect("integration_test", errMsg));
     uassert(ErrorCodes::SocketException, errMsg, fixtureConn);
+    DBClientBase* conn = fixtureConn.get();
 
-    // TODO SERVER-44813: Run this test on standalone.
-    // TODO SERVER-44521: Run this test on mongos.
-    if (!fixtureConn->isReplicaSetMember()) {
-        return;
+    if (fixtureConn->isReplicaSetMember()) {
+        // Connect directly to the primary.
+        conn = &static_cast<DBClientReplicaSet*>(fixtureConn.get())->masterConn();
+        ASSERT(conn);
     }
-
-    // Connect directly to the primary.
-    DBClientBase* conn = &static_cast<DBClientReplicaSet*>(fixtureConn.get())->masterConn();
-    ASSERT(conn);
 
     // Issue an isMaster command with exhaust but no maxAwaitTimeMS.
     auto isMasterCmd = BSON("isMaster" << 1);
