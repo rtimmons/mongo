@@ -1,45 +1,43 @@
 (function() {
 "use strict";
 
-const name = 'initial_sync_applier_error';
-const replSet = new ReplSetTest({
-    name: name,
-    nodes: [{}, {}],
-});
+load("jstests/libs/fail_point_util.js");
 
-replSet.startSet();
-replSet.initiate();
-const primary = replSet.getPrimary();
+// Start one-node repl-set.
+var rst = new ReplSetTest({name: "initial_sync_move_forward", nodes: 1});
+rst.startSet();
+rst.initiate();
 
-const primaryColl = primary.getDB('test').getCollection(name);
-assert.writeOK(primaryColl.insert({_id: 0, a: 0}));
+var masterColl = rst.getPrimary().getDB("test").coll;
 
-// Restart the secondary as a standalone node.
-replSet.stop(1);
+// Insert _id={0,1}
+masterColl.insertOne({_id: 0, a:0});
+masterColl.insertOne({_id: 1, a:1});
 
-// restart secondary without replset config
-const options = replSet.getSecondary().savedOptions;
-options.noCleanData = true;
-const originalOptions = Object.merge({}, options);
-delete options.replSet;
-let secondary = MongoRunner.runMongod(options);
-assert.neq(null, secondary, "secondary failed to start");
-
-// Add index on secondary and restart
-assert.commandWorked(secondary.getDB("test").getCollection(name).createIndex({"a.0": 1}));
-MongoRunner.stopMongod(secondary);
-
-assert.writeOK(primaryColl.insert({_id: 1, a: [{0:1}]}));
-
-// Add secondary back (now with replset config)
-// It will now have to catch up to the primary.
-// It should ignore index violations.
-secondary = MongoRunner.runMongod(originalOptions);
+// Add a secondary.
+var secondary = rst.add({setParameter: "numInitialSyncAttempts=1"});
+secondary.setSlaveOk();
+var secondaryColl = secondary.getDB("test").coll;
 
 
-replSet.awaitReplication();
+var failPoint = configureFailPoint(secondary,
+                                   "initialSyncHangDuringCollectionClone",
+                                   {namespace: secondaryColl.getFullName(), numDocsToClone: 2});
+rst.reInitiate();
+failPoint.wait();
 
-// There are different indexes on secondary and primary.
-replSet.stopSet(undefined, undefined, {skipCheckDBHashes: true, skipValidation: true});
+masterColl.insertOne({_id: 2, a:[{"0": 1}]});
+masterColl.deleteOne({_id: 2});
+masterColl.ensureIndex({"a.0": 1});
 
+// Resume initial sync.
+failPoint.off();
+
+// Wait for initial sync to finish.
+rst.awaitSecondaryNodes();
+
+// Check document count on secondary.
+assert.eq(2, secondaryColl.find().itcount());
+
+rst.stopSet();
 })();
