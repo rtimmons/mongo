@@ -144,12 +144,7 @@ void ReplSetRequestVotesArgs::addToBSON(BSONObjBuilder* builder) const {
     builder->append(kTermFieldName, _term);
     builder->appendIntOrLL(kCandidateIndexFieldName, _candidateIndex);
     builder->appendIntOrLL(kConfigVersionFieldName, _cfgver);
-    // Only append the config term field if we are in FCV 4.4
-    if (serverGlobalParams.featureCompatibility.isVersionInitialized() &&
-        serverGlobalParams.featureCompatibility.getVersion() ==
-            ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo44) {
-        builder->appendIntOrLL(kConfigTermFieldName, _cfgterm);
-    }
+    builder->appendIntOrLL(kConfigTermFieldName, _cfgterm);
     _lastDurableOpTime.append(builder, kLastDurableOpTimeFieldName);
 }
 
