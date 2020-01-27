@@ -37,9 +37,11 @@ const collName = "reconstruct_prepared_transactions_initial_sync_on_oplog_seed";
 let testDB = primary.getDB(dbName);
 let testColl = testDB.getCollection(collName);
 
-assert.commandWorked(testColl.insert({_id: 1}));
+const session = primary.startSession();
+const sessionDB = session.getDatabase(dbName);
+const sessionColl = sessionDB.getCollection(collName);
 
-testColl.ensureIndex({"a.0": 1});
+assert.commandWorked(testColl.insert({_id: 1}));
 
 jsTestLog("Restarting the secondary");
 
@@ -50,7 +52,10 @@ secondary = replTest.start(
     {
         startClean: true,
         setParameter: {
-            'numInitialSyncAttempts': 1,
+            'numInitialSyncAttempts': 2,
+            // Fail point to force the first attempt to fail and hang before starting the second
+            // attempt.
+            'failpoint.failAndHangInitialSync': tojson({mode: 'alwaysOn'}),
             'failpoint.initialSyncHangDuringCollectionClone': tojson(
                 {mode: 'alwaysOn', data: {namespace: testColl.getFullName(), numDocsToClone: 0}}),
             'logComponentVerbosity': tojson({'replication': {'initialSync': 2}})
@@ -69,8 +74,7 @@ jsTestLog("Running operations while collection cloning is paused");
 
 // Perform writes while collection cloning is paused so that we know they must be applied during
 // the first attempt of initial sync.
-assert.commandWorked(testColl.dropIndex({"a.0": 1}));
-assert.commandWorked(testColl.insert({_id: 2, a:[{"0": 1}]}));
+assert.commandWorked(testColl.insert({_id: 2}));
 
 jsTestLog("Resuming initial sync");
 
@@ -86,46 +90,40 @@ assert.commandWorked(secondary.adminCommand({
     maxTimeMS: kDefaultWaitForFailPointTimeout
 }));
 
+jsTestLog("Preparing the transaction before the second attempt of initial sync");
+
+session.startTransaction();
+assert.commandWorked(sessionColl.update({_id: 1}, {_id: 1, a: 1}));
+const prepareTimestamp = PrepareHelpers.prepareTransaction(session, {w: 1});
+
+jsTestLog("Resuming initial sync for the second attempt");
+// Resume initial sync.
+assert.commandWorked(
+    secondary.adminCommand({configureFailPoint: "failAndHangInitialSync", mode: "off"}));
+
+// Wait for the secondary to complete initial sync.
+replTest.awaitSecondaryNodes();
+PrepareHelpers.awaitMajorityCommitted(replTest, prepareTimestamp);
+
+jsTestLog("Initial sync completed");
+
+secondary.setSlaveOk();
+const secondaryColl = secondary.getDB(dbName).getCollection(collName);
+
+jsTestLog("Checking that the transaction is properly prepared");
+
+// Make sure that we can't read changes to the document from the prepared transaction after
+// initial sync.
+assert.eq(secondaryColl.findOne({_id: 1}), {_id: 1});
+
+jsTestLog("Committing the transaction");
+
+assert.commandWorked(PrepareHelpers.commitTransaction(session, prepareTimestamp));
 replTest.awaitReplication();
 
-assert.eq(2, testColl.find({}).itcount());
-assert.eq(2, secondary.getDB(dbName).getCollection(collName).find({}).itcount());
-
-//
-// jsTestLog("Preparing the transaction before the second attempt of initial sync");
-//
-// session.startTransaction();
-// assert.commandWorked(sessionColl.update({_id: 1}, {_id: 1, a: 1}));
-// const prepareTimestamp = PrepareHelpers.prepareTransaction(session, {w: 1});
-//
-// jsTestLog("Resuming initial sync for the second attempt");
-// // Resume initial sync.
-// assert.commandWorked(
-//     secondary.adminCommand({configureFailPoint: "failAndHangInitialSync", mode: "off"}));
-//
-// // Wait for the secondary to complete initial sync.
-// replTest.awaitSecondaryNodes();
-// PrepareHelpers.awaitMajorityCommitted(replTest, prepareTimestamp);
-//
-// jsTestLog("Initial sync completed");
-//
-// secondary.setSlaveOk();
-// const secondaryColl = secondary.getDB(dbName).getCollection(collName);
-//
-// jsTestLog("Checking that the transaction is properly prepared");
-//
-// // Make sure that we can't read changes to the document from the prepared transaction after
-// // initial sync.
-// assert.eq(secondaryColl.findOne({_id: 1}), {_id: 1});
-//
-// jsTestLog("Committing the transaction");
-//
-// assert.commandWorked(PrepareHelpers.commitTransaction(session, prepareTimestamp));
-// replTest.awaitReplication();
-//
-// // Make sure that we can see the data from the committed transaction on the secondary if it was
-// // applied during secondary oplog application.
-// assert.eq(secondaryColl.findOne({_id: 1}), {_id: 1, a: 1});
+// Make sure that we can see the data from the committed transaction on the secondary if it was
+// applied during secondary oplog application.
+assert.eq(secondaryColl.findOne({_id: 1}), {_id: 1, a: 1});
 
 replTest.stopSet();
 })();
