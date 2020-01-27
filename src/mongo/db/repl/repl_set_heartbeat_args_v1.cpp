@@ -49,7 +49,7 @@ const std::string kSenderIdFieldName = "fromId";
 const std::string kSetNameFieldName = "replSetHeartbeat";
 const std::string kTermFieldName = "term";
 const std::string kPrimaryFieldName = "isPrimary";
-// TODO: gate isPrimary with FCV for 4.4; siyuan will send ticket
+// TODO: gate isPrimary with FCV for 4.4; siyuan will send ticket with example
 const std::string kLegalHeartbeatFieldNames[] = {kCheckEmptyFieldName,
                                                  kConfigVersionFieldName,
                                                  kHeartbeatVersionFieldName,

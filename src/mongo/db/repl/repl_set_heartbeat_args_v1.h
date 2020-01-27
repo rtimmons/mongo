@@ -154,6 +154,7 @@ private:
     long long _heartbeatVersion = -1;
     long long _senderId = -1;
     long long _term = -1;
+    // TODO: send primary id/index rather than just bool.
     bool _primary = false;
     bool _checkEmpty = false;
     bool _hasSender = false;
