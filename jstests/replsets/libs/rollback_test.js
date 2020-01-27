@@ -288,6 +288,7 @@ function RollbackTest(name = "RollbackTest", replSet) {
             rst.reInitiate();
         }
         // New node to do consistency checks on.
+        // Note that this behavior isn't tested in rollbacktest_unittest.js.
         doneConsistencyChecks = false;
         return node;
     };
