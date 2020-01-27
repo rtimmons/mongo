@@ -21,6 +21,8 @@ import shutil
 
 from threading import Lock
 from glob import glob
+from os.path import join as joinpath
+from os.path import splitext
 
 import SCons
 from SCons.Action import _string_from_cmd_list, get_default_ENV
@@ -43,17 +45,6 @@ COMMAND_TYPES = (
     SCons.Action.CommandAction,
     SCons.Action.CommandGeneratorAction,
 )
-
-
-# TODO: make this configurable or improve generated source detection
-def is_generated_source(output):
-    """
-    Determine if output indicates this is a generated header file.
-    """
-    for generated in output:
-        if generated.endswith(".h") or generated.endswith(".hpp"):
-            return True
-    return False
 
 
 def _install_action_function(_env, node):
@@ -113,10 +104,7 @@ def alias_to_ninja_build(node):
 
 def get_dependencies(node):
     """Return a list of dependencies for node."""
-    return [
-        get_path(src_file(child))
-        for child in node.children()
-    ]
+    return [get_path(src_file(child)) for child in node.children()]
 
 
 def get_inputs(node):
@@ -352,6 +340,7 @@ class NinjaState:
         self.writer_class = writer_class
         self.__generated = False
         self.translator = SConsToNinjaTranslator(env)
+        self.generated_suffixes = env.get("NINJA_GENERATED_SOURCE_SUFFIXES", [])
 
         # List of generated builds that will be written at a later stage
         self.builds = list()
@@ -518,6 +507,20 @@ class NinjaState:
 
                 self.builds.append(build)
 
+    def is_generated_source(self, output):
+        """Check if output ends with a known generated suffix."""
+        _, suffix = splitext(output)
+        return suffix in self.generated_suffixes
+        
+    def has_generated_sources(self, output):
+        """
+        Determine if output indicates this is a generated header file.
+        """
+        for generated in output:
+            if self.is_generated_source(generated):
+                return True
+        return False
+
     # pylint: disable=too-many-branches,too-many-locals
     def generate(self, ninja_file, fallback_default_target=None):
         """
@@ -546,14 +549,14 @@ class NinjaState:
             output
             # First find builds which have header files in their outputs.
             for build in self.builds
-            if is_generated_source(build["outputs"])
+            if self.has_generated_sources(build["outputs"])
             for output in build["outputs"]
             # Collect only the header files from the builds with them
             # in their output. We do this because is_generated_source
             # returns True if it finds a header in any of the outputs,
             # here we need to filter so we only have the headers and
             # not the other outputs.
-            if output.endswith(".h") or output.endswith(".hpp")
+            if self.is_generated_source(output)
         }
 
         if generated_source_files:
@@ -580,8 +583,9 @@ class NinjaState:
             # generated sources or else we will create a dependency
             # cycle.
             if (
-                not build["rule"] == "INSTALL"
-                and not is_generated_source(build["outputs"])
+                generated_source_files
+                and not build["rule"] == "INSTALL"
+                and set(build["outputs"]).isdisjoint(generated_source_files)
                 and set(implicit).isdisjoint(generated_source_files)
             ):
 
@@ -592,6 +596,40 @@ class NinjaState:
                 # sure that all of these sources are generated before
                 # other builds.
                 build["order_only"] = "_generated_sources"
+
+            # When using a depfile Ninja can only have a single output
+            # but SCons will usually have emitted an output for every
+            # thing a command will create because it's caching is much
+            # more complex than Ninja's. This includes things like DWO
+            # files. Here we make sure that Ninja only ever sees one
+            # target when using a depfile. It will still have a command
+            # that will create all of the outputs but most targets don't
+            # depend direclty on DWO files and so this assumption is safe
+            # to make.
+            rule = self.rules.get(build["rule"])
+
+            # Some rules like 'phony' and other builtins we don't have
+            # listed in self.rules so verify that we got a result
+            # before trying to check if it has a deps key.
+            if rule is not None and rule.get("deps"):
+
+                # Anything using deps in Ninja can only have a single
+                # output, but we may have a build which actually
+                # produces multiple outputs which other targets can
+                # depend on. Here we slice up the outputs so we have a
+                # single output which we will use for the "real"
+                # builder and multiple phony targets that match the
+                # file names of the remaining outputs. This way any
+                # build can depend on any output from any build.
+                first_output, remaining_outputs = build["outputs"][0], build["outputs"][1:]
+                if remaining_outputs:
+                    ninja.build(
+                        outputs=remaining_outputs,
+                        rule="phony",
+                        implicit=first_output,
+                    )
+
+                build["outputs"] = first_output
 
             ninja.build(**build)
 
@@ -807,19 +845,9 @@ def get_command(env, node, action):  # pylint: disable=too-many-branches
             cmd = cmd[0:-2].strip()
 
     outputs = get_outputs(node)
-    if rule == "CMD_W_DEPS":
-        # When using a depfile Ninja can only have a single output but
-        # SCons will usually have emitted an output for every thing a
-        # command will create because it's caching is much more
-        # complex than Ninja's. This includes things like DWO
-        # files. Here we make sure that Ninja only ever sees one
-        # target when using a depfile. It will still have a command
-        # that will create all of the outputs but most targets don't
-        # depend direclty on DWO files and so this assumption is
-        # safe to make.
-        outputs = outputs[0:1]
+    command_env = ""
+    windows = env["PLATFORM"] == "win32"
 
-    command_env = getattr(node.attributes, "NINJA_ENV_ENV", "")
     # If win32 and rule == CMD_W_DEPS then we don't want to calculate
     # an environment for this command. It's a compile command and
     # compiledb doesn't support shell syntax on Windows. We need the
@@ -829,40 +857,50 @@ def get_command(env, node, action):  # pylint: disable=too-many-branches
     #
     # On POSIX we can still set environment variables even for compile
     # commands so we do so.
-    if not command_env and not (env["PLATFORM"] == "win32" and rule == "CMD_W_DEPS"):
+    if not (windows and rule == "CMD_W_DEPS"):
+
+        # Scan the ENV looking for any keys which do not exist in
+        # os.environ or differ from it. We assume if it's a new or
+        # differing key from the process environment then it's
+        # important to pass down to commands in the Ninja file.
         ENV = get_default_ENV(sub_env)
+        scons_specified_env = {
+            key: value
+            for key, value in ENV.items()
+            if key not in os.environ or os.environ.get(key, None) != value
+        }
 
-        # This is taken wholesale from SCons/Action.py
-        #
-        # Ensure that the ENV values are all strings:
-        for key, value in ENV.items():
-            if not is_String(value):
-                if is_List(value):
-                    # If the value is a list, then we assume it is a
-                    # path list, because that's a pretty common list-like
-                    # value to stick in an environment variable:
-                    value = flatten_sequence(value)
-                    value = os.pathsep.join(map(str, value))
-                else:
-                    # If it isn't a string or a list, then we just coerce
-                    # it to a string, which is the proper way to handle
-                    # Dir and File instances and will produce something
-                    # reasonable for just about everything else:
-                    value = str(value)
+        for key, value in scons_specified_env.items():
+            # Ensure that the ENV values are all strings:
+            if is_List(value):
+                # If the value is a list, then we assume it is a
+                # path list, because that's a pretty common list-like
+                # value to stick in an environment variable:
+                value = flatten_sequence(value)
+                value = joinpath(map(str, value))
+            else:
+                # If it isn't a string or a list, then we just coerce
+                # it to a string, which is the proper way to handle
+                # Dir and File instances and will produce something
+                # reasonable for just about everything else:
+                value = str(value)
 
-            if env["PLATFORM"] == "win32":
+            if windows:
                 command_env += "set '{}={}' && ".format(key, value)
             else:
                 command_env += "{}={} ".format(key, value)
 
-        setattr(node.attributes, "NINJA_ENV_ENV", command_env)
+    variables = {"cmd": command_env + cmd}
+    extra_vars = getattr(node.attributes, "NINJA_EXTRA_VARS", {})
+    if extra_vars:
+        variables.update(extra_vars)
 
     ninja_build = {
         "outputs": outputs,
         "inputs": get_inputs(node),
         "implicit": implicit,
         "rule": rule,
-        "variables": {"cmd": command_env + cmd},
+        "variables": variables,
     }
 
     # Don't use sub_env here because we require that NINJA_POOL be set
@@ -943,7 +981,7 @@ def ninja_print(_cmd, target, _source, env):
     if target:
         for tgt in target:
             if (
-                tgt.builder is not None
+                tgt.has_builder()
                 # Use 'is False' because not would still trigger on
                 # None's which we don't want to regenerate
                 and getattr(tgt.attributes, NINJA_BUILD, False) is False
@@ -968,12 +1006,17 @@ def register_custom_rule_mapping(env, pre_subst_string, rule):
     __NINJA_RULE_MAPPING[pre_subst_string] = rule
 
 
-def register_custom_rule(env, rule, command, description=""):
+def register_custom_rule(env, rule, command, description="", deps=None):
     """Allows specification of Ninja rules from inside SCons files."""
-    env[NINJA_RULES][rule] = {
+    rule_obj = {
         "command": command,
         "description": description if description else "{} $out".format(rule),
     }
+
+    if deps is not None:
+        rule_obj["deps"] = deps
+
+    env[NINJA_RULES][rule] = rule_obj
 
 
 def register_custom_pool(env, pool, size):
@@ -1068,6 +1111,20 @@ def ninja_whereis(thing, *_args, **_kwargs):
         path = shutil.which(thing)
         NINJA_WHEREIS_MEMO[thing] = path
         return path
+
+
+def ninja_always_serial(self, num, taskmaster):
+    """Replacement for SCons.Job.Jobs constructor which always uses the Serial Job class."""
+    # We still set self.num_jobs to num even though it's a lie. The
+    # only consumer of this attribute is the Parallel Job class AND
+    # the Main.py function which instantiates a Jobs class. It checks
+    # if Jobs.num_jobs is equal to options.num_jobs, so if the user
+    # provides -j12 but we set self.num_jobs = 1 they get an incorrect
+    # warning about this version of Python not supporting parallel
+    # builds. So here we lie so the Main.py will not give a false
+    # warning to users.
+    self.num_jobs = num
+    self.job = SCons.Job.Serial(taskmaster)
 
 
 class NinjaEternalTempFile(SCons.Platform.TempFileMunge):
@@ -1201,6 +1258,11 @@ def generate(env):
     # Make SCons node walk faster by preventing unnecessary work
     env.Decider("timestamp-match")
 
+    # Used to determine if a build generates a source file. Ninja
+    # requires that all generated sources are added as order_only
+    # dependencies to any builds that *might* use them.
+    env["NINJA_GENERATED_SOURCE_SUFFIXES"] = [".h", ".hpp"]
+
     # This is the point of no return, anything after this comment
     # makes changes to SCons that are irreversible and incompatible
     # with a normal SCons build. We return early if __NINJA_NO=1 has
@@ -1212,6 +1274,10 @@ def generate(env):
 
     if not exists(env):
         return
+
+    # Set a known variable that other tools can query so they can
+    # behave correctly during ninja generation.
+    env["GENERATING_NINJA"] = True
 
     # These methods are no-op'd because they do not work during ninja
     # generation, expected to do no work, or simply fail. All of which
@@ -1225,6 +1291,11 @@ def generate(env):
     # We make lstat a no-op because it is only used for SONAME
     # symlinks which we're not producing.
     SCons.Node.FS.LocalFS.lstat = ninja_noop
+
+    # This is a slow method that isn't memoized. We make it a noop
+    # since during our generation we will never use the results of
+    # this or change the results.
+    SCons.Node.FS.is_up_to_date = ninja_noop
 
     # We overwrite stat and WhereIs with eternally memoized
     # implementations. See the docstring of ninja_stat and
@@ -1262,6 +1333,13 @@ def generate(env):
     # call.
     env["PRINT_CMD_LINE_FUNC"] = ninja_print
 
+    # This reduces unnecessary subst_list calls to add the compiler to
+    # the implicit dependencies of targets. Since we encode full paths
+    # in our generated commands we do not need these slow subst calls
+    # as executing the command will fail if the file is not found
+    # where we expect it.
+    env["IMPLICIT_COMMAND_DEPENDENCIES"] = False
+
     # Set build to no_exec, our sublcass of FunctionAction will force
     # an execution for ninja_builder so this simply effects all other
     # Builders.
@@ -1270,6 +1348,11 @@ def generate(env):
     # This makes SCons more aggressively cache MD5 signatures in the
     # SConsign file.
     env.SetOption("max_drift", 1)
+
+    # The Serial job class is SIGNIFICANTLY (almost twice as) faster
+    # than the Parallel job class for generating Ninja files. So we
+    # monkey the Jobs constructor to only use the Serial Job class.
+    SCons.Job.Jobs.__init__ = ninja_always_serial
 
     # We will eventually need to overwrite TempFileMunge to make it
     # handle persistent tempfiles or get an upstreamed change to add
