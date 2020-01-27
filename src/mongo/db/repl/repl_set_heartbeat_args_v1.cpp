@@ -48,6 +48,7 @@ const std::string kSenderHostFieldName = "from";
 const std::string kSenderIdFieldName = "fromId";
 const std::string kSetNameFieldName = "replSetHeartbeat";
 const std::string kTermFieldName = "term";
+const std::string kPrimaryFieldName = "isPrimary";
 
 const std::string kLegalHeartbeatFieldNames[] = {kCheckEmptyFieldName,
                                                  kConfigVersionFieldName,
@@ -55,7 +56,8 @@ const std::string kLegalHeartbeatFieldNames[] = {kCheckEmptyFieldName,
                                                  kSenderHostFieldName,
                                                  kSenderIdFieldName,
                                                  kSetNameFieldName,
-                                                 kTermFieldName};
+                                                 kTermFieldName,
+                                                 kPrimaryFieldName};
 
 }  // namespace
 
@@ -103,6 +105,11 @@ Status ReplSetHeartbeatArgsV1::initialize(const BSONObj& argsObj) {
         _hasSender = true;
     }
 
+    status = bsonExtractBooleanField(argsObj, kPrimaryFieldName, &_primary);
+    if (!status.isOK()) {
+        return status;
+    }
+
     status = bsonExtractIntegerField(argsObj, kTermFieldName, &_term);
     if (!status.isOK())
         return status;
@@ -148,6 +155,11 @@ void ReplSetHeartbeatArgsV1::setCheckEmpty() {
     _checkEmpty = true;
 }
 
+void ReplSetHeartbeatArgsV1::setPrimary() {
+    _primary = true;
+}
+
+
 BSONObj ReplSetHeartbeatArgsV1::toBSON() const {
     invariant(isInitialized());
     BSONObjBuilder builder;
@@ -167,6 +179,7 @@ void ReplSetHeartbeatArgsV1::addToBSON(BSONObjBuilder* builder) const {
     builder->append(kSenderHostFieldName, _hasSender ? _senderHost.toString() : "");
     builder->appendIntOrLL(kSenderIdFieldName, _senderId);
     builder->appendIntOrLL(kTermFieldName, _term);
+    builder->append(kPrimaryFieldName, _primary);
 }
 
 }  // namespace repl

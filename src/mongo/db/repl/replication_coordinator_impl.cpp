@@ -4111,6 +4111,12 @@ Status ReplicationCoordinatorImpl::processHeartbeatV1(const ReplSetHeartbeatArgs
             int senderIndex = _rsConfig.findMemberIndexByHostAndPort(senderHost);
             _scheduleHeartbeatToTarget_inlock(senderHost, senderIndex, now);
         }
+    } else if (result.isOK() && args.isPrimary() &&
+               args.getSenderId() != response->getPrimaryId() && args.getTerm() != getTerm()) {
+        // The caller knows about a different primary than we do.
+        if (!senderHost.empty() /* ?? && _seedList.insert(senderHost).second */) {
+            _scheduleHeartbeatToTarget_inlock(senderHost, -1, now);
+        }
     }
     return result;
 }

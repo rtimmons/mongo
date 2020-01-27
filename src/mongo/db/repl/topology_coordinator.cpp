@@ -567,11 +567,14 @@ void TopologyCoordinator::prepareSyncFromResponse(const HostAndPort& target,
     *result = Status::OK();
 }
 
-// produce a reply to a heartbeat
-Status TopologyCoordinator::prepareHeartbeatResponseV1(Date_t now,
-                                                       const ReplSetHeartbeatArgsV1& args,
-                                                       const std::string& ourSetName,
-                                                       ReplSetHeartbeatResponse* response) {
+// Produce a reply to a heartbeat.
+// This contains information about ourselves.
+Status TopologyCoordinator::prepareHeartbeatResponseV1(
+    Date_t now,
+    // args contains information about the node that sent us the request.
+    const ReplSetHeartbeatArgsV1& args,
+    const std::string& ourSetName,
+    ReplSetHeartbeatResponse* response) {
     // Verify that replica set names match
     const std::string rshb = args.getSetName();
     if (ourSetName != rshb) {
@@ -610,6 +613,7 @@ Status TopologyCoordinator::prepareHeartbeatResponseV1(Date_t now,
     response->setAppliedOpTimeAndWallTime(lastOpApplied);
     response->setDurableOpTimeAndWallTime(lastOpDurable);
 
+    // Propagate any known primary information.
     if (_currentPrimaryIndex != -1) {
         response->setPrimaryId(_rsConfig.getMemberAt(_currentPrimaryIndex).getId().getData());
     }

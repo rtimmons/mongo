@@ -100,6 +100,13 @@ public:
     }
 
     /**
+     * If the sender believes it's primary.
+     */
+    bool isPrimary() const {
+        return _primary;
+    }
+
+    /**
      * Returns whether or not the sender is checking for emptiness.
      */
     bool hasCheckEmpty() const {
@@ -129,6 +136,7 @@ public:
     void setSenderHost(const HostAndPort& newVal);
     void setSetName(const std::string& newVal);
     void setTerm(long long newVal);
+    void setPrimary();
     void setCheckEmpty();
 
     /**
@@ -146,6 +154,7 @@ private:
     long long _heartbeatVersion = -1;
     long long _senderId = -1;
     long long _term = -1;
+    bool _primary = false;
     bool _checkEmpty = false;
     bool _hasSender = false;
     bool _hasHeartbeatVersion = false;
