@@ -17,7 +17,7 @@ rollbackTest._checkDataConsistencyImpl = function() {
 
 const rst = rollbackTest.getTestFixture();
 rst.stopSet = function(signal, forRestart, opts) {
-    // Unoconditionally skip in rst.stopSet because rbt.stop does its own validation.
+    // Unconditionally skip in rst.stopSet because rbt.stop does its own validation.
     assert.eq(opts, {"skipCheckDBHashes": true, "skipValidation": true});
     ++stopSetCallCount;
 
