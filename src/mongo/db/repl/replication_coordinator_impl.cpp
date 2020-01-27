@@ -4111,8 +4111,10 @@ Status ReplicationCoordinatorImpl::processHeartbeatV1(const ReplSetHeartbeatArgs
             int senderIndex = _rsConfig.findMemberIndexByHostAndPort(senderHost);
             _scheduleHeartbeatToTarget_inlock(senderHost, senderIndex, now);
         }
+    // TODO: send actual primary index or id not just boolean
+    // Unit-tests would be fine - check to see if this block is already tested and just extend them.
     } else if (result.isOK() && args.isPrimary() &&
-               args.getSenderId() != response->getPrimaryId() && args.getTerm() != getTerm()) {
+               args.getSenderId() != response->getPrimaryId()) {
         // The caller knows about a different primary than we do.
         if (!senderHost.empty() /* ?? && _seedList.insert(senderHost).second */) {
             _scheduleHeartbeatToTarget_inlock(senderHost, -1, now);
