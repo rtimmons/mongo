@@ -31,6 +31,9 @@ rst.startSet();
 rst.initiate();
 const primaryColl = rst.getPrimary().getDB(DB_NAME).getCollection(COLLECTION_NAME);
 
+// Create the index.
+primaryColl.ensureIndex({"a.0": 1});
+
 // Insert the initial document set.
 for (let i = 0; i < INITIAL_DOCS; ++i) {
     primaryColl.insertOne({_id: i, a: i});
