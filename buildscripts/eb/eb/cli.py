@@ -1,3 +1,4 @@
+import argparse
 import os
 import sys
 import typing as typ
@@ -19,14 +20,20 @@ def _trim_env(env: typ.Mapping[str,str]):
     return {key: value for (key, value) in env.items() if key.startswith("EB_") or key == "PATH"}
 
 
-def main(args: typ.List[str] = None, env: typ.Mapping[str,str] = None):
-    if args is None:
-        args = sys.argv
+def _parse_args():
+    parser = argparse.ArgumentParser(prog='PROG')
 
-    if env is None:
-        env = os.environ
+    # TODO: the recursive part needs recursive generate.tasks()
+    parser.add_argument('task', type=str, nargs=1, help='name of the task to generate')
+    parser.add_argument('--convert', type=bool, help='convert generated tasks to Evergreen generate.tasks format instead of running them recursively')
+
+    return parser.parse_args()
+
+
+def main():
+    env = os.environ
+
     env = _trim_env(env)
-    print(env)
     if "EB_REPO_ROOT" not in env.keys():
         raise Exception("Need to define the EB_REPO_ROOT env var.")
     repo_root = env["EB_REPO_ROOT"]
@@ -34,7 +41,15 @@ def main(args: typ.List[str] = None, env: typ.Mapping[str,str] = None):
 
     print(f'Have expansions as env vars: {", ".join(expansions.keys())}')
 
-    commands.dispatch(args, env, repo_root, expansions)
+    args = _parse_args()
 
-    taskgen.gen_tasks(repo_root)
+    next_tasks: typ.List = args.task
+    while next_tasks:
+        commands.dispatch(next_tasks.pop(), env, repo_root, expansions)
+        if args.convert:
+            taskgen.gen_tasks_evg(repo_root)
+            break
+        else:
+            next_tasks.extend(taskgen.gen_tasks(repo_root))
+
 

@@ -90,7 +90,7 @@ Tasks:
 """
 
 
-def _gen_tasks(repo_root: str) -> typ.List[typ.Dict]:
+def gen_tasks(repo_root: str) -> typ.List[typ.Dict]:
     task_dir = os.path.join(repo_root, 'build', 'Tasks')
     if not os.path.exists(task_dir):
         # Didn't create any files
@@ -114,14 +114,14 @@ def _gen_tasks(repo_root: str) -> typ.List[typ.Dict]:
             for task in fc["Tasks"]:
                 if not task["Name"]:
                     raise Exception(f"No Name in task {task}")
-                tasks.append(_task(task["Name"]))
+                tasks.append(task["Name"])
 
     return tasks
 
 
-def gen_tasks(repo_root: str):
-    tasks = _gen_tasks(repo_root)
-    full_obj = {'tasks': tasks}
+def gen_tasks_evg(repo_root: str):
+    tasks = gen_tasks(repo_root)
+    full_obj = {'tasks': [_task(task) for task in tasks]}
     result = json.dumps(full_obj)
 
     out_path = os.path.join(repo_root, 'build', 'Tasks.json')

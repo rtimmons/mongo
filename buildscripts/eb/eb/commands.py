@@ -44,13 +44,10 @@ def _runner_and_fname(dirname: str, command_no_suffix: str):
     return (sh, _run_sh) if sh_exists else (py, _run_py)
 
 
-def dispatch(args: typ.List[str],
+def dispatch(command: str,
              env: typ.Mapping[str, str],
              repo_root: str,
              expansions: typ.Mapping[str, typ.Any]):
-    if len(args) < 2:
-        raise Exception("Usage: eb command")
-    command = args[1]
     # TODO: use pkg_resources or similar
     scripts_dir = os.path.join(repo_root, 'buildscripts', 'eb', 'eb', 'scripts')
     if not os.path.isdir(scripts_dir):
