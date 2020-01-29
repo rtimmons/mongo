@@ -181,9 +181,7 @@ void ReplSetHeartbeatArgsV1::addToBSON(BSONObjBuilder* builder) const {
     builder->appendIntOrLL(kSenderIdFieldName, _senderId);
     builder->appendIntOrLL(kTermFieldName, _term);
 
-    if (getUsePrimaryId()) {
-        builder->append(kPrimaryIdFieldName, _primaryId);
-    }
+    builder->append(kPrimaryIdFieldName, _primaryId);
 }
 
 }  // namespace repl
