@@ -4115,6 +4115,7 @@ Status ReplicationCoordinatorImpl::processHeartbeatV1(const ReplSetHeartbeatArgs
                args.getPrimaryId() != response->getPrimaryId()) {
         // The caller knows about a different primary than we do, so schedule a heartbeat back to the
         // caller, and we'll update our full primary etc information based on that exchange.
+        log() << "RRR " << __LINE__ << ": The caller knows about a different primary than we do, so schedule a heartbeat back to the";
         if (!senderHost.empty()) {
             severe() << "RRR Scheduling heartbeat cuz different primary.";
             _scheduleHeartbeatToTarget_inlock(senderHost, -1, now);

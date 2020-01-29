@@ -155,7 +155,6 @@ TEST_F(ReplCoordHBV1Test,
 
     ASSERT_TRUE(getExternalState()->threadsStarted());
 }
-#endif
 
 TEST_F(ReplCoordHBV1Test,
        HeartbeatRequestContainsDifferentPrimary) {
@@ -234,8 +233,8 @@ TEST_F(ReplCoordHBV1Test,
     exitNetwork();
     ASSERT_TRUE(getExternalState()->threadsStarted());
 }
+#endif
 
-#if 0
 TEST_F(ReplCoordHBV1Test, AwaitIsMasterReturnsResponseOnReconfigViaHeartbeat) {
     init();
     assertStartSuccess(BSON("_id"
@@ -328,6 +327,7 @@ TEST_F(ReplCoordHBV1Test, AwaitIsMasterReturnsResponseOnReconfigViaHeartbeat) {
     getIsMasterThread.join();
 }
 
+#if 0
 TEST_F(ReplCoordHBV1Test,
        ArbiterJoinsExistingReplSetWhenReceivingAConfigContainingTheArbiterViaHeartbeat) {
     setMinimumLoggedSeverity(logger::LogSeverity::Debug(3));
