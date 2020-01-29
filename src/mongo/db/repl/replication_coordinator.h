@@ -666,7 +666,6 @@ public:
      * Handles an incoming heartbeat command with arguments 'args'. Populates 'response';
      * returns a Status with either OK or an error message.
      */
-    // Called when other nodes want to know about my state.
     virtual Status processHeartbeatV1(const ReplSetHeartbeatArgsV1& args,
                                       ReplSetHeartbeatResponse* response) = 0;
 
