@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2019-present MongoDB, Inc.
+ *    Copyright (C) 2020-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -27,22 +27,22 @@
  *    it in the license file.
  */
 
-#pragma once
+#include "mongo/s/mongos_server_parameters.h"
+
+#include "mongo/util/str.h"
 
 namespace mongo {
-/**
- * Set parameter used to control whether or not the mongos attempts to precache the routing table on
- * startup.
- */
-
-extern bool gLoadRoutingTableOnStartup;
 
 /**
- * Set parameters used to control whether or not the mongos attempts to warm up the connection
- * pool on start up and for how long it should try.
+ * Validation callback for setParameter 'readHedgingMode'.
  */
-
-extern bool gWarmMinConnectionsInShardingTaskExecutorPoolOnStartup;
-extern int gWarmMinConnectionsInShardingTaskExecutorPoolOnStartupWaitMS;
+Status validateReadHedgingMode(const std::string& mode) {
+    if (mode != kReadHedgingModeOn && mode != kReadHedgingModeOff) {
+        return {ErrorCodes::BadValue,
+                str::stream() << "readHedgingMode must be either \"" << kReadHedgingModeOn
+                              << "\" or \"" << kReadHedgingModeOff << "\""};
+    }
+    return Status::OK();
+}
 
 }  // namespace mongo

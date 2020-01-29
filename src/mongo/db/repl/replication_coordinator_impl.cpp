@@ -78,7 +78,6 @@
 #include "mongo/db/repl/replication_process.h"
 #include "mongo/db/repl/rslog.h"
 #include "mongo/db/repl/storage_interface.h"
-#include "mongo/db/repl/tla_plus_trace_repl_gen.h"
 #include "mongo/db/repl/topology_coordinator.h"
 #include "mongo/db/repl/transaction_oplog_application.h"
 #include "mongo/db/repl/update_position_args.h"
@@ -99,7 +98,6 @@
 #include "mongo/util/stacktrace.h"
 #include "mongo/util/time_support.h"
 #include "mongo/util/timer.h"
-#include "mongo/util/tla_plus_trace.h"
 
 namespace mongo {
 namespace repl {
@@ -1039,7 +1037,6 @@ void ReplicationCoordinatorImpl::signalDrainComplete(OperationContext* opCtx,
     if (_applierState != ApplierState::Draining) {
         return;
     }
-    _tlaPlusRaftMongoEvent(lk, opCtx, RaftMongoSpecActionEnum::kBecomePrimaryByMagic);
     lk.unlock();
 
     _externalState->onDrainComplete(opCtx);
@@ -2215,7 +2212,6 @@ void ReplicationCoordinatorImpl::stepDown(OperationContext* opCtx,
     });
 
     auto waitTimeout = std::min(waitTime, stepdownTime);
-    auto lastAppliedOpTime = _getMyLastAppliedOpTime_inlock();
 
     // Set up a waiter which will be signaled when we process a heartbeat or updatePosition
     // and have a majority of nodes at our optime.
@@ -2258,6 +2254,15 @@ void ReplicationCoordinatorImpl::stepDown(OperationContext* opCtx,
             arsd.rstlReacquire();
             lk.lock();
         });
+
+        auto lastAppliedOpTime = _getMyLastAppliedOpTime_inlock();
+        auto currentTerm = _topCoord->getTerm();
+        // If termAtStart != currentTerm, tryToStartStepDown would have thrown.
+        invariant(termAtStart == currentTerm);
+        // As we should not wait for secondaries to catch up if this node has not yet written in
+        // this term, invariant that the lastAppliedOpTime we will wait for has the same term as the
+        // current term. Also see TopologyCoordinator::isSafeToStepDown.
+        invariant(lastAppliedOpTime.getTerm() == currentTerm);
 
         auto future = _replicationWaiterList.add_inlock(lastAppliedOpTime, waiterWriteConcern);
 
@@ -3003,6 +3008,11 @@ void ReplicationCoordinatorImpl::_fulfillTopologyChangePromise(OperationContext*
     }
 }
 
+void ReplicationCoordinatorImpl::incrementTopologyVersion(OperationContext* opCtx) {
+    stdx::lock_guard lk(_mutex);
+    _fulfillTopologyChangePromise(opCtx, lk);
+}
+
 ReplicationCoordinatorImpl::PostMemberStateUpdateAction
 ReplicationCoordinatorImpl::_updateMemberStateFromTopologyCoordinator(WithLock lk,
                                                                       OperationContext* opCtx) {
@@ -3697,12 +3707,6 @@ bool ReplicationCoordinatorImpl::shouldChangeSyncSource(
 void ReplicationCoordinatorImpl::_updateLastCommittedOpTimeAndWallTime(WithLock lk) {
     if (_topCoord->updateLastCommittedOpTimeAndWallTime()) {
         _setStableTimestampForStorage(lk);
-        if (MONGO_unlikely(logForTLAPlusSpecs.shouldFail())) {
-            EnsureOperationContext ensureOpCtx;
-            _tlaPlusRaftMongoEvent(lk,
-                                   ensureOpCtx.getOperationContext(),
-                                   RaftMongoSpecActionEnum::kAdvanceCommitPoint);
-        }
     }
 }
 
@@ -3944,15 +3948,6 @@ void ReplicationCoordinatorImpl::_advanceCommitPoint(
         }
 
         _setStableTimestampForStorage(lk);
-        if (MONGO_unlikely(logForTLAPlusSpecs.shouldFail())) {
-            EnsureOperationContext ensureOpCtx;
-            auto action = fromSyncSource
-                ? RaftMongoSpecActionEnum::kLearnCommitPointFromSyncSourceNeverBeyondLastApplied
-                : RaftMongoSpecActionEnum::kLearnCommitPointWithTermCheck;
-
-            _tlaPlusRaftMongoEvent(lk, ensureOpCtx.getOperationContext(), action);
-        }
-
         // Even if we have no new snapshot, we need to notify waiters that the commit point moved.
         _externalState->notifyOplogMetadataWaiters(committedOpTimeAndWallTime.opTime);
     }

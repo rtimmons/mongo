@@ -41,7 +41,6 @@
 #include "mongo/db/repl/repl_settings.h"
 #include "mongo/db/repl/split_horizon.h"
 #include "mongo/db/repl/sync_source_selector.h"
-#include "mongo/db/repl/tla_plus_trace_repl_gen.h"
 #include "mongo/rpc/topology_version_gen.h"
 #include "mongo/util/net/hostandport.h"
 #include "mongo/util/time_support.h"
@@ -949,6 +948,12 @@ public:
         const size_t numOpsRunning) const = 0;
 
     /**
+     * Increment the server TopologyVersion and fulfill the promise of any currently waiting
+     * isMaster request.
+     */
+    virtual void incrementTopologyVersion(OperationContext* opCtx) = 0;
+
+    /**
      * Constructs and returns an IsMasterResponse. Will block until the given deadline waiting for a
      * significant topology change if the 'counter' field of 'clientTopologyVersion' is equal to the
      * current TopologyVersion 'counter' from the TopologyCoordinator. Returns immediately if
@@ -960,14 +965,6 @@ public:
         const SplitHorizon::Parameters& horizonParams,
         boost::optional<TopologyVersion> clientTopologyVersion,
         boost::optional<Date_t> deadline) const = 0;
-
-    /**
-     * Trace a replication event for the RaftMongo.tla spec.
-     */
-    virtual void tlaPlusRaftMongoEvent(
-        OperationContext* opCtx,
-        RaftMongoSpecActionEnum action,
-        boost::optional<Timestamp> oplogReadTimestamp = boost::none) const {}
 
     /**
      * Returns the OpTime that consists of the timestamp of the latest oplog entry and the current

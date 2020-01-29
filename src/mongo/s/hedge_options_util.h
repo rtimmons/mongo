@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2019-present MongoDB, Inc.
+ *    Copyright (C) 2020-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -26,31 +26,20 @@
  *    exception statement from all source files in the program, then also delete
  *    it in the license file.
  */
-
 #pragma once
 
-#include "mongo/util/fail_point.h"
-#include "mongo/util/tla_plus_trace_gen.h"
+#include "mongo/platform/basic.h"
+
+#include "mongo/executor/remote_command_request.h"
 
 namespace mongo {
 
-extern FailPoint logForTLAPlusSpecs;
-
 /**
- * Use like:
- * if (MONGO_unlikely(logForTLAPlusSpecs.scopedIf(
- *         enabledForSpec(TLAPlusSpecEnum::kRaftMongo)).isActive()))
- * {
- *     ... log event for spec "Foo.tla" ...
- * }
- *
- * The return value is a lambda like "bool lambda(const BSONObj& data)".
+ * Constructs and returns hedge options based on the ReadPreferenceSetting on the 'opCtx'
+ * (assumes that it is not null), the hedging server parameters, and maxTimeMS in 'cmdObj'.
+ * If no hedging should be performed, returns boost::none.
  */
-std::function<bool(const BSONObj& data)> enabledForSpec(TLAPlusSpecEnum spec);
-
-/**
- * Trace an event for a TLA+ spec.
- */
-void logTlaPlusTraceEvent(const TlaPlusTraceEvent& event);
+boost::optional<executor::RemoteCommandRequestOnAny::HedgeOptions> extractHedgeOptions(
+    OperationContext* opCtx, const BSONObj& cmdObj);
 
 }  // namespace mongo

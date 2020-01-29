@@ -208,7 +208,6 @@ MONGO_INITIALIZER(AuthorizationBuiltinRoles)(InitializerContext* context) {
     hostManagerRoleClusterActions
         << ActionType::applicationMessage  // clusterManager gets this also
         << ActionType::connPoolSync
-        << ActionType::cpuProfiler
         << ActionType::dropConnections
         << ActionType::logRotate
         << ActionType::setParameter
@@ -413,11 +412,19 @@ void addClusterMonitorPrivileges(PrivilegeVector* privileges) {
     Privilege::addPrivilegeToPrivilegeVector(
         privileges,
         Privilege(ResourcePattern::forDatabaseName("local"), clusterMonitorRoleDatabaseActions));
-    addReadOnlyDbPrivileges(privileges, "local");
     addReadOnlyDbPrivileges(privileges, "config");
+    addReadOnlyDbPrivileges(privileges, "local");
     Privilege::addPrivilegeToPrivilegeVector(
         privileges,
         Privilege(ResourcePattern::forExactNamespace(NamespaceString("local", "system.replset")),
+                  ActionType::find));
+    Privilege::addPrivilegeToPrivilegeVector(
+        privileges,
+        Privilege(ResourcePattern::forExactNamespace(NamespaceString("local", "replset.election")),
+                  ActionType::find));
+    Privilege::addPrivilegeToPrivilegeVector(
+        privileges,
+        Privilege(ResourcePattern::forExactNamespace(NamespaceString("local", "replset.minvalid")),
                   ActionType::find));
     Privilege::addPrivilegeToPrivilegeVector(
         privileges,
@@ -458,6 +465,14 @@ void addClusterManagerPrivileges(PrivilegeVector* privileges) {
         privileges, Privilege(ResourcePattern::forDatabaseName("config"), writeActions));
     Privilege::addPrivilegeToPrivilegeVector(
         privileges, Privilege(ResourcePattern::forDatabaseName("local"), writeActions));
+    Privilege::addPrivilegeToPrivilegeVector(
+        privileges,
+        Privilege(ResourcePattern::forExactNamespace(NamespaceString("local", "replset.election")),
+                  writeActions));
+    Privilege::addPrivilegeToPrivilegeVector(
+        privileges,
+        Privilege(ResourcePattern::forExactNamespace(NamespaceString("local", "replset.minvalid")),
+                  writeActions));
 }
 
 void addClusterAdminPrivileges(PrivilegeVector* privileges) {
@@ -490,6 +505,15 @@ void addQueryableBackupPrivileges(PrivilegeVector* privileges) {
 
     Privilege::addPrivilegeToPrivilegeVector(
         privileges, Privilege(ResourcePattern::forDatabaseName("local"), ActionType::find));
+
+    Privilege::addPrivilegeToPrivilegeVector(
+        privileges,
+        Privilege(ResourcePattern::forExactNamespace(NamespaceString("local", "replset.election")),
+                  ActionType::find));
+    Privilege::addPrivilegeToPrivilegeVector(
+        privileges,
+        Privilege(ResourcePattern::forExactNamespace(NamespaceString("local", "replset.minvalid")),
+                  ActionType::find));
 
     Privilege::addPrivilegeToPrivilegeVector(
         privileges, Privilege(ResourcePattern::forCollectionName("system.js"), ActionType::find));
@@ -566,6 +590,19 @@ void addRestorePrivileges(PrivilegeVector* privileges) {
 
     Privilege::addPrivilegeToPrivilegeVector(
         privileges, Privilege(ResourcePattern::forDatabaseName("config"), actions));
+
+    Privilege::addPrivilegeToPrivilegeVector(
+        privileges,
+        Privilege(ResourcePattern::forExactNamespace(NamespaceString("local", "system.replset")),
+                  actions));
+    Privilege::addPrivilegeToPrivilegeVector(
+        privileges,
+        Privilege(ResourcePattern::forExactNamespace(NamespaceString("local", "replset.election")),
+                  actions));
+    Privilege::addPrivilegeToPrivilegeVector(
+        privileges,
+        Privilege(ResourcePattern::forExactNamespace(NamespaceString("local", "replset.minvalid")),
+                  actions));
 
     Privilege::addPrivilegeToPrivilegeVector(
         privileges, Privilege(ResourcePattern::forDatabaseName("local"), actions));

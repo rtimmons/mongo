@@ -1,4 +1,4 @@
-# Copyright (C) 2019-present MongoDB, Inc.
+# Copyright (C) 2020-present MongoDB, Inc.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the Server Side Public License, version 1,
@@ -26,39 +26,21 @@
 # it in the license file.
 #
 
-# TLA+ Trace Checker Event IDL File
-
 global:
-    cpp_namespace: "mongo"
-    cpp_includes:
-        - "mongo/db/server_options.h"
-        - "mongo/util/net/socket_utils.h"
+  cpp_namespace: "mongo"
 
 imports:
-    - "mongo/idl/basic_types.idl"
-    - "mongo/util/net/hostandport.idl"
-
-enums:
-    TLAPlusSpec:
-        description: "The supported TLA+ specs."
-        type: string
-        values:
-            kRaftMongo: "RaftMongo"
+  - "mongo/idl/basic_types.idl"
 
 structs:
-    TlaPlusTraceEvent:
-        description: "A document used for generating a TLA+ trace checker event."
-        fields:
-            spec:
-                type: TLAPlusSpec
-                description: "The TLA+ Spec that this event corresponds to."
-            action:
-                type: string
-                description: "The action that this event is logging."
-            host:
-                type: HostAndPort
-                description: "The HostAndPort logging the event."
-                default: HostAndPort(getHostName(), serverGlobalParams.port)
-            state:
-                type: object
-                description: "State relevant to the current spec and action."
+  UnionWithSpec:
+    description: Specification for a $unionWith stage given in the full, explicit format.
+    strict: true
+    fields:
+      coll:
+        description: The collection to union with.
+        type: string
+      pipeline:
+        description: An optional pipeline to apply to the collection being unioned.
+        optional: true
+        type: array<object>

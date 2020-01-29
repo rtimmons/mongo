@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2019-present MongoDB, Inc.
+ *    Copyright (C) 2020-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -27,37 +27,20 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kTlaPlusTrace
+#pragma once
 
 #include "mongo/platform/basic.h"
 
-#include "mongo/util/tla_plus_trace.h"
-
-#include "mongo/util/log.h"
-#include "mongo/util/time_support.h"
+#include "mongo/base/status.h"
 
 namespace mongo {
 
-MONGO_FAIL_POINT_DEFINE(logForTLAPlusSpecs);
+constexpr auto kReadHedgingModeOn = "on";
+constexpr auto kReadHedgingModeOff = "off";
 
-std::function<bool(const BSONObj& data)> enabledForSpec(TLAPlusSpecEnum spec) {
-    return [spec](const BSONObj& data) {
-        auto array = data["specs"_sd].Array();
-        return std::find_if(array.begin(), array.end(), [&spec](BSONElement elem) {
-                   return elem.String() == TLAPlusSpec_serializer(spec);
-               }) != array.end();
-    };
-}
+/**
+ * Validation callback for setParameter 'readHedgingMode'.
+ */
+Status validateReadHedgingMode(const std::string& mode);
 
-void logTlaPlusTraceEvent(const TlaPlusTraceEvent& event) {
-    Date_t beforeTime = Date_t::now();
-    Date_t afterTime = Date_t::now();
-    while (afterTime == beforeTime) {
-        sleepmillis(1);
-        afterTime = Date_t::now();
-    }
-
-    invariant(afterTime > beforeTime, "Clock went backwards");
-    log() << event.toBSON().jsonString(JsonStringFormat::LegacyStrict);
-}
 }  // namespace mongo
