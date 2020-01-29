@@ -48,8 +48,8 @@ const std::string kSenderHostFieldName = "from";
 const std::string kSenderIdFieldName = "fromId";
 const std::string kSetNameFieldName = "replSetHeartbeat";
 const std::string kTermFieldName = "term";
-const std::string kPrimaryFieldName = "isPrimary";
-// TODO: gate isPrimary with FCV for 4.4; siyuan will send ticket with example
+const std::string kPrimaryIdFieldName = "primaryId";
+
 const std::string kLegalHeartbeatFieldNames[] = {kCheckEmptyFieldName,
                                                  kConfigVersionFieldName,
                                                  kHeartbeatVersionFieldName,
@@ -57,7 +57,7 @@ const std::string kLegalHeartbeatFieldNames[] = {kCheckEmptyFieldName,
                                                  kSenderIdFieldName,
                                                  kSetNameFieldName,
                                                  kTermFieldName,
-                                                 kPrimaryFieldName};
+                                                 kPrimaryIdFieldName};
 
 }  // namespace
 
@@ -90,6 +90,8 @@ Status ReplSetHeartbeatArgsV1::initialize(const BSONObj& argsObj) {
         return status;
     }
 
+    // If sender is version < 4.4 we won't have the primaryId field,
+    // but we still parse and allow it whenever it is present.
     status = bsonExtractIntegerFieldWithDefault(argsObj, kSenderIdFieldName, -1, &_senderId);
     if (!status.isOK())
         return status;
@@ -105,10 +107,9 @@ Status ReplSetHeartbeatArgsV1::initialize(const BSONObj& argsObj) {
         _hasSender = true;
     }
 
-    status = bsonExtractBooleanField(argsObj, kPrimaryFieldName, &_primary);
-    if (!status.isOK()) {
+    status = bsonExtractIntegerFieldWithDefault(argsObj, kPrimaryIdFieldName, -1, &_primaryId);
+    if (!status.isOK())
         return status;
-    }
 
     status = bsonExtractIntegerField(argsObj, kTermFieldName, &_term);
     if (!status.isOK())
@@ -155,8 +156,8 @@ void ReplSetHeartbeatArgsV1::setCheckEmpty() {
     _checkEmpty = true;
 }
 
-void ReplSetHeartbeatArgsV1::setPrimary() {
-    _primary = true;
+void ReplSetHeartbeatArgsV1::setPrimaryId(long long primaryId) {
+    _primaryId = primaryId;
 }
 
 
@@ -179,7 +180,10 @@ void ReplSetHeartbeatArgsV1::addToBSON(BSONObjBuilder* builder) const {
     builder->append(kSenderHostFieldName, _hasSender ? _senderHost.toString() : "");
     builder->appendIntOrLL(kSenderIdFieldName, _senderId);
     builder->appendIntOrLL(kTermFieldName, _term);
-    builder->append(kPrimaryFieldName, _primary);
+
+    if (getUsePrimaryId()) {
+        builder->append(kPrimaryIdFieldName, _primaryId);
+    }
 }
 
 }  // namespace repl

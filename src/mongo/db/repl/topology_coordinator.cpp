@@ -567,14 +567,10 @@ void TopologyCoordinator::prepareSyncFromResponse(const HostAndPort& target,
     *result = Status::OK();
 }
 
-// Produce a reply to a heartbeat.
-// This contains information about ourselves.
-Status TopologyCoordinator::prepareHeartbeatResponseV1(
-    Date_t now,
-    // args contains information about the node that sent us the request.
-    const ReplSetHeartbeatArgsV1& args,
-    const std::string& ourSetName,
-    ReplSetHeartbeatResponse* response) {
+Status TopologyCoordinator::prepareHeartbeatResponseV1(Date_t now,
+                                                       const ReplSetHeartbeatArgsV1& args,
+                                                       const std::string& ourSetName,
+                                                       ReplSetHeartbeatResponse* response) {
     // Verify that replica set names match
     const std::string rshb = args.getSetName();
     if (ourSetName != rshb) {
@@ -613,7 +609,6 @@ Status TopologyCoordinator::prepareHeartbeatResponseV1(
     response->setAppliedOpTimeAndWallTime(lastOpApplied);
     response->setDurableOpTimeAndWallTime(lastOpDurable);
 
-    // Propagate any known primary information.
     if (_currentPrimaryIndex != -1) {
         response->setPrimaryId(_rsConfig.getMemberAt(_currentPrimaryIndex).getId().getData());
     }
@@ -680,6 +675,10 @@ std::pair<ReplSetHeartbeatArgsV1, Milliseconds> TopologyCoordinator::prepareHear
     if (_rsConfig.isInitialized()) {
         hbArgs.setSetName(_rsConfig.getReplSetName());
         hbArgs.setConfigVersion(_rsConfig.getConfigVersion());
+        if (_currentPrimaryIndex >= 0) {
+            // Send primary member id if one exists.
+            hbArgs.setPrimaryId(_memberData.at(_currentPrimaryIndex).getMemberId().getData());
+        }
         if (_selfIndex >= 0) {
             const MemberConfig& me = _selfConfig();
             hbArgs.setSenderId(me.getId().getData());

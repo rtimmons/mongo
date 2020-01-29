@@ -100,10 +100,10 @@ public:
     }
 
     /**
-     * If the sender believes it's primary.
+     * Gets the id of the node the sender believes to be primary or -1 if it is not known.
      */
-    bool isPrimary() const {
-        return _primary;
+    long long getPrimaryId() const {
+        return _primaryId;
     }
 
     /**
@@ -136,7 +136,7 @@ public:
     void setSenderHost(const HostAndPort& newVal);
     void setSetName(const std::string& newVal);
     void setTerm(long long newVal);
-    void setPrimary();
+    void setPrimaryId(long long primaryId);
     void setCheckEmpty();
 
     /**
@@ -155,7 +155,7 @@ private:
     long long _senderId = -1;
     long long _term = -1;
     // TODO: send primary id/index rather than just bool.
-    bool _primary = false;
+    long long _primaryId = -1;
     bool _checkEmpty = false;
     bool _hasSender = false;
     bool _hasHeartbeatVersion = false;
