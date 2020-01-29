@@ -26,6 +26,7 @@
  *    exception statement from all source files in the program, then also delete
  *    it in the license file.
  */
+#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kReplication
 
 #include "mongo/platform/basic.h"
 
@@ -35,6 +36,7 @@
 #include "mongo/bson/util/bson_extract.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/util/net/hostandport.h"
+#include "mongo/util/log.h"
 
 namespace mongo {
 namespace repl {
@@ -90,7 +92,7 @@ Status ReplSetHeartbeatArgsV1::initialize(const BSONObj& argsObj) {
         return status;
     }
 
-    // If sender is version < 4.4 we won't have the primaryId field,
+    // If sender is version < 4.4, argsObj won't have the primaryId field,
     // but we still parse and allow it whenever it is present.
     status = bsonExtractIntegerFieldWithDefault(argsObj, kSenderIdFieldName, -1, &_senderId);
     if (!status.isOK())
@@ -181,7 +183,16 @@ void ReplSetHeartbeatArgsV1::addToBSON(BSONObjBuilder* builder) const {
     builder->appendIntOrLL(kSenderIdFieldName, _senderId);
     builder->appendIntOrLL(kTermFieldName, _term);
 
-    builder->append(kPrimaryIdFieldName, _primaryId);
+    severe() << "RRRR Checking compat version to include _primaryId " << _primaryId << "(" <<
+                                                                                   static_cast<int>(serverGlobalParams.featureCompatibility.getVersion()) << ")";
+
+    // Can't send _primaryId field unless we're all on latest version since
+    // parsing code above has bsonCheckOnlyHasFieldsForCommand (and all < 4.4 branches have this)
+    if (serverGlobalParams.featureCompatibility.getVersion() ==
+         ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo44) {
+        severe() << "RRR Included _primaryId";
+        builder->append(kPrimaryIdFieldName, _primaryId);
+    }
 }
 
 }  // namespace repl

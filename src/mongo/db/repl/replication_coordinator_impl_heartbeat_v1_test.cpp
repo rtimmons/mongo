@@ -58,7 +58,8 @@ protected:
     void assertMemberState(MemberState expected, std::string msg = "");
     ReplSetHeartbeatResponse receiveHeartbeatFrom(const ReplSetConfig& rsConfig,
                                                   int sourceId,
-                                                  const HostAndPort& source);
+                                                  const HostAndPort& source,
+                                                  int sourcePrimaryId = -1);
 };
 
 void ReplCoordHBV1Test::assertMemberState(const MemberState expected, std::string msg) {
@@ -69,10 +70,12 @@ void ReplCoordHBV1Test::assertMemberState(const MemberState expected, std::strin
 
 ReplSetHeartbeatResponse ReplCoordHBV1Test::receiveHeartbeatFrom(const ReplSetConfig& rsConfig,
                                                                  int sourceId,
-                                                                 const HostAndPort& source) {
+                                                                 const HostAndPort& source,
+                                                                 int sourcePrimaryId) {
     ReplSetHeartbeatArgsV1 hbArgs;
     hbArgs.setConfigVersion(rsConfig.getConfigVersion());
     hbArgs.setSetName(rsConfig.getReplSetName());
+    hbArgs.setPrimaryId(sourcePrimaryId);
     hbArgs.setSenderHost(source);
     hbArgs.setSenderId(sourceId);
     hbArgs.setTerm(1);
@@ -83,6 +86,7 @@ ReplSetHeartbeatResponse ReplCoordHBV1Test::receiveHeartbeatFrom(const ReplSetCo
     return response;
 }
 
+#if 0
 TEST_F(ReplCoordHBV1Test,
        NodeJoinsExistingReplSetWhenReceivingAConfigContainingTheNodeViaHeartbeat) {
     setMinimumLoggedSeverity(logger::LogSeverity::Debug(3));
@@ -151,10 +155,87 @@ TEST_F(ReplCoordHBV1Test,
 
     ASSERT_TRUE(getExternalState()->threadsStarted());
 }
+#endif
 
-// TODO: add a test here
-// TODO: populate primary id/index when sending the request
+TEST_F(ReplCoordHBV1Test,
+       HeartbeatRequestContainsDifferentPrimary) {
+    setMinimumLoggedSeverity(logger::LogSeverity::Debug(3));
+    ReplSetConfig rsConfig = assertMakeRSConfig(BSON("_id"
+                                                     << "mySet"
+                                                     << "version" << 3 << "members"
+                                                     << BSON_ARRAY(BSON("_id" << 100 << "host"
+                                                                              << "h1:1")
+                                                                   << BSON("_id" << 200 << "host"
+                                                                                 << "h2:1"))
+                                                     << "protocolVersion" << 1));
+    init("mySet");
+    addSelf(HostAndPort("h2", 1));
+    const Date_t startDate = getNet()->now();
+    start();
+    enterNetwork();
+    assertMemberState(MemberState::RS_STARTUP);
+    NetworkInterfaceMock* net = getNet();
+    ASSERT_FALSE(net->hasReadyRequests());
+    exitNetwork();
+    log() << "RRRRR calling with sourcePrimaryId=200";
+    receiveHeartbeatFrom(rsConfig, 100, HostAndPort("h1", 1), 200);
 
+    enterNetwork();
+    NetworkInterfaceMock::NetworkOperationIterator noi = net->getNextReadyRequest();
+    const RemoteCommandRequest& request = noi->getRequest();
+    ASSERT_EQUALS(HostAndPort("h1", 1), request.target);
+    ReplSetHeartbeatArgsV1 hbArgs;
+    log() << "Got initial heartbeat obj " << request.target;
+    ASSERT_OK(hbArgs.initialize(request.cmdObj));
+    ASSERT_EQUALS("mySet", hbArgs.getSetName());
+    ASSERT_EQUALS(-2, hbArgs.getConfigVersion());
+    ASSERT_EQUALS(OpTime::kInitialTerm, hbArgs.getTerm());
+    ASSERT_EQUALS(-1, hbArgs.getPrimaryId());
+    ReplSetHeartbeatResponse hbResp;
+    hbResp.setSetName("mySet");
+    hbResp.setState(MemberState::RS_PRIMARY);
+    hbResp.setConfigVersion(rsConfig.getConfigVersion());
+    hbResp.setConfig(rsConfig);
+    // The smallest valid optime in PV1.
+    OpTime opTime(Timestamp(), 0);
+    hbResp.setAppliedOpTimeAndWallTime({opTime, Date_t()});
+    hbResp.setDurableOpTimeAndWallTime({opTime, Date_t()});
+    BSONObjBuilder responseBuilder;
+    responseBuilder << "ok" << 1;
+    hbResp.addToBSON(&responseBuilder);
+    net->scheduleResponse(
+        noi, startDate + Milliseconds(200), makeResponseStatus(responseBuilder.obj()));
+    assertRunUntil(startDate + Milliseconds(200));
+
+    // Because the new config is stored using an out-of-band thread, we need to perform some
+    // extra synchronization to let the executor finish the heartbeat reconfig.  We know that
+    // after the out-of-band thread completes, it schedules new heartbeats.  We assume that no
+    // other network operations get scheduled during or before the reconfig, though this may
+    // cease to be true in the future.
+    noi = net->getNextReadyRequest();
+
+    assertMemberState(MemberState::RS_STARTUP2);
+    OperationContextNoop opCtx;
+    ReplSetConfig storedConfig;
+    ASSERT_OK(storedConfig.initialize(
+        unittest::assertGet(getExternalState()->loadLocalConfigDocument(&opCtx))));
+    ASSERT_OK(storedConfig.validate());
+    ASSERT_EQUALS(3, storedConfig.getConfigVersion());
+    ASSERT_EQUALS(2, storedConfig.getNumMembers());
+    exitNetwork();
+
+    ASSERT_TRUE(getExternalState()->threadsStarted());
+
+    log() <<  "RRR @line" << __LINE__;
+    receiveHeartbeatFrom(rsConfig, 100, HostAndPort("h1", 1), 200);
+    enterNetwork();
+    ASSERT_TRUE(net->hasReadyRequests());
+
+    exitNetwork();
+    ASSERT_TRUE(getExternalState()->threadsStarted());
+}
+
+#if 0
 TEST_F(ReplCoordHBV1Test, AwaitIsMasterReturnsResponseOnReconfigViaHeartbeat) {
     init();
     assertStartSuccess(BSON("_id"
@@ -680,6 +761,7 @@ TEST_F(ReplCoordHBV1Test, LastCommittedOpTimeOnlyUpdatesFromHeartbeatIfNotInStar
         ASSERT_EQUALS(commitPoint, getReplCoord()->getLastCommittedOpTime());
     }
 }
+#endif
 
 }  // namespace
 }  // namespace repl
