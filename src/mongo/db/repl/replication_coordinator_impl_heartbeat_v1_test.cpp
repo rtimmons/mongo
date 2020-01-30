@@ -86,6 +86,82 @@ ReplSetHeartbeatResponse ReplCoordHBV1Test::receiveHeartbeatFrom(const ReplSetCo
     return response;
 }
 
+TEST_F(ReplCoordHBV1Test,
+       NodeReceivesHeartbeatRequestFromNodeWithDifferentPrimary) {
+    setMinimumLoggedSeverity(logger::LogSeverity::Debug(3));
+    BSONObj configObj = BSON("_id"
+                             << "mySet"
+                             << "version" << 1 << "members"
+                             << BSON_ARRAY(BSON("_id" << 1 << "host"
+                                                      << "node1:12345")
+                                           << BSON("_id" << 2 << "host"
+                                                         << "node2:12345")
+                                           << BSON("_id" << 3 << "host"
+                                                         << "node3:12345"))
+                             << "protocolVersion" << 1);
+    // we are node 1
+    assertStartSuccess(configObj, HostAndPort("node1", 12345));
+    OperationContextNoop opCtx;
+    replCoordSetMyLastAppliedOpTime(OpTime(Timestamp(100, 1), 0), Date_t() + Seconds(100));
+    replCoordSetMyLastDurableOpTime(OpTime(Timestamp(100, 1), 0), Date_t() + Seconds(100));
+    ASSERT_OK(getReplCoord()->setFollowerMode(MemberState::RS_PRIMARY));
+    startCapturingLogMessages();
+
+    simulateSuccessfulV1Election();
+    getReplCoord()->waitForElectionFinish_forTest();
+
+    // we are secondary
+    ASSERT_TRUE(getReplCoord()->getMemberState().secondary());
+
+//    ReplSetConfig rsConfig = assertMakeRSConfig(BSON("_id"
+//                                                     << "mySet"
+//                                                     << "version" << 3 << "members"
+//                                                     << BSON_ARRAY(BSON("_id" << 1 << "host"
+//                                                                              << "h1:1")
+//                                                                   << BSON("_id" << 2 << "host"
+//                                                                                 << "h2:1")
+//                                                                   << BSON("_id" << 3 << "host"
+//                                                                                 << "h3:1"))
+//                                                     << "protocolVersion" << 1));
+//        init("mySet");
+//        start();
+//        addSelf(HostAndPort("h1", 1));
+//        ASSERT_OK(getReplCoord()->setFollowerMode(MemberState::RS_SECONDARY));
+//        log() << "RRS : " << getTopoCoord().getCurrentPrimaryIndex();
+
+//        // Become secondary.
+//        log() << "RRS : " << "simulateEnoughHeartbeatsForAllNodesUp";
+//        simulateEnoughHeartbeatsForAllNodesUp();
+//        log() << "RRS : " << "finished simulateEnoughHeartbeatsForAllNodesUp";
+//
+//        log() << "RRS : current primary: " << getTopoCoord().getCurrentPrimaryIndex();
+//        throw std::exception();
+
+//        // process heartbeat
+//        enterNetwork();
+//        const NetworkInterfaceMock::NetworkOperationIterator noi = getNet()->getNextReadyRequest();
+//        const RemoteCommandRequest& request = noi->getRequest();
+//        log() << request.target.toString() << " processing " << request.cmdObj;
+//        getNet()->scheduleResponse(
+//                noi,
+//                getNet()->now(),
+//                makeResponseStatus(BSON("ok" << 0.0 << "errmsg"
+//                                             << "unauth'd"
+//                                             << "code" << ErrorCodes::Unauthorized)));
+//
+//        if (request.target != HostAndPort("node2", 12345) &&
+//            request.cmdObj.firstElement().fieldNameStringData() != "replSetHeartbeat") {
+//            error() << "Black holing unexpected request to " << request.target << ": "
+//                    << request.cmdObj;
+//            getNet()->blackHole(noi);
+//        }
+//        getNet()->runReadyNetworkOperations();
+//        exitNetwork();
+//
+//        ASSERT_TRUE(getTopoCoord().getMemberState().recovering());
+//        assertMemberState(MemberState::RS_RECOVERING, "0");
+}
+
 #if 0
 TEST_F(ReplCoordHBV1Test,
        NodeJoinsExistingReplSetWhenReceivingAConfigContainingTheNodeViaHeartbeat) {
@@ -233,7 +309,6 @@ TEST_F(ReplCoordHBV1Test,
     exitNetwork();
     ASSERT_TRUE(getExternalState()->threadsStarted());
 }
-#endif
 
 TEST_F(ReplCoordHBV1Test, AwaitIsMasterReturnsResponseOnReconfigViaHeartbeat) {
     init();
@@ -317,7 +392,6 @@ TEST_F(ReplCoordHBV1Test, AwaitIsMasterReturnsResponseOnReconfigViaHeartbeat) {
     getIsMasterThread.join();
 }
 
-#if 0
 TEST_F(ReplCoordHBV1Test,
        ArbiterJoinsExistingReplSetWhenReceivingAConfigContainingTheArbiterViaHeartbeat) {
     setMinimumLoggedSeverity(logger::LogSeverity::Debug(3));
