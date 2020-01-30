@@ -188,8 +188,9 @@ void ReplSetHeartbeatArgsV1::addToBSON(BSONObjBuilder* builder) const {
 
     // Can't send _primaryId field unless we're all on latest version since
     // parsing code above has bsonCheckOnlyHasFieldsForCommand (and all < 4.4 branches have this)
-    if (serverGlobalParams.featureCompatibility.getVersion() ==
-         ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo44) {
+    if (serverGlobalParams.featureCompatibility.isVersionInitialized() &&
+        serverGlobalParams.featureCompatibility.getVersion() ==
+             ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo44) {
         severe() << "RRR Included _primaryId";
         builder->append(kPrimaryIdFieldName, _primaryId);
     }
