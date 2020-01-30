@@ -13,8 +13,13 @@ _scons_compile_targets=(
 # TODO setup python virtualenv for Server
 python3 -m pip install -r etc/pip/dev-requirements.txt -q -q
 
-# TODO: change CWD to scripts/
 source ./buildscripts/eb/eb/scripts/_scons_compile.sh
 
 # TODO
 # mv mongo ./build/Artifacts/mongo
+
+cat << EOF >> $repo_root/build/Tasks/resmoke_tasks.yml
+SchemaVersion: 2020-01-01
+Tasks:
+- Name: execute_resmoke_tests
+EOF

@@ -1,6 +1,5 @@
 import argparse
 import os
-import sys
 import typing as typ
 import yaml
 
@@ -23,7 +22,6 @@ def _trim_env(env: typ.Mapping[str,str]):
 def _parse_args():
     parser = argparse.ArgumentParser(prog='PROG')
 
-    # TODO: the recursive part needs recursive generate.tasks()
     parser.add_argument('task', type=str, nargs=1, help='name of the task to generate')
     parser.add_argument('--convert', type=bool, help='convert generated tasks to Evergreen generate.tasks format instead of running them recursively')
 
@@ -32,7 +30,6 @@ def _parse_args():
 
 def main():
     env = os.environ
-
     env = _trim_env(env)
     if "EB_REPO_ROOT" not in env.keys():
         raise Exception("Need to define the EB_REPO_ROOT env var.")
@@ -48,8 +45,7 @@ def main():
         commands.dispatch(next_tasks.pop(), env, repo_root, expansions)
         if args.convert:
             taskgen.gen_tasks_evg(repo_root)
+            # TODO: Need the ability to run generated tasks recursively without manually calling generate.tasks
             break
         else:
             next_tasks.extend(taskgen.gen_tasks(repo_root))
-
-
