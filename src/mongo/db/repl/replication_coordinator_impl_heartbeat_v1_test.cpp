@@ -58,7 +58,8 @@ protected:
     void assertMemberState(MemberState expected, std::string msg = "");
     ReplSetHeartbeatResponse receiveHeartbeatFrom(const ReplSetConfig& rsConfig,
                                                   int sourceId,
-                                                  const HostAndPort& source);
+                                                  const HostAndPort& source,
+                                                  const int currentPrimaryId = -2);
 };
 
 void ReplCoordHBV1Test::assertMemberState(const MemberState expected, std::string msg) {
@@ -69,13 +70,17 @@ void ReplCoordHBV1Test::assertMemberState(const MemberState expected, std::strin
 
 ReplSetHeartbeatResponse ReplCoordHBV1Test::receiveHeartbeatFrom(const ReplSetConfig& rsConfig,
                                                                  int sourceId,
-                                                                 const HostAndPort& source) {
+                                                                 const HostAndPort& source,
+                                                                 const int currentPrimaryId) {
     ReplSetHeartbeatArgsV1 hbArgs;
     hbArgs.setConfigVersion(rsConfig.getConfigVersion());
     hbArgs.setSetName(rsConfig.getReplSetName());
     hbArgs.setSenderHost(source);
     hbArgs.setSenderId(sourceId);
     hbArgs.setTerm(1);
+    if (currentPrimaryId != -2) {
+        hbArgs.setPrimaryId(currentPrimaryId);
+    }
     ASSERT(hbArgs.isInitialized());
 
     ReplSetHeartbeatResponse response;
@@ -254,8 +259,7 @@ TEST_F(ReplCoordHBV1Test,
                                 << BSON_ARRAY(BSON("_id" << 1 << "host"
                                                          << "h1:1")
                                               << BSON("_id" << 2 << "host"
-                                                            << "h2:1"
-                                                            << "arbiterOnly" << true)
+                                                            << "h2:1")
                                               << BSON("_id" << 3 << "host"
                                                             << "h3:1"))
                                 << "protocolVersion" << 1));
@@ -399,44 +403,60 @@ TEST_F(ReplCoordHBV1Test,
 }
 
 TEST_F(ReplCoordHBV1Test,
-       NodeChangesToRecoveringStateWhenAllNodesRespondToHeartbeatsWithUnauthorized) {
+       RyansRenamedTest) {
     // Tests that a node that only has auth error heartbeats is recovering
     setMinimumLoggedSeverity(logger::LogSeverity::Debug(3));
-    assertStartSuccess(BSON("_id"
-                            << "mySet"
-                            << "version" << 1 << "members"
-                            << BSON_ARRAY(BSON("_id" << 1 << "host"
-                                                     << "node1:12345")
-                                          << BSON("_id" << 2 << "host"
-                                                        << "node2:12345"))),
+    auto replConfigBson = BSON("_id"
+                                       << "mySet"
+                                       << "protocolVersion" << 1
+                                       << "version" << 1 << "members"
+                                       << BSON_ARRAY(BSON("_id" << 1 << "host"
+                                                                << "node1:12345")
+                                                             << BSON("_id" << 2 << "host"
+                                                                           << "node2:12345")
+                                                             << BSON("_id" << 3 << "host"
+                                                                           << "node3:12345")));
+
+    assertStartSuccess(replConfigBson,
                        HostAndPort("node1", 12345));
     ASSERT_OK(getReplCoord()->setFollowerMode(MemberState::RS_SECONDARY));
 
     // process heartbeat
-    enterNetwork();
-    const NetworkInterfaceMock::NetworkOperationIterator noi = getNet()->getNextReadyRequest();
-    const RemoteCommandRequest& request = noi->getRequest();
-    log() << request.target.toString() << " processing " << request.cmdObj;
-    getNet()->scheduleResponse(
-        noi,
-        getNet()->now(),
-        makeResponseStatus(BSON("ok" << 0.0 << "errmsg"
-                                     << "unauth'd"
-                                     << "code" << ErrorCodes::Unauthorized)));
 
-    if (request.target != HostAndPort("node2", 12345) &&
-        request.cmdObj.firstElement().fieldNameStringData() != "replSetHeartbeat") {
-        error() << "Black holing unexpected request to " << request.target << ": "
-                << request.cmdObj;
+    {
+        enterNetwork();
+        const NetworkInterfaceMock::NetworkOperationIterator noi = getNet()->getNextReadyRequest();
+        noi->getRequest();
         getNet()->blackHole(noi);
+        exitNetwork();
     }
-    getNet()->runReadyNetworkOperations();
-    exitNetwork();
+    {
+        enterNetwork();
+        const NetworkInterfaceMock::NetworkOperationIterator noi = getNet()->getNextReadyRequest();
+        noi->getRequest();
+        getNet()->blackHole(noi);
+        exitNetwork();
+    }
 
-    ASSERT_TRUE(getTopoCoord().getMemberState().recovering());
-    assertMemberState(MemberState::RS_RECOVERING, "0");
+    log() << "RST : logQueues prior to sending heartbeat";
+    getNet()->logQueues();
+    log() << "RST : after logQueues prior to sending heartbeat";
+
+    log() << "RST : receiveHeartbeatFrom";
+    ReplSetConfig rsConfig = assertMakeRSConfig(replConfigBson);
+    receiveHeartbeatFrom(rsConfig, 3, HostAndPort("node3", 12345), 2);
+
+    {
+        enterNetwork();
+        const NetworkInterfaceMock::NetworkOperationIterator noi = getNet()->getNextReadyRequest();
+        const RemoteCommandRequest& request = noi->getRequest();
+        log() << "RST: " << request.cmdObj; // Assert on fields of this guy
+
+        exitNetwork();
+    }
 }
 
+#if 0
 TEST_F(ReplCoordHBV1Test, IgnoreTheContentsOfMetadataWhenItsReplicaSetIdDoesNotMatchOurs) {
     // Tests that a secondary node will not update its committed optime from the heartbeat metadata
     // if the replica set ID is inconsistent with the existing configuration.
@@ -677,6 +697,7 @@ TEST_F(ReplCoordHBV1Test, LastCommittedOpTimeOnlyUpdatesFromHeartbeatIfNotInStar
         ASSERT_EQUALS(commitPoint, getReplCoord()->getLastCommittedOpTime());
     }
 }
+# endif
 
 }  // namespace
 }  // namespace repl

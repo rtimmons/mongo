@@ -4079,6 +4079,7 @@ bool ReplicationCoordinatorImpl::getWriteConcernMajorityShouldJournal_inlock() c
 
 Status ReplicationCoordinatorImpl::processHeartbeatV1(const ReplSetHeartbeatArgsV1& args,
                                                       ReplSetHeartbeatResponse* response) {
+    log() << "RRR  Received args " << args.toBSON();
     {
         stdx::lock_guard<Latch> lock(_mutex);
         if (_rsConfigState == kConfigPreStart || _rsConfigState == kConfigStartingUp) {
@@ -4115,8 +4116,9 @@ Status ReplicationCoordinatorImpl::processHeartbeatV1(const ReplSetHeartbeatArgs
             _scheduleHeartbeatToTarget_inlock(senderHost, senderIndex, now);
         }
     } else if (result.isOK() && args.getPrimaryId() >= 0 &&
-               response->hasPrimaryId() &&
-               args.getPrimaryId() != response->getPrimaryId()) {
+            ((response->hasPrimaryId() &&
+               args.getPrimaryId() != response->getPrimaryId()) ||
+            (!response->hasPrimaryId()))) {
         // The caller knows about a different primary than we do, so schedule a heartbeat back to the
         // caller, and we'll update our full primary etc information based on that exchange.
         log() << "RRR " << __LINE__ << ": The caller knows about a different primary than we do, so schedule a heartbeat back to the";
