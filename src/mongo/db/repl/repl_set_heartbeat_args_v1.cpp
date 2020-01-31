@@ -35,8 +35,8 @@
 #include "mongo/bson/util/bson_check.h"
 #include "mongo/bson/util/bson_extract.h"
 #include "mongo/db/jsobj.h"
-#include "mongo/util/net/hostandport.h"
 #include "mongo/util/log.h"
+#include "mongo/util/net/hostandport.h"
 
 namespace mongo {
 namespace repl {
@@ -187,7 +187,7 @@ void ReplSetHeartbeatArgsV1::addToBSON(BSONObjBuilder* builder) const {
     // parsing code above has bsonCheckOnlyHasFieldsForCommand (and all < 4.4 branches have this)
     if (serverGlobalParams.featureCompatibility.isVersionInitialized() &&
         serverGlobalParams.featureCompatibility.getVersion() ==
-             ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo44) {
+            ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo44) {
         severe() << "RRR Included _primaryId";
         builder->append(kPrimaryIdFieldName, _primaryId);
     }

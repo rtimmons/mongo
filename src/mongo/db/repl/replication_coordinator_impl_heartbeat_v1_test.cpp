@@ -252,17 +252,16 @@ TEST_F(ReplCoordHBV1Test, AwaitIsMasterReturnsResponseOnReconfigViaHeartbeat) {
 TEST_F(ReplCoordHBV1Test,
        ArbiterJoinsExistingReplSetWhenReceivingAConfigContainingTheArbiterViaHeartbeat) {
     setMinimumLoggedSeverity(logger::LogSeverity::Debug(3));
-    ReplSetConfig rsConfig =
-        assertMakeRSConfig(BSON("_id"
-                                << "mySet"
-                                << "version" << 3 << "members"
-                                << BSON_ARRAY(BSON("_id" << 1 << "host"
-                                                         << "h1:1")
-                                              << BSON("_id" << 2 << "host"
-                                                            << "h2:1")
-                                              << BSON("_id" << 3 << "host"
-                                                            << "h3:1"))
-                                << "protocolVersion" << 1));
+    ReplSetConfig rsConfig = assertMakeRSConfig(BSON("_id"
+                                                     << "mySet"
+                                                     << "version" << 3 << "members"
+                                                     << BSON_ARRAY(BSON("_id" << 1 << "host"
+                                                                              << "h1:1")
+                                                                   << BSON("_id" << 2 << "host"
+                                                                                 << "h2:1")
+                                                                   << BSON("_id" << 3 << "host"
+                                                                                 << "h3:1"))
+                                                     << "protocolVersion" << 1));
     init("mySet");
     addSelf(HostAndPort("h2", 1));
     const Date_t startDate = getNet()->now();
@@ -402,23 +401,20 @@ TEST_F(ReplCoordHBV1Test,
     ASSERT_EQUALS(ErrorCodes::NotYetInitialized, status.code());
 }
 
-TEST_F(ReplCoordHBV1Test,
-       RyansRenamedTest) {
+TEST_F(ReplCoordHBV1Test, RyansRenamedTest) {
     // Tests that a node that only has auth error heartbeats is recovering
     setMinimumLoggedSeverity(logger::LogSeverity::Debug(3));
     auto replConfigBson = BSON("_id"
-                                       << "mySet"
-                                       << "protocolVersion" << 1
-                                       << "version" << 1 << "members"
-                                       << BSON_ARRAY(BSON("_id" << 1 << "host"
-                                                                << "node1:12345")
-                                                             << BSON("_id" << 2 << "host"
-                                                                           << "node2:12345")
-                                                             << BSON("_id" << 3 << "host"
-                                                                           << "node3:12345")));
+                               << "mySet"
+                               << "protocolVersion" << 1 << "version" << 1 << "members"
+                               << BSON_ARRAY(BSON("_id" << 1 << "host"
+                                                        << "node1:12345")
+                                             << BSON("_id" << 2 << "host"
+                                                           << "node2:12345")
+                                             << BSON("_id" << 3 << "host"
+                                                           << "node3:12345")));
 
-    assertStartSuccess(replConfigBson,
-                       HostAndPort("node1", 12345));
+    assertStartSuccess(replConfigBson, HostAndPort("node1", 12345));
     ASSERT_OK(getReplCoord()->setFollowerMode(MemberState::RS_SECONDARY));
 
     // process heartbeat
@@ -450,13 +446,12 @@ TEST_F(ReplCoordHBV1Test,
         enterNetwork();
         const NetworkInterfaceMock::NetworkOperationIterator noi = getNet()->getNextReadyRequest();
         const RemoteCommandRequest& request = noi->getRequest();
-        log() << "RST: " << request.cmdObj; // Assert on fields of this guy
+        log() << "RST: " << request.cmdObj;  // Assert on fields of this guy
 
         exitNetwork();
     }
 }
 
-#if 0
 TEST_F(ReplCoordHBV1Test, IgnoreTheContentsOfMetadataWhenItsReplicaSetIdDoesNotMatchOurs) {
     // Tests that a secondary node will not update its committed optime from the heartbeat metadata
     // if the replica set ID is inconsistent with the existing configuration.
@@ -697,7 +692,6 @@ TEST_F(ReplCoordHBV1Test, LastCommittedOpTimeOnlyUpdatesFromHeartbeatIfNotInStar
         ASSERT_EQUALS(commitPoint, getReplCoord()->getLastCommittedOpTime());
     }
 }
-# endif
 
 }  // namespace
 }  // namespace repl

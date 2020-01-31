@@ -4096,7 +4096,8 @@ Status ReplicationCoordinatorImpl::processHeartbeatV1(const ReplSetHeartbeatArgs
     result = _topCoord->prepareHeartbeatResponseV1(now, args, _settings.ourSetName(), response);
     BSONObjBuilder bob;
     response->addToBSON(&bob);
-    log() << "RRR prepareHeartbeatResponseV1 prepared: " << result << ":" << bob.done() << " _selfIndex=" << _selfIndex;
+    log() << "RRR prepareHeartbeatResponseV1 prepared: " << result << ":" << bob.done()
+          << " _selfIndex=" << _selfIndex;
 
     if ((result.isOK() || result == ErrorCodes::InvalidReplicaSetConfig) && _selfIndex < 0) {
         // If this node does not belong to the configuration it knows about, send heartbeats
@@ -4116,12 +4117,13 @@ Status ReplicationCoordinatorImpl::processHeartbeatV1(const ReplSetHeartbeatArgs
             _scheduleHeartbeatToTarget_inlock(senderHost, senderIndex, now);
         }
     } else if (result.isOK() && args.getPrimaryId() >= 0 &&
-            ((response->hasPrimaryId() &&
-               args.getPrimaryId() != response->getPrimaryId()) ||
-            (!response->hasPrimaryId()))) {
-        // The caller knows about a different primary than we do, so schedule a heartbeat back to the
-        // caller, and we'll update our full primary etc information based on that exchange.
-        log() << "RRR " << __LINE__ << ": The caller knows about a different primary than we do, so schedule a heartbeat back to the";
+               ((response->hasPrimaryId() && args.getPrimaryId() != response->getPrimaryId()) ||
+                (!response->hasPrimaryId()))) {
+        // The caller knows about a different primary than we do, so schedule a heartbeat back to
+        // the caller, and we'll update our full primary etc information based on that exchange.
+        log() << "RRR " << __LINE__
+              << ": The caller knows about a different primary than we do, so schedule a heartbeat "
+                 "back to the";
         if (!senderHost.empty()) {
             severe() << "RRR Scheduling heartbeat cuz different primary.";
             _scheduleHeartbeatToTarget_inlock(senderHost, -1, now);
