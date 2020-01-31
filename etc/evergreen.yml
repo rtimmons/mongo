@@ -1090,10 +1090,9 @@ functions:
             --out-file bypass_compile_expansions.yml                           \
             --version-id ${version_id}                                         \
             --json-artifact artifacts.json
-        fi
 
         # For patch builds determine if we can bypass compile.
-        if [[ "${is_patch}" = "true" && "${task_name}" = "compile" ]]; then
+        elif [[ "${is_patch}" = "true" && "${task_name}" = "compile" ]]; then
           ${activate_virtualenv}
           # Evergreen executable is in $HOME, so add that to the path.
           PATH=$PATH:$HOME $python buildscripts/bypass_compile_and_fetch_binaries.py            \
@@ -3886,7 +3885,7 @@ tasks:
         task_compile_flags: >-
           --ninja
         targets:
-          new.build.ninja
+          build.ninja
     - command: shell.exec
       params:
         working_dir: src
@@ -4117,7 +4116,6 @@ tasks:
           --separate-debug
           --ssl=off
           --use-system-mongo-c=on
-          --wiredtiger=off
           DESTDIR='$BUILD_ROOT/mongo-embedded-sdk-$MONGO_VERSION'
           CPPPATH='$BUILD_ROOT/mongo-embedded-sdk-$MONGO_VERSION/include/libbson-1.0 $BUILD_ROOT/mongo-embedded-sdk-$MONGO_VERSION/include/libmongoc-1.0'
         task_compile_flags_extra: >-
@@ -5411,6 +5409,7 @@ tasks:
     vars:
       pip_dir: ${workdir}/src/etc/pip
   - func: "upload pip requirements"
+  - func: "do multiversion setup"
   - func: "generate burn in tags"
     vars:
       max_revisions: 25

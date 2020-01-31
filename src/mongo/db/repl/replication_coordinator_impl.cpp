@@ -2610,8 +2610,12 @@ void ReplicationCoordinatorImpl::cancelAndRescheduleElectionTimeout() {
 
 EventHandle ReplicationCoordinatorImpl::_processReplSetMetadata_inlock(
     const rpc::ReplSetMetadata& replMetadata) {
-    if (replMetadata.getConfigVersion() != _rsConfig.getConfigVersion()) {
-        return EventHandle();
+    // If we're in FCV 4.4, allow metadata updates between config versions.
+    if (!serverGlobalParams.featureCompatibility.isVersion(
+            ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo44)) {
+        if (replMetadata.getConfigVersion() != _rsConfig.getConfigVersion()) {
+            return EventHandle();
+        }
     }
     return _updateTerm_inlock(replMetadata.getTerm());
 }
@@ -2821,8 +2825,8 @@ void ReplicationCoordinatorImpl::_finishReplSetReconfig(OperationContext* opCtx,
     // we have already set our ReplicationCoordinatorImpl::_rsConfigState state to
     // "kConfigReconfiguring" which prevents new elections from happening.
     if (electionFinishedEvent) {
-        LOG(2) << "Waiting for election to complete before finishing reconfig to version "
-               << newConfig.getConfigVersion();
+        LOG(2) << "Waiting for election to complete before finishing reconfig to config with term "
+               << newConfig.getConfigTerm() << ", version " << newConfig.getConfigVersion();
         // Wait for the election to complete and the node's Role to be set to follower.
         _replExecutor->waitForEvent(electionFinishedEvent);
     }

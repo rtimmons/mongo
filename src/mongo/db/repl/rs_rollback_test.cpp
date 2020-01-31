@@ -220,9 +220,9 @@ int _createIndexOnEmptyCollection(OperationContext* opCtx,
 
 TEST_F(RSRollbackTest, InconsistentMinValid) {
     _replicationProcess->getConsistencyMarkers()->setAppliedThrough(
-        _opCtx.get(), OpTime(Timestamp(Seconds(0), 0), 0));
+        _opCtx.get(), OpTime(Timestamp(Seconds(1), 0), 0));
     _replicationProcess->getConsistencyMarkers()->setMinValid(_opCtx.get(),
-                                                              OpTime(Timestamp(Seconds(1), 0), 0));
+                                                              OpTime(Timestamp(Seconds(2), 0), 0));
     auto status = syncRollback(_opCtx.get(),
                                OplogInterfaceMock(),
                                RollbackSourceMock(std::make_unique<OplogInterfaceMock>()),
@@ -1061,7 +1061,7 @@ TEST_F(RSRollbackTest, RollbackCommitIndexBuild) {
 
     // Kill the index build we just restarted so the fixture can shut down.
     IndexBuildsCoordinator::get(_opCtx.get())
-        ->abortIndexBuildByBuildUUID(_opCtx.get(), buildUUID, "");
+        ->abortIndexBuildByBuildUUID(_opCtx.get(), buildUUID, Timestamp(), "");
 }
 
 TEST_F(RSRollbackTest, RollbackAbortIndexBuild) {
@@ -1105,7 +1105,7 @@ TEST_F(RSRollbackTest, RollbackAbortIndexBuild) {
 
     // Kill the index build we just restarted so the fixture can shut down.
     IndexBuildsCoordinator::get(_opCtx.get())
-        ->abortIndexBuildByBuildUUID(_opCtx.get(), buildUUID, "");
+        ->abortIndexBuildByBuildUUID(_opCtx.get(), buildUUID, Timestamp(), "");
 }
 
 TEST_F(RSRollbackTest, AbortedIndexBuildsAreRestarted) {
@@ -1154,7 +1154,7 @@ TEST_F(RSRollbackTest, AbortedIndexBuildsAreRestarted) {
 
     // Kill the index build we just restarted so the fixture can shut down.
     IndexBuildsCoordinator::get(_opCtx.get())
-        ->abortIndexBuildByBuildUUID(_opCtx.get(), buildUUID, "");
+        ->abortIndexBuildByBuildUUID(_opCtx.get(), buildUUID, Timestamp(), "");
 }
 
 TEST_F(RSRollbackTest, AbortedIndexBuildsAreNotRestartedWhenStartIsRolledBack) {
