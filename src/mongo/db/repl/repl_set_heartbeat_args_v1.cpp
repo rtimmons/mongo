@@ -183,9 +183,6 @@ void ReplSetHeartbeatArgsV1::addToBSON(BSONObjBuilder* builder) const {
     builder->appendIntOrLL(kSenderIdFieldName, _senderId);
     builder->appendIntOrLL(kTermFieldName, _term);
 
-    severe() << "RRRR Checking compat version to include _primaryId " << _primaryId << "(" <<
-                                                                                   static_cast<int>(serverGlobalParams.featureCompatibility.getVersion()) << ")";
-
     // Can't send _primaryId field unless we're all on latest version since
     // parsing code above has bsonCheckOnlyHasFieldsForCommand (and all < 4.4 branches have this)
     if (serverGlobalParams.featureCompatibility.isVersionInitialized() &&
