@@ -56,10 +56,11 @@ using executor::RemoteCommandResponse;
 class ReplCoordHBV1Test : public ReplCoordTest {
 protected:
     void assertMemberState(MemberState expected, std::string msg = "");
-    ReplSetHeartbeatResponse receiveHeartbeatFrom(const ReplSetConfig& rsConfig,
-                                                  int sourceId,
-                                                  const HostAndPort& source,
-                                                  const boost::optional<int> currentPrimaryId = boost::none);
+    ReplSetHeartbeatResponse receiveHeartbeatFrom(
+        const ReplSetConfig& rsConfig,
+        int sourceId,
+        const HostAndPort& source,
+        const boost::optional<int> currentPrimaryId = boost::none);
 };
 
 void ReplCoordHBV1Test::assertMemberState(const MemberState expected, std::string msg) {
@@ -68,10 +69,11 @@ void ReplCoordHBV1Test::assertMemberState(const MemberState expected, std::strin
                                << " but found " << actual.toString() << " - " << msg;
 }
 
-ReplSetHeartbeatResponse ReplCoordHBV1Test::receiveHeartbeatFrom(const ReplSetConfig& rsConfig,
-                                                                 int sourceId,
-                                                                 const HostAndPort& source,
-                                                                 const boost::optional<int> currentPrimaryId) {
+ReplSetHeartbeatResponse ReplCoordHBV1Test::receiveHeartbeatFrom(
+    const ReplSetConfig& rsConfig,
+    int sourceId,
+    const HostAndPort& source,
+    const boost::optional<int> currentPrimaryId) {
     ReplSetHeartbeatArgsV1 hbArgs;
     hbArgs.setConfigVersion(rsConfig.getConfigVersion());
     hbArgs.setSetName(rsConfig.getReplSetName());
@@ -174,7 +176,7 @@ TEST_F(ReplCoordHBV1Test,
     ASSERT_OK(getReplCoord()->setFollowerMode(MemberState::RS_SECONDARY));
 
     // Ignore the first 2 messages.
-    for(int j = 1; j <= 2; ++j) {
+    for (int j = 1; j <= 2; ++j) {
         enterNetwork();
         const auto noi = getNet()->getNextReadyRequest();
         noi->getRequest();
