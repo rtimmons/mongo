@@ -138,23 +138,41 @@ std::unique_ptr<DocumentSourceLookUp::LiteParsed> DocumentSourceLookUp::LitePars
             str::stream() << "invalid $lookup namespace: " << fromNss.ns(),
             fromNss.isValid());
 
-    stdx::unordered_set<NamespaceString> foreignNssSet;
-
     // Recursively lite parse the nested pipeline, if one exists.
     auto pipelineElem = specObj["pipeline"];
     boost::optional<LiteParsedPipeline> liteParsedPipeline;
     if (pipelineElem) {
         auto pipeline = uassertStatusOK(AggregationRequest::parsePipelineFromBSON(pipelineElem));
         liteParsedPipeline = LiteParsedPipeline(fromNss, pipeline);
-
-        auto pipelineInvolvedNamespaces = liteParsedPipeline->getInvolvedNamespaces();
-        foreignNssSet.insert(pipelineInvolvedNamespaces.begin(), pipelineInvolvedNamespaces.end());
     }
 
-    foreignNssSet.insert(fromNss);
+    return std::make_unique<DocumentSourceLookUp::LiteParsed>(std::move(fromNss),
+                                                              std::move(liteParsedPipeline));
+}
 
-    return std::make_unique<DocumentSourceLookUp::LiteParsed>(
-        std::move(fromNss), std::move(foreignNssSet), std::move(liteParsedPipeline));
+PrivilegeVector DocumentSourceLookUp::LiteParsed::requiredPrivileges(
+    bool isMongos, bool bypassDocumentValidation) const {
+    PrivilegeVector requiredPrivileges;
+    invariant(_pipelines.size() <= 1);
+    invariant(_foreignNss);
+
+    // If no pipeline is specified or the local/foreignField syntax was used, then assume that we're
+    // reading directly from the collection.
+    if (_pipelines.empty() || !_pipelines[0].startsWithInitialSource()) {
+        Privilege::addPrivilegeToPrivilegeVector(
+            &requiredPrivileges,
+            Privilege(ResourcePattern::forExactNamespace(*_foreignNss), ActionType::find));
+    }
+
+    // Add the sub-pipeline privileges, if one was specified.
+    if (!_pipelines.empty()) {
+        const LiteParsedPipeline& pipeline = _pipelines[0];
+        Privilege::addPrivilegesToPrivilegeVector(
+            &requiredPrivileges,
+            std::move(pipeline.requiredPrivileges(isMongos, bypassDocumentValidation)));
+    }
+
+    return requiredPrivileges;
 }
 
 REGISTER_DOCUMENT_SOURCE(lookup,
@@ -227,6 +245,16 @@ BSONObj buildEqualityOrQuery(const std::string& fieldName, const BSONArray& valu
     return orBuilder.obj();
 }
 
+void assertIsValidCollectionState(const boost::intrusive_ptr<ExpressionContext>& expCtx) {
+    if (expCtx->mongoProcessInterface->isSharded(expCtx->opCtx, expCtx->ns)) {
+        const bool foreignShardedAllowed =
+            getTestCommandsEnabled() && internalQueryAllowShardedLookup.load();
+        if (!foreignShardedAllowed) {
+            uasserted(51069, "Cannot run $lookup with sharded foreign collection");
+        }
+    }
+}
+
 }  // namespace
 
 DocumentSource::GetNextResult DocumentSourceLookUp::doGetNext() {
@@ -282,12 +310,20 @@ std::unique_ptr<Pipeline, PipelineDeleter> DocumentSourceLookUp::buildPipeline(
     // Copy all 'let' variables into the foreign pipeline's expression context.
     copyVariablesToExpCtx(_variables, _variablesParseState, _fromExpCtx.get());
 
+    assertIsValidCollectionState(_fromExpCtx);
+
     // Resolve the 'let' variables to values per the given input document.
     resolveLetVariables(inputDoc, &_fromExpCtx->variables);
 
     // If we don't have a cache, build and return the pipeline immediately.
     if (!_cache || _cache->isAbandoned()) {
-        return pExpCtx->mongoProcessInterface->makePipeline(_resolvedPipeline, _fromExpCtx);
+        MongoProcessInterface::MakePipelineOptions pipelineOpts;
+        pipelineOpts.optimize = true;
+        pipelineOpts.attachCursorSource = true;
+        // By default, $lookup doesnt support sharded 'from' collections.
+        pipelineOpts.allowTargetingShards = internalQueryAllowShardedLookup.load();
+        return pExpCtx->mongoProcessInterface->makePipeline(
+            _resolvedPipeline, _fromExpCtx, pipelineOpts);
     }
 
     // Tailor the pipeline construction for our needs. We want a non-optimized pipeline without a
@@ -317,8 +353,8 @@ std::unique_ptr<Pipeline, PipelineDeleter> DocumentSourceLookUp::buildPipeline(
 
     if (!_cache->isServing()) {
         // The cache has either been abandoned or has not yet been built. Attach a cursor.
-        pipeline = pExpCtx->mongoProcessInterface->attachCursorSourceToPipeline(_fromExpCtx,
-                                                                                pipeline.release());
+        pipeline = pExpCtx->mongoProcessInterface->attachCursorSourceToPipeline(
+            _fromExpCtx, pipeline.release(), internalQueryAllowShardedLookup.load());
     }
 
     // If the cache has been abandoned, release it.

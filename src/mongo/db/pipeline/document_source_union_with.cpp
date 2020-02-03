@@ -26,10 +26,13 @@
  *    exception statement from all source files in the program, then also delete
  *    it in the license file.
  */
+#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kQuery
+
 #include "mongo/platform/basic.h"
 
 #include "mongo/db/pipeline/document_source_union_with.h"
 #include "mongo/db/pipeline/document_source_union_with_gen.h"
+#include "mongo/util/log.h"
 
 namespace mongo {
 
@@ -46,7 +49,6 @@ std::unique_ptr<DocumentSourceUnionWith::LiteParsed> DocumentSourceUnionWith::Li
             spec.type() == BSONType::Object || spec.type() == BSONType::String);
 
     NamespaceString unionNss;
-    stdx::unordered_set<NamespaceString> foreignNssSet;
     boost::optional<LiteParsedPipeline> liteParsedPipeline;
     if (spec.type() == BSONType::String) {
         unionNss = NamespaceString(nss.db(), spec.valueStringData());
@@ -58,14 +60,36 @@ std::unique_ptr<DocumentSourceUnionWith::LiteParsed> DocumentSourceUnionWith::Li
         // Recursively lite parse the nested pipeline, if one exists.
         if (unionWithSpec.getPipeline()) {
             liteParsedPipeline = LiteParsedPipeline(unionNss, *unionWithSpec.getPipeline());
-            foreignNssSet.merge(liteParsedPipeline->getInvolvedNamespaces());
         }
     }
 
-    foreignNssSet.insert(unionNss);
+    return std::make_unique<DocumentSourceUnionWith::LiteParsed>(std::move(unionNss),
+                                                                 std::move(liteParsedPipeline));
+}
 
-    return std::make_unique<DocumentSourceUnionWith::LiteParsed>(
-        std::move(unionNss), std::move(foreignNssSet), std::move(liteParsedPipeline));
+PrivilegeVector DocumentSourceUnionWith::LiteParsed::requiredPrivileges(
+    bool isMongos, bool bypassDocumentValidation) const {
+    PrivilegeVector requiredPrivileges;
+    invariant(_pipelines.size() <= 1);
+    invariant(_foreignNss);
+
+    // If no pipeline is specified, then assume that we're reading directly from the collection.
+    // Otherwise check whether the pipeline starts with an "initial source" indicating that we don't
+    // require the "find" privilege.
+    if (_pipelines.empty() || !_pipelines[0].startsWithInitialSource()) {
+        Privilege::addPrivilegeToPrivilegeVector(
+            &requiredPrivileges,
+            Privilege(ResourcePattern::forExactNamespace(*_foreignNss), ActionType::find));
+    }
+
+    // Add the sub-pipeline privileges, if one was specified.
+    if (!_pipelines.empty()) {
+        const LiteParsedPipeline& pipeline = _pipelines[0];
+        Privilege::addPrivilegesToPrivilegeVector(
+            &requiredPrivileges,
+            std::move(pipeline.requiredPrivileges(isMongos, bypassDocumentValidation)));
+    }
+    return requiredPrivileges;
 }
 
 boost::intrusive_ptr<DocumentSource> DocumentSourceUnionWith::createFromBson(
@@ -108,6 +132,7 @@ DocumentSource::GetNextResult DocumentSourceUnionWith::doGetNext() {
         _pipeline =
             pExpCtx->mongoProcessInterface->attachCursorSourceToPipeline(ctx, _pipeline.release());
         _cursorAttached = true;
+        LOG(3) << "$unionWith attached cursor to pipeline";
     }
 
     if (auto res = _pipeline->getNext())
@@ -151,14 +176,18 @@ void DocumentSourceUnionWith::detachFromOperationContext() {
     // We have a pipeline we're going to be executing across multiple calls to getNext(), so we
     // use Pipeline::detachFromOperationContext() to take care of updating the Pipeline's
     // ExpressionContext.
-    _pipeline->detachFromOperationContext();
+    if (_pipeline) {
+        _pipeline->detachFromOperationContext();
+    }
 }
 
 void DocumentSourceUnionWith::reattachToOperationContext(OperationContext* opCtx) {
     // We have a pipeline we're going to be executing across multiple calls to getNext(), so we
     // use Pipeline::reattachToOperationContext() to take care of updating the Pipeline's
     // ExpressionContext.
-    _pipeline->reattachToOperationContext(opCtx);
+    if (_pipeline) {
+        _pipeline->reattachToOperationContext(opCtx);
+    }
 }
 
 void DocumentSourceUnionWith::addInvolvedCollections(
