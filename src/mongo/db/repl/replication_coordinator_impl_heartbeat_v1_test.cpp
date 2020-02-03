@@ -58,7 +58,8 @@ protected:
     void assertMemberState(MemberState expected, std::string msg = "");
     ReplSetHeartbeatResponse receiveHeartbeatFrom(const ReplSetConfig& rsConfig,
                                                   int sourceId,
-                                                  const HostAndPort& source);
+                                                  const HostAndPort& source,
+                                                  const boost::optional<int> currentPrimaryId = boost::none);
 };
 
 void ReplCoordHBV1Test::assertMemberState(const MemberState expected, std::string msg) {
@@ -69,13 +70,17 @@ void ReplCoordHBV1Test::assertMemberState(const MemberState expected, std::strin
 
 ReplSetHeartbeatResponse ReplCoordHBV1Test::receiveHeartbeatFrom(const ReplSetConfig& rsConfig,
                                                                  int sourceId,
-                                                                 const HostAndPort& source) {
+                                                                 const HostAndPort& source,
+                                                                 const boost::optional<int> currentPrimaryId) {
     ReplSetHeartbeatArgsV1 hbArgs;
     hbArgs.setConfigVersion(rsConfig.getConfigVersion());
     hbArgs.setSetName(rsConfig.getReplSetName());
     hbArgs.setSenderHost(source);
     hbArgs.setSenderId(sourceId);
     hbArgs.setTerm(1);
+    if (currentPrimaryId) {
+        hbArgs.setPrimaryId(*currentPrimaryId);
+    }
     ASSERT(hbArgs.isInitialized());
 
     ReplSetHeartbeatResponse response;
@@ -183,9 +188,12 @@ TEST_F(ReplCoordHBV1Test,
     {
         enterNetwork();
         const auto noi = getNet()->getNextReadyRequest();
+        // 'request' represents the request sent from self(node1) back to node3
         const RemoteCommandRequest& request = noi->getRequest();
-        // TODO
-        log() << "RST: " << request.cmdObj;  // Assert on fields of this guy
+        ReplSetHeartbeatArgsV1 args;
+        ASSERT_OK(args.initialize(request.cmdObj));
+        ASSERT_EQ(request.target, HostAndPort("node3", 12345));
+        ASSERT_EQ(args.getPrimaryId(), -1);
 
         exitNetwork();
     }
