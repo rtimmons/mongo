@@ -26,7 +26,6 @@
  *    exception statement from all source files in the program, then also delete
  *    it in the license file.
  */
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kReplication
 
 #include "mongo/platform/basic.h"
 
@@ -35,7 +34,6 @@
 #include "mongo/bson/util/bson_check.h"
 #include "mongo/bson/util/bson_extract.h"
 #include "mongo/db/jsobj.h"
-#include "mongo/util/log.h"
 #include "mongo/util/net/hostandport.h"
 
 namespace mongo {
@@ -183,12 +181,9 @@ void ReplSetHeartbeatArgsV1::addToBSON(BSONObjBuilder* builder) const {
     builder->appendIntOrLL(kSenderIdFieldName, _senderId);
     builder->appendIntOrLL(kTermFieldName, _term);
 
-    // Can't send _primaryId field unless we're all on latest version since
-    // parsing code above has bsonCheckOnlyHasFieldsForCommand (and all < 4.4 branches have this)
     if (serverGlobalParams.featureCompatibility.isVersionInitialized() &&
         serverGlobalParams.featureCompatibility.getVersion() ==
             ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo44) {
-        severe() << "RRR Included _primaryId";
         builder->append(kPrimaryIdFieldName, _primaryId);
     }
 }

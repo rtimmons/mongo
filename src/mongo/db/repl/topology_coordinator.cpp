@@ -567,6 +567,7 @@ void TopologyCoordinator::prepareSyncFromResponse(const HostAndPort& target,
     *result = Status::OK();
 }
 
+// produce a reply to a heartbeat
 Status TopologyCoordinator::prepareHeartbeatResponseV1(Date_t now,
                                                        const ReplSetHeartbeatArgsV1& args,
                                                        const std::string& ourSetName,

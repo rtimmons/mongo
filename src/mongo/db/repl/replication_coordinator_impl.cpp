@@ -4079,7 +4079,6 @@ bool ReplicationCoordinatorImpl::getWriteConcernMajorityShouldJournal_inlock() c
 
 Status ReplicationCoordinatorImpl::processHeartbeatV1(const ReplSetHeartbeatArgsV1& args,
                                                       ReplSetHeartbeatResponse* response) {
-    log() << "RRR  Received args " << args.toBSON();
     {
         stdx::lock_guard<Latch> lock(_mutex);
         if (_rsConfigState == kConfigPreStart || _rsConfigState == kConfigStartingUp) {
@@ -4094,10 +4093,6 @@ Status ReplicationCoordinatorImpl::processHeartbeatV1(const ReplSetHeartbeatArgs
     auto senderHost(args.getSenderHost());
     const Date_t now = _replExecutor->now();
     result = _topCoord->prepareHeartbeatResponseV1(now, args, _settings.ourSetName(), response);
-    BSONObjBuilder bob;
-    response->addToBSON(&bob);
-    log() << "RRR prepareHeartbeatResponseV1 prepared: " << result << ":" << bob.done()
-          << " _selfIndex=" << _selfIndex;
 
     if ((result.isOK() || result == ErrorCodes::InvalidReplicaSetConfig) && _selfIndex < 0) {
         // If this node does not belong to the configuration it knows about, send heartbeats
@@ -4108,7 +4103,6 @@ Status ReplicationCoordinatorImpl::processHeartbeatV1(const ReplSetHeartbeatArgs
             _scheduleHeartbeatToTarget_inlock(senderHost, -1, now);
         }
     } else if (result.isOK() && response->getConfigVersion() < args.getConfigVersion()) {
-        log() << "RRR " << __LINE__ << "Have lower config version";
         // Schedule a heartbeat to the sender to fetch the new config.
         // We cannot cancel the enqueued heartbeat, but either this one or the enqueued heartbeat
         // will trigger reconfig, which cancels and reschedules all heartbeats.
@@ -4121,11 +4115,7 @@ Status ReplicationCoordinatorImpl::processHeartbeatV1(const ReplSetHeartbeatArgs
                 (!response->hasPrimaryId()))) {
         // The caller knows about a different primary than we do, so schedule a heartbeat back to
         // the caller, and we'll update our full primary etc information based on that exchange.
-        log() << "RRR " << __LINE__
-              << ": The caller knows about a different primary than we do, so schedule a heartbeat "
-                 "back to the";
         if (!senderHost.empty()) {
-            severe() << "RRR Scheduling heartbeat cuz different primary.";
             _scheduleHeartbeatToTarget_inlock(senderHost, -1, now);
         }
     }
