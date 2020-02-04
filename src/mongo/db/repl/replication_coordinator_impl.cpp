@@ -317,7 +317,7 @@ ReplicationCoordinatorImpl::ReplicationCoordinatorImpl(
       _inShutdown(false),
       _memberState(MemberState::RS_STARTUP),
       _rsConfigState(kConfigPreStart),
-      _selfIndex(-
+      _selfIndex(-1),
       _sleptLastElection(false),
       _readWriteAbility(std::make_unique<ReadWriteAbility>(!settings.usingReplSets())),
       _replicationProcess(replicationProcess),
