@@ -90,8 +90,6 @@ Status ReplSetHeartbeatArgsV1::initialize(const BSONObj& argsObj) {
         return status;
     }
 
-    // If sender is version < 4.4, argsObj won't have the primaryId field,
-    // but we still parse and allow it whenever it is present.
     status = bsonExtractIntegerFieldWithDefault(argsObj, kSenderIdFieldName, -1, &_senderId);
     if (!status.isOK())
         return status;
@@ -107,6 +105,8 @@ Status ReplSetHeartbeatArgsV1::initialize(const BSONObj& argsObj) {
         _hasSender = true;
     }
 
+    // If sender is version < 4.4, argsObj won't have the primaryId field,
+    // but we still parse and allow it whenever it is present.
     status = bsonExtractIntegerFieldWithDefault(argsObj, kPrimaryIdFieldName, -1, &_primaryId);
     if (!status.isOK())
         return status;
@@ -160,7 +160,6 @@ void ReplSetHeartbeatArgsV1::setPrimaryId(long long primaryId) {
     _primaryId = primaryId;
 }
 
-
 BSONObj ReplSetHeartbeatArgsV1::toBSON() const {
     invariant(isInitialized());
     BSONObjBuilder builder;
@@ -181,9 +180,8 @@ void ReplSetHeartbeatArgsV1::addToBSON(BSONObjBuilder* builder) const {
     builder->appendIntOrLL(kSenderIdFieldName, _senderId);
     builder->appendIntOrLL(kTermFieldName, _term);
 
-    if (serverGlobalParams.featureCompatibility.isVersionInitialized() &&
-        serverGlobalParams.featureCompatibility.getVersion() ==
-            ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo44) {
+    if (serverGlobalParams.featureCompatibility.isVersion(
+            ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo44)) {
         builder->append(kPrimaryIdFieldName, _primaryId);
     }
 }
