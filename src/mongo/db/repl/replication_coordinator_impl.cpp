@@ -4114,23 +4114,16 @@ Status ReplicationCoordinatorImpl::processHeartbeatV1(const ReplSetHeartbeatArgs
         if (!senderHost.empty() && _seedList.insert(senderHost).second) {
             _scheduleHeartbeatToTarget_inlock(senderHost, -1, now);
         }
-    } else if (result.isOK() && response->getConfigVersion() < args.getConfigVersion()) {
-        // Schedule a heartbeat to the sender to fetch the new config.
+    } else if (result.isOK() &&
+               (response->getConfigVersion() < args.getConfigVersion() ||
+                (args.getPrimaryId() >= 0 &&
+                 (!response->hasPrimaryId() || response->getPrimaryId() != args.getPrimaryId())))) {
+        // Schedule a heartbeat to the sender to fetch the new config or primary information.
         // We cannot cancel the enqueued heartbeat, but either this one or the enqueued heartbeat
         // will trigger reconfig, which cancels and reschedules all heartbeats.
         if (args.hasSender()) {
             int senderIndex = _rsConfig.findMemberIndexByHostAndPort(senderHost);
             _scheduleHeartbeatToTarget_inlock(senderHost, senderIndex, now);
-        }
-    } else {
-        if (result.isOK() && args.getPrimaryId() >= 0 &&
-            (!response->hasPrimaryId() || response->getPrimaryId() != args.getPrimaryId())) {
-            // The caller knows about a different primary than we do, so schedule a heartbeat back
-            // to the caller, and we'll update our full primary etc information based on that
-            // exchange.
-            if (!senderHost.empty()) {
-                _scheduleHeartbeatToTarget_inlock(senderHost, -1, now);
-            }
         }
     }
     return result;
