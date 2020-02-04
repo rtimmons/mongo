@@ -317,13 +317,12 @@ ReplicationCoordinatorImpl::ReplicationCoordinatorImpl(
       _inShutdown(false),
       _memberState(MemberState::RS_STARTUP),
       _rsConfigState(kConfigPreStart),
-      _selfIndex(-1),
+      _selfIndex(-
       _sleptLastElection(false),
       _readWriteAbility(std::make_unique<ReadWriteAbility>(!settings.usingReplSets())),
       _replicationProcess(replicationProcess),
       _storage(storage),
       _random(prngSeed) {
-
     _termShadow.store(OpTime::kUninitializedTerm);
 
     invariant(_service);
@@ -1744,7 +1743,6 @@ BSONObj ReplicationCoordinatorImpl::_getReplicationProgress(WithLock wl) const {
 
 SharedSemiFuture<void> ReplicationCoordinatorImpl::_startWaitingForReplication(
     WithLock wl, const OpTime& opTime, const WriteConcernOptions& writeConcern) {
-
     const Mode replMode = getReplicationMode();
     if (replMode == modeNone) {
         // no replication check needed (validated above)
@@ -1835,7 +1833,6 @@ void ReplicationCoordinatorImpl::updateAndLogStateTransitionMetrics(
     const ReplicationCoordinator::OpsKillingStateTransitionEnum stateTransition,
     const size_t numOpsKilled,
     const size_t numOpsRunning) const {
-
     // Clear the current metrics before setting.
     userOpsKilled.decrement(userOpsKilled.get());
     userOpsRunning.decrement(userOpsRunning.get());
@@ -2142,7 +2139,6 @@ void ReplicationCoordinatorImpl::stepDown(OperationContext* opCtx,
                                           const bool force,
                                           const Milliseconds& waitTime,
                                           const Milliseconds& stepdownTime) {
-
     const Date_t startTime = _replExecutor->now();
     const Date_t stepDownUntil = startTime + stepdownTime;
     const Date_t waitUntil = startTime + waitTime;
@@ -2536,7 +2532,6 @@ StatusWith<BSONObj> ReplicationCoordinatorImpl::prepareReplSetUpdatePositionComm
 
 Status ReplicationCoordinatorImpl::processReplSetGetStatus(
     BSONObjBuilder* response, ReplSetGetStatusResponseStyle responseStyle) {
-
     BSONObj initialSyncProgress;
     if (responseStyle == ReplSetGetStatusResponseStyle::kInitialSync) {
         std::shared_ptr<InitialSyncer> initialSyncerCopy;
@@ -3734,7 +3729,6 @@ boost::optional<OpTimeAndWallTime> ReplicationCoordinatorImpl::_chooseStableOpTi
     WithLock lk,
     const std::set<OpTimeAndWallTime>& candidates,
     OpTimeAndWallTime maximumStableOpTime) {
-
     // No optime candidates.
     if (candidates.empty()) {
         return boost::none;
@@ -3991,7 +3985,6 @@ Status ReplicationCoordinatorImpl::processReplSetRequestVotes(
     OperationContext* opCtx,
     const ReplSetRequestVotesArgs& args,
     ReplSetRequestVotesResponse* response) {
-
     auto termStatus = updateTerm(opCtx, args.getTerm());
     if (!termStatus.isOK() && termStatus.code() != ErrorCodes::StaleTerm)
         return termStatus;
@@ -4049,7 +4042,6 @@ Status ReplicationCoordinatorImpl::processReplSetRequestVotes(
 void ReplicationCoordinatorImpl::prepareReplMetadata(const BSONObj& metadataRequestObj,
                                                      const OpTime& lastOpTimeFromClient,
                                                      BSONObjBuilder* builder) const {
-
     bool hasReplSetMetadata = metadataRequestObj.hasField(rpc::kReplSetMetadataFieldName);
     bool hasOplogQueryMetadata = metadataRequestObj.hasField(rpc::kOplogQueryMetadataFieldName);
     // Don't take any locks if we do not need to.
@@ -4130,13 +4122,15 @@ Status ReplicationCoordinatorImpl::processHeartbeatV1(const ReplSetHeartbeatArgs
             int senderIndex = _rsConfig.findMemberIndexByHostAndPort(senderHost);
             _scheduleHeartbeatToTarget_inlock(senderHost, senderIndex, now);
         }
-    } else if (result.isOK() && args.getPrimaryId() >= 0 &&
-               ((response->hasPrimaryId() && args.getPrimaryId() != response->getPrimaryId()) ||
-                (!response->hasPrimaryId()))) {
-        // The caller knows about a different primary than we do, so schedule a heartbeat back to
-        // the caller, and we'll update our full primary etc information based on that exchange.
-        if (!senderHost.empty()) {
-            _scheduleHeartbeatToTarget_inlock(senderHost, -1, now);
+    } else {
+        if (result.isOK() && args.getPrimaryId() >= 0 &&
+            (!response->hasPrimaryId() || response->getPrimaryId() != args.getPrimaryId())) {
+            // The caller knows about a different primary than we do, so schedule a heartbeat back
+            // to the caller, and we'll update our full primary etc information based on that
+            // exchange.
+            if (!senderHost.empty()) {
+                _scheduleHeartbeatToTarget_inlock(senderHost, -1, now);
+            }
         }
     }
     return result;
@@ -4190,7 +4184,6 @@ Status ReplicationCoordinatorImpl::updateTerm(OperationContext* opCtx, long long
 
 EventHandle ReplicationCoordinatorImpl::_updateTerm_inlock(
     long long term, TopologyCoordinator::UpdateTermResult* updateTermResult) {
-
     auto now = _replExecutor->now();
     TopologyCoordinator::UpdateTermResult localUpdateTermResult = _topCoord->updateTerm(term, now);
     if (localUpdateTermResult == TopologyCoordinator::UpdateTermResult::kUpdatedTerm) {
@@ -4381,7 +4374,6 @@ CallbackFn ReplicationCoordinatorImpl::_wrapAsCallbackFn(const std::function<voi
 }
 
 Status ReplicationCoordinatorImpl::stepUpIfEligible(bool skipDryRun) {
-
     auto reason = skipDryRun ? StartElectionReasonEnum::kStepUpRequestSkipDryRun
                              : StartElectionReasonEnum::kStepUpRequest;
     _startElectSelfIfEligibleV1(reason);
