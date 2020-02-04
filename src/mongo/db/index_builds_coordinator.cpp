@@ -84,7 +84,7 @@ constexpr StringData kUniqueFieldName = "unique"_sd;
 void checkShardKeyRestrictions(OperationContext* opCtx,
                                const NamespaceString& nss,
                                const BSONObj& newIdxKey) {
-    invariant(UncommittedCollections::get(opCtx).hasExclusiveAccessToCollection(opCtx, nss));
+    UncommittedCollections::get(opCtx).invariantHasExclusiveAccessToCollection(opCtx, nss);
 
     const auto metadata = CollectionShardingState::get(opCtx, nss)->getCurrentMetadata();
     if (!metadata->isSharded())
@@ -974,8 +974,8 @@ void IndexBuildsCoordinator::createIndexesOnEmptyCollection(OperationContext* op
     invariant(!specs.empty(), str::stream() << collectionUUID);
 
     auto nss = collection->ns();
-    invariant(
-        UncommittedCollections::get(opCtx).hasExclusiveAccessToCollection(opCtx, collection->ns()));
+    UncommittedCollections::get(opCtx).invariantHasExclusiveAccessToCollection(opCtx,
+                                                                               collection->ns());
 
     auto opObserver = opCtx->getServiceContext()->getOpObserver();
 
@@ -1699,10 +1699,8 @@ void IndexBuildsCoordinator::_scanCollectionAndInsertKeysIntoSorter(
     }
 
     // Rebuilding system indexes during startup using the IndexBuildsCoordinator is done by all
-    // storage engines if they're missing. This includes the mobile storage engine which builds
-    // its indexes in the foreground.
-    invariant(_indexBuildsManager.isBackgroundBuilding(replState->buildUUID) ||
-              storageGlobalParams.engine == "mobile");
+    // storage engines if they're missing.
+    invariant(_indexBuildsManager.isBackgroundBuilding(replState->buildUUID));
 
     // Index builds can safely ignore prepare conflicts and perform writes. On secondaries, prepare
     // operations wait for index builds to complete.
@@ -2105,8 +2103,8 @@ std::vector<BSONObj> IndexBuildsCoordinator::prepareSpecListForCreate(
     Collection* collection,
     const NamespaceString& nss,
     const std::vector<BSONObj>& indexSpecs) {
-    invariant(
-        UncommittedCollections::get(opCtx).hasExclusiveAccessToCollection(opCtx, collection->ns()));
+    UncommittedCollections::get(opCtx).invariantHasExclusiveAccessToCollection(opCtx,
+                                                                               collection->ns());
     invariant(collection);
 
     // During secondary oplog application, the index specs have already been normalized in the

@@ -1,7 +1,11 @@
 /**
  * Tests metrics in serverStatus related to replication.
  *
- * @tags: [requires_fcv_44]
+ * The test for metrics.repl.network.oplogGetMoresProcessed requires a storage engine that supports
+ * document-level locking because it uses the planExecutorHangBeforeShouldWaitForInserts failpoint
+ * to block oplog fetching getMores while trying to do oplog writes. Thus we need a document-level
+ * locking storage engine so that oplog writes would not conflict with oplog reads.
+ * @tags: [requires_document_locking, requires_fcv_44]
  */
 
 (function() {
@@ -171,7 +175,8 @@ assert.commandWorked(testDB.a.insert({x: 1}, {writeConcern: {w: 1, wtimeout: 500
 assert.eq(testDB.serverStatus().metrics.getLastError.wtime.totalMillis, startMillis);
 assert.eq(testDB.serverStatus().metrics.getLastError.wtime.num, startNum);
 
-assert.commandWorked(testDB.a.insert({x: 1}, {writeConcern: {w: -11, wtimeout: 5000}}));
+assert.commandFailedWithCode(testDB.a.insert({x: 1}, {writeConcern: {w: -11, wtimeout: 5000}}),
+                             ErrorCodes.FailedToParse);
 assert.eq(testDB.serverStatus().metrics.getLastError.wtime.totalMillis, startMillis);
 assert.eq(testDB.serverStatus().metrics.getLastError.wtime.num, startNum);
 

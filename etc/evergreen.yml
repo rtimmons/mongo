@@ -290,14 +290,10 @@ variables:
   - name: compile_all_run_unittests_TG
     distros:
     - windows-64-vs2019-large
-  - name: compile_benchmarks
-    distros:
-    - windows-64-vs2019-large
   - name: burn_in_tests_gen
   - name: .aggfuzzer .common
   - name: audit
   - name: auth_audit_gen
-  - name: .benchmarks
   - name: buildscripts_test
   - name: causally_consistent_jscore_txns_passthrough
   - name: .encrypt !.aggregation !.gcm
@@ -398,7 +394,7 @@ variables:
   - enterprise-rhel-70-64-bit
   - enterprise-ubuntu1604-64
   - enterprise-ubuntu1804-64
-  - enterprise-windows
+  - enterprise-windows-required
 
 # List of all variants that use the packages.tgz
 - package_variants: &package_variants
@@ -480,6 +476,21 @@ functions:
         api_server_host: https://evergreen.mongodb.com/api
         api_key: "${evergreen_api_key}"
         user: "${evergreen_api_user}"
+        END_OF_CREDS
+
+  "configure selected tests credentials": &configure_selected_tests_credentials
+    command: shell.exec
+    type: test
+    params:
+      working_dir: src
+      silent: true
+      script: |
+        # Create the Evergreen API credentials
+        cat > .selected_tests.yml <<END_OF_CREDS
+        url: "https://selected-tests.server-tig.prod.corp.mongodb.com"
+        project: "${project}"
+        auth_user: "${selected_tests_auth_user}"
+        auth_token: "${selected_tests_auth_token}"
         END_OF_CREDS
 
   "git get project": &git_get_project
@@ -1488,6 +1499,60 @@ functions:
 
         cd $target_dir
         tar xzf generate_tasks_config.tgz
+
+  "generate selected tests":
+    - command: expansions.write
+      params:
+        file: src/expansions.yml
+    - *configure_evergreen_api_credentials
+    - *configure_selected_tests_credentials
+    - command: shell.exec
+      type: test
+      params:
+        working_dir: src
+        shell: bash
+        script: |
+          set -o errexit
+          set -o verbose
+
+          # Only run on master branch
+          if [[ "${project}" != "mongodb-mongo-master" ]]; then
+
+            if [ "${is_patch}" = "true" ]; then
+              echo "Not on master, skipping selected_tests_gen task"
+              exit 1
+            else
+              exit 0
+            fi
+
+          else
+
+            ${activate_virtualenv}
+            PATH=$PATH:$HOME $python buildscripts/selected_tests.py --expansion-file expansions.yml --verbose --build-variant=enterprise-rhel-62-64-bit --selected-tests-config .selected_tests.yml
+
+          fi
+    - command: archive.targz_pack
+      params:
+        target: generate_tasks_config.tgz
+        source_dir: src/generated_resmoke_config
+        include:
+          - "*"
+    - command: s3.put
+      params:
+        aws_key: ${aws_key}
+        aws_secret: ${aws_secret}
+        local_file: generate_tasks_config.tgz
+        remote_file: ${project}/${build_variant}/${revision}/generate_tasks/${task_name}-${build_id}.tgz
+        bucket: mciuploads
+        permissions: public-read
+        content_type: ${content_type|application/gzip}
+        display_name: Generated Task Config - Execution ${execution}
+        optional: true
+    - command: generate.tasks
+      params:
+        optional: true
+        files:
+          - src/generated_resmoke_config/*.json
 
   "generate burn in tags":
     - command: expansions.write
@@ -3890,7 +3955,7 @@ tasks:
       params:
         working_dir: src
         shell: bash
-        script: ninja -f new.build.ninja
+        script: ninja -f build.ninja
 
 ## compile_all - build all scons targets ##
 - name: compile_all
@@ -5417,6 +5482,17 @@ tasks:
       repeat_tests_min: 2
       repeat_tests_max: 1000
 
+- name: selected_tests_gen
+  commands:
+  - command: manifest.load
+  - func: "git get project"
+  - func: "set task expansion macros"
+  - func: "set up virtualenv"
+    vars:
+      pip_dir: ${workdir}/src/etc/pip
+  - func: "upload pip requirements"
+  - func: "generate selected tests"
+
 - name: auth_audit_gen
   tags: ["auth", "audit"]
   commands:
@@ -5622,15 +5698,6 @@ tasks:
   - func: "run tests"
     vars:
       resmoke_args: --suites=change_streams_multi_stmt_txn_sharded_collections_passthrough --storageEngine=wiredTiger
-
-- <<: *task_template
-  name: disk_mobile
-  commands:
-  - func: "do setup"
-  - func: "run tests"
-    vars:
-      resmoke_args: --suites=disk_mobile --storageEngine=mobile
-      resmoke_jobs_max: 1
 
 - <<: *task_template
   name: disk_wiredtiger
@@ -6201,7 +6268,7 @@ tasks:
 
 - <<: *task_template
   name: mongosTest
-  tags: ["misc_js", "non_mobile", "non_read_maj"]
+  tags: ["misc_js", "non_read_maj"]
   commands:
   - func: "do setup"
   - func: "run tests"
@@ -6266,7 +6333,7 @@ tasks:
       resmoke_args: --suites=bulk_gle_passthrough --storageEngine=wiredTiger
 
 - name: slow1_gen
-  tags: ["misc_js", "non_win_dbg", "non_mobile"]
+  tags: ["misc_js", "non_win_dbg"]
   commands:
   - func: "generate resmoke tasks"
     vars:
@@ -6423,7 +6490,7 @@ tasks:
       fallback_num_sub_suites: 37
 
 - name: parallel_gen
-  tags: ["misc_js", "non_mobile"]
+  tags: ["misc_js"]
   depends_on:
   - name: jsCore
   commands:
@@ -6436,7 +6503,7 @@ tasks:
 
 - <<: *task_template
   name: parallel_compatibility
-  tags: ["misc_js", "non_mobile"]
+  tags: ["misc_js"]
   depends_on:
   - name: jsCore_compatibility
   commands:
@@ -7510,29 +7577,6 @@ tasks:
       <<: *powercycle_test
       client_options: "--numCrudClients=20 --numFsmClients=20 --writeConcern='{\"w\": \"majority\"}'"
       mongod_extra_options: --mongodOptions \"--setParameter enableTestCommands=1 --setParameter logComponentVerbosity='{storage:{recovery:2}}' --storageEngine wiredTiger\"
-
-- name: powercycle_mobile
-  exec_timeout_secs: 7200 # 2 hour timeout for the task overall
-  depends_on:
-  - name: compile
-  commands:
-  - func: "do setup"
-  - func: "set up remote credentials"
-    vars:
-      <<: *powercycle_remote_credentials
-  - func: "set up EC2 instance"
-    vars:
-      <<: *powercycle_ec2_instance
-  - command: expansions.update
-    <<: *powercycle_expansions
-  - func: "run powercycle test"
-    timeout_secs: 1800 # 30 minute timeout for no output
-    vars:
-      <<: *powercycle_test
-      # We do 5 rather than 15 loops when running against the mobile storage engine because
-      # collection validation otherwise starts to take several minutes after each loop.
-      client_options: --testLoops=5 --numCrudClients=20 --numFsmClients=20
-      mongod_extra_options: --mongodOptions=\"--setParameter enableTestCommands=1 --storageEngine mobile\"
 
 - name: idl_tests
   depends_on:
@@ -9158,44 +9202,6 @@ buildvariants:
 #         Windows buildvariants           #
 ###########################################
 
-- name: enterprise-windows-required
-  display_name: "! Enterprise Windows"
-  batchtime: 60 # 1 hour
-  modules:
-    - enterprise
-  run_on:
-    - windows-64-vs2019-small
-  expansions: &enterprise_windows_expansions
-    burn_in_tests_build_variant: enterprise-windows
-    exe: ".exe"
-    msi_target: msi
-    mh_target: archive-mh archive-mh-debug
-    content_type: application/zip
-    compile_flags: --ssl MONGO_DISTMOD=windows CPPPATH="c:/sasl/include c:/snmp/include" LIBPATH="c:/sasl/lib c:/snmp/lib" -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) --win-version-min=win10
-    # We invoke SCons using --jobs = (# of CPUs / 4) to avoid causing out of memory errors due to
-    # spawning a large number of linker processes.
-    num_scons_link_jobs_available: $(( $(grep -c ^processor /proc/cpuinfo) / 4 ))
-    python: '/cygdrive/c/python/python37/python.exe'
-    ext: zip
-    scons_cache_scope: shared
-    multiversion_platform: windows
-    multiversion_edition: enterprise
-    jstestfuzz_num_generated_files: 35
-    target_resmoke_time: 20
-    large_distro_name: windows-64-vs2019-large
-  tasks:
-    - name: compile_TG
-      distros:
-        - windows-64-vs2019-large
-    - name: burn_in_tests_gen
-    - name: buildscripts_test
-    - name: unittest_shell_hang_analyzer_gen
-    - name: server_discovery_and_monitoring_json_test_TG
-    - name: dbtest_TG
-      distros:
-        - windows-64-vs2019-large
-    - name: noPassthrough_gen
-
 - name: windows-debug
   display_name: "* Windows DEBUG"
   batchtime: 60 # 1 hour
@@ -9262,34 +9268,44 @@ buildvariants:
   - name: .stitch
   - name: server_discovery_and_monitoring_json_test_TG
 
-- name: enterprise-windows
-  display_name: "* Enterprise Windows"
+- name: enterprise-windows-required
+  display_name: "! Enterprise Windows"
   batchtime: 60 # 1 hour
   modules:
   - enterprise
   run_on:
   - windows-64-vs2019-small
   expansions:
-    <<: *enterprise_windows_expansions
+    exe: ".exe"
+    msi_target: msi
+    mh_target: archive-mh archive-mh-debug
+    content_type: application/zip
+    compile_flags: --ssl MONGO_DISTMOD=windows CPPPATH="c:/sasl/include c:/snmp/include" LIBPATH="c:/sasl/lib c:/snmp/lib" -j$(( $(grep -c ^processor /proc/cpuinfo) / 2 )) --win-version-min=win10
+    # We invoke SCons using --jobs = (# of CPUs / 4) to avoid causing out of memory errors due to
+    # spawning a large number of linker processes.
+    num_scons_link_jobs_available: $(( $(grep -c ^processor /proc/cpuinfo) / 4 ))
+    python: '/cygdrive/c/python/python37/python.exe'
+    ext: zip
+    scons_cache_scope: shared
+    multiversion_platform: windows
+    multiversion_edition: enterprise
+    jstestfuzz_num_generated_files: 35
+    target_resmoke_time: 20
+    large_distro_name: windows-64-vs2019-large
     push_path: windows
     push_bucket: downloads.10gen.com
     push_name: windows
     push_arch: x86_64-enterprise
   tasks:
-  - name: compile_TG
-    distros:
-    - windows-64-vs2019-large
-  - name: compile_benchmarks
+  - name: compile_all_run_unittests_TG
     distros:
     - windows-64-vs2019-large
   - name: burn_in_tests_gen
   - name: .aggfuzzer
   - name: audit
   - name: auth_audit_gen
-  - name: .benchmarks
   - name: buildscripts_test
   - name: causally_consistent_jscore_txns_passthrough
-  - name: dbtest_TG
     distros:
     - windows-64-vs2019-large
   - name: .encrypt !.aggregation !.replica_sets !.sharding !.jscore
@@ -9310,14 +9326,25 @@ buildvariants:
   - name: .replica_sets .multi_oplog
   - name: replica_sets_ese_gen
   - name: sasl
+  - name: server_discovery_and_monitoring_json_test_TG
   - name: .sharding .txns
   - name: sharding_auth_gen
   - name: sharding_auth_audit_gen
   - name: sharding_ese_gen
   - name: snmp
+  - name: unittest_shell_hang_analyzer_gen
   - name: push
     distros:
     - rhel70-small
+
+- <<: *enterprise-windows-nopush-template
+  name: enterprise-windows-benchmarks
+  display_name: "~ Enterprise Windows (Benchmarks)"
+  tasks:
+  - name: compile_benchmarks
+    distros:
+    - windows-64-vs2019-large
+  - name: .benchmarks
 
 - <<: *enterprise-windows-nopush-template
   name: enterprise-windows-wtdevelop
@@ -9328,18 +9355,6 @@ buildvariants:
   expansions:
     <<: *enterprise-windows-nopush-expansions-template
     use_wt_develop: true
-
-- <<: *enterprise-windows-nopush-template
-  name: enterprise-windows-compile-all
-  display_name: "* Enterprise Windows compile_all"
-  batchtime: 60 # 1 hour
-  run_on:
-  - windows-64-vs2019-small
-  tasks:
-  - name: compile_all_run_unittests_TG
-    distros:
-    - windows-64-vs2019-large
-  # Do not add more tasks to this list.
 
 - name: enterprise-windows-async
   display_name: "~ Enterprise Windows async"
@@ -9612,7 +9627,7 @@ buildvariants:
     - rhel70-small
 
 ###########################################
-#          Mobile SDK buildvariants       #
+#          Embedded SDK buildvariants     #
 ###########################################
 
 - name: embedded-sdk-macos
@@ -10190,14 +10205,10 @@ buildvariants:
   - name: compile_all_run_unittests_TG
     distros:
     - rhel70
-  - name: compile_benchmarks
-    distros:
-    - rhel70
   - name: .aggfuzzer
   - name: audit
   - name: auth_audit_gen
   - name: auth_gen
-  - name: .benchmarks
   - name: causally_consistent_jscore_txns_passthrough
   - name: .encrypt !.sharding !.replica_sets !.aggregation !.jscore
   - name: external_auth
@@ -10251,14 +10262,10 @@ buildvariants:
   - name: compile_all_run_unittests_TG
     distros:
     - rhel80-build
-  - name: compile_benchmarks
-    distros:
-    - rhel80-build
   - name: .aggfuzzer
   - name: audit
   - name: auth_audit_gen
   - name: auth_gen
-  - name: .benchmarks
   - name: causally_consistent_jscore_txns_passthrough
   - name: .encrypt !.sharding !.replica_sets !.aggregation !.jscore
   - name: external_auth
@@ -10295,9 +10302,6 @@ buildvariants:
   - name: compile_all_run_unittests_TG
     distros:
     - rhel70
-  - name: compile_benchmarks
-    distros:
-    - rhel70
   - name: jsCore
   - name: libunwind_tests
 
@@ -10331,14 +10335,10 @@ buildvariants:
   - name: compile_all_run_unittests_TG
     distros:
     - rhel70
-  - name: compile_benchmarks
-    distros:
-    - rhel70
   - name: .aggfuzzer
   - name: audit
   - name: auth_audit_gen
   - name: auth_gen
-  - name: .benchmarks
   - name: causally_consistent_jscore_txns_passthrough
   - name: .encrypt !.sharding !.replica_sets !.aggregation !.jscore
   - name: external_auth
@@ -10821,7 +10821,7 @@ buildvariants:
   expansions:
     lang_environment: LANG=C
     # We need --allocator=system here solely due to SERVER-27675
-    compile_flags: --link-model=dynamic --allocator=system -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_v3_clang.vars --mobile-se=on
+    compile_flags: --link-model=dynamic --allocator=system -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_v3_clang.vars
     scons_cache_scope: shared
     scons_cache_mode: all
     multiversion_platform: ubuntu1604
@@ -10843,7 +10843,7 @@ buildvariants:
   expansions:
     lang_environment: LANG=C
     # We need --allocator=system here solely due to SERVER-27675
-    compile_flags: --link-model=dynamic --allocator=system -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_v3_clang.vars --mobile-se=on
+    compile_flags: --link-model=dynamic --allocator=system -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_v3_clang.vars
     scons_cache_scope: shared
     scons_cache_mode: all
   tasks:
@@ -11449,9 +11449,6 @@ buildvariants:
   - name: compile_all_run_unittests_TG
     distros:
     - rhel62-large
-  - name: compile_benchmarks
-    distros:
-    - rhel62-large
   - name: burn_in_tests_gen
   - name: burn_in_tests_multiversion_gen
   - name: .aggfuzzer
@@ -11459,7 +11456,6 @@ buildvariants:
   - name: audit
   - name: .auth
   - name: burn_in_tags_gen
-  - name: .benchmarks
     distros:
     - centos6-perf
   - name: buildscripts_test
@@ -11549,9 +11545,6 @@ buildvariants:
   - name: compile_all_run_unittests_TG
     distros:
     - rhel62-large
-  - name: compile_benchmarks
-    distros:
-    - rhel62-large
   - name: burn_in_tests_gen
   - name: burn_in_tests_multiversion_gen
   - name: .aggfuzzer
@@ -11559,7 +11552,6 @@ buildvariants:
   - name: audit
   - name: .auth
   - name: burn_in_tags_gen
-  - name: .benchmarks
     distros:
     - centos6-perf
   - name: buildscripts_test
@@ -11772,9 +11764,11 @@ buildvariants:
     test_flags: --excludeWithAnyTags=requires_fast_memory
   tasks:
   - name: compile_all_run_unittests_TG
+  - name: compile_benchmarks
   - name: .aggregation
   - name: .auth
   - name: audit
+  - name: .benchmarks
   - name: .causally_consistent !.wo_snapshot
   - name: .change_streams
   - name: .misc_js
@@ -11860,9 +11854,11 @@ buildvariants:
     scons_cache_scope: shared
   tasks:
   - name: compile_all_run_unittests_TG
+  - name: compile_benchmarks
   - name: .aggregation
   - name: .auth
   - name: audit
+  - name: .benchmarks
   - name: .causally_consistent !.wo_snapshot
   - name: .change_streams
   - name: .misc_js
@@ -12027,6 +12023,17 @@ buildvariants:
   stepback: false
   tasks:
   - name: win_shared_scons_cache_pruning
+
+- name: selected-tests
+  display_name: "~ Selected Tests"
+  modules:
+    - enterprise
+  run_on:
+    - rhel62-small
+  batchtime: 10080 # 7 days
+  stepback: false
+  tasks:
+  - name: selected_tests_gen
 
 - name: commit-queue
   display_name: "~ Commit Queue"
