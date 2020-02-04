@@ -176,7 +176,7 @@ TEST_F(ReplCoordHBV1Test,
     ASSERT_OK(getReplCoord()->setFollowerMode(MemberState::RS_SECONDARY));
 
     // Ignore the first 2 messages.
-    for (int j = 1; j <= 2; ++j) {
+    for (int j = 0; j < 2; ++j) {
         enterNetwork();
         const auto noi = getNet()->getNextReadyRequest();
         noi->getRequest();
