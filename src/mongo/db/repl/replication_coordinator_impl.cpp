@@ -4150,11 +4150,14 @@ Status ReplicationCoordinatorImpl::processHeartbeatV1(const ReplSetHeartbeatArgs
         // We cannot cancel the enqueued heartbeat, but either this one or the enqueued heartbeat
         // will trigger reconfig, which cancels and reschedules all heartbeats.
         if (args.hasSender()) {
-            log() << "Scheduling heartbeat to fetch primary information. Sender has primary "
-                  << args.getPrimaryId() << " and we have primary " << response->getPrimaryId()
-                  << " from member " << senderHost;
+            log() << "Scheduling heartbeat to fetch primary information from member " << senderHost << ". "
+                  << "Sender has primaryId " << args.getPrimaryId() << " and we have "
+                  << std::string(response->hasPrimaryId()
+                      ? (str::stream() << "primaryId " << response->getPrimaryId())
+                      : std::string("no primaryId"));
             int senderIndex = _rsConfig.findMemberIndexByHostAndPort(senderHost);
             _scheduleHeartbeatToTarget_inlock(senderHost, senderIndex, now);
+        }
     }
     return result;
 }
