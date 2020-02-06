@@ -4142,6 +4142,19 @@ Status ReplicationCoordinatorImpl::processHeartbeatV1(const ReplSetHeartbeatArgs
             int senderIndex = _rsConfig.findMemberIndexByHostAndPort(senderHost);
             _scheduleHeartbeatToTarget_inlock(senderHost, senderIndex, now);
         }
+    } else if (result.isOK() &&
+               args.getPrimaryId() >= 0 &&
+               (!response->hasPrimaryId() || response->getPrimaryId() != args.getPrimaryId())) {
+        // Schedule a heartbeat to the sender to fetch the new master.
+        // Only send this if the sender thinks the primary is different from what we think.
+        // We cannot cancel the enqueued heartbeat, but either this one or the enqueued heartbeat
+        // will trigger reconfig, which cancels and reschedules all heartbeats.
+        if (args.hasSender()) {
+            log() << "Scheduling heartbeat to fetch primary information. Sender has primary "
+                  << args.getPrimaryId() << " and we have primary " << response->getPrimaryId()
+                  << " from member " << senderHost;
+            int senderIndex = _rsConfig.findMemberIndexByHostAndPort(senderHost);
+            _scheduleHeartbeatToTarget_inlock(senderHost, senderIndex, now);
     }
     return result;
 }
