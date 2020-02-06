@@ -39,6 +39,7 @@
 #include "mongo/db/catalog_raii.h"
 #include "mongo/db/concurrency/write_conflict_exception.h"
 #include "mongo/db/logical_clock.h"
+#include "mongo/db/logical_session_cache.h"
 #include "mongo/db/logical_session_id_helpers.h"
 #include "mongo/db/op_observer.h"
 #include "mongo/db/operation_context.h"
@@ -259,6 +260,7 @@ Status MigrationSourceManager::startClone() {
     auto replEnabled = replCoord->isReplEnabled();
 
     UUID migrationId = UUID::gen();
+    _lsid = makeLogicalSessionId(_opCtx);
 
     {
         const auto metadata = _getCurrentMetadataAndCheckEpoch();
@@ -318,7 +320,7 @@ Status MigrationSourceManager::startClone() {
         _coordinator->startMigration(_opCtx, _args.getWaitForDelete());
     }
 
-    Status startCloneStatus = _cloneDriver->startClone(_opCtx, migrationId);
+    Status startCloneStatus = _cloneDriver->startClone(_opCtx, migrationId, _lsid, TxnNumber{0});
     if (!startCloneStatus.isOK()) {
         return startCloneStatus;
     }
@@ -719,7 +721,7 @@ void MigrationSourceManager::_cleanup() {
         // possible that the persisted metadata is rolled back after step down, but the write which
         // cleared the 'inMigration' flag is not, a secondary node will report itself at an older
         // shard version.
-        CatalogCacheLoader::get(_opCtx).waitForCollectionFlush(_opCtx, getNss());
+        getCatalogCacheLoaderForFiltering(_opCtx).waitForCollectionFlush(_opCtx, getNss());
 
         // Clear the 'minOpTime recovery' document so that the next time a node from this shard
         // becomes a primary, it won't have to recover the config server optime.
@@ -746,6 +748,8 @@ void MigrationSourceManager::_cleanup() {
             auto newOpCtx = newOpCtxPtr.get();
             _coordinator->completeMigration(newOpCtx);
         }
+
+        LogicalSessionCache::get(_opCtx)->endSessions({_lsid});
     }
 
     _state = kDone;

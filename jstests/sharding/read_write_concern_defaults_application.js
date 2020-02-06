@@ -25,6 +25,7 @@
  *   requires_majority_read_concern,
  *   requires_profiling,
  *   requires_text_logs,
+ *   uses_transactions,
  * ]
  */
 (function() {
@@ -521,7 +522,6 @@ let testCases = {
     replSetTest: {skip: "does not accept read or write concern"},
     replSetUpdatePosition: {skip: "does not accept read or write concern"},
     resetError: {skip: "does not accept read or write concern"},
-    restartCatalog: {skip: "internal command"},
     resync: {skip: "does not accept read or write concern"},
     revokePrivilegesFromRole: {
         setUp: function(conn) {

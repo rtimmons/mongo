@@ -320,7 +320,7 @@ class NinjaState:
         escape = env.get("ESCAPE", lambda x: x)
 
         self.variables = {
-            "COPY": "cmd.exe /c copy" if sys.platform == "win32" else "cp",
+            "COPY": "cmd.exe /c 1>NUL copy" if sys.platform == "win32" else "cp",
             "SCONS_INVOCATION": "{} {} __NINJA_NO=1 $out".format(
                 sys.executable,
                 " ".join(
@@ -601,20 +601,20 @@ class NinjaState:
             # Some rules like 'phony' and other builtins we don't have
             # listed in self.rules so verify that we got a result
             # before trying to check if it has a deps key.
-            if rule is not None and rule.get("deps"):
-
-                # Anything using deps in Ninja can only have a single
-                # output, but we may have a build which actually
-                # produces multiple outputs which other targets can
-                # depend on. Here we slice up the outputs so we have a
-                # single output which we will use for the "real"
-                # builder and multiple phony targets that match the
-                # file names of the remaining outputs. This way any
-                # build can depend on any output from any build.
+            #
+            # Anything using deps or rspfile in Ninja can only have a single
+            # output, but we may have a build which actually produces
+            # multiple outputs which other targets can depend on. Here we
+            # slice up the outputs so we have a single output which we will
+            # use for the "real" builder and multiple phony targets that
+            # match the file names of the remaining outputs. This way any
+            # build can depend on any output from any build.
+            if rule is not None and (rule.get("deps") or rule.get("rspfile")):
                 first_output, remaining_outputs = (
                     build["outputs"][0],
                     build["outputs"][1:],
                 )
+
                 if remaining_outputs:
                     ninja.build(
                         outputs=remaining_outputs, rule="phony", implicit=first_output,
@@ -1255,9 +1255,9 @@ def generate(env):
         env.NinjaRuleMapping(env[var], provider)
 
     robust_rule_mapping("CCCOM", "CC", env["CC"])
-    robust_rule_mapping("SHCCCOM", "LINK", env["CC"])
+    robust_rule_mapping("SHCCCOM", "CC", env["CC"])
     robust_rule_mapping("CXXCOM", "CXX", env["CXX"])
-    robust_rule_mapping("SHCXXCOM", "LINK", env["CXX"])
+    robust_rule_mapping("SHCXXCOM", "CXX", env["CXX"])
     robust_rule_mapping("LINKCOM", "LINK", "$LINK")
     robust_rule_mapping("SHLINKCOM", "LINK", "$SHLINK")
     robust_rule_mapping("ARCOM", "AR", env["AR"])

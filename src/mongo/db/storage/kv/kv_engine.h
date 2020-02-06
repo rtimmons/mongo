@@ -462,7 +462,19 @@ public:
     /**
      * See `StorageEngine::triggerJournalFlush()`
      */
-    virtual void triggerJournalFlush() const {};
+    virtual void triggerJournalFlush() const {}
+
+    /**
+     * See `StorageEngine::waitForJournalFlush()`
+     */
+    virtual void waitForJournalFlush(OperationContext* opCtx) const {
+        opCtx->recoveryUnit()->waitUntilDurable(opCtx);
+    }
+
+    /**
+     * See `StorageEngine::interruptJournalFlusherForReplStateChange()`
+     */
+    virtual void interruptJournalFlusherForReplStateChange() const {}
 
     /**
      * Methods to access the storage engine's timestamps.

@@ -57,7 +57,7 @@ protected:
 
         WaitForMajorityService::get(getServiceContext()).setUp(getServiceContext());
 
-        CatalogCacheLoader::get(operationContext()).initializeReplicaSetRole(true);
+        getCatalogCacheLoaderForFiltering(operationContext()).initializeReplicaSetRole(true);
 
         setupNShards(2);
     }
@@ -231,27 +231,6 @@ protected:
                                         chunk4.toConfigBSON()};
         }());
     }
-
-    void respondToMetadataRefreshRequestsWithError() {
-        // Return an empty database (need to return it twice because for missing databases, the
-        // CatalogClient tries twice)
-        expectFindSendBSONObjVector(kConfigHostAndPort, {});
-        expectFindSendBSONObjVector(kConfigHostAndPort, {});
-
-        // getCollectionRoutingInfoWithRefresh calls _getCollectionRoutingInfo twice
-        expectFindSendBSONObjVector(kConfigHostAndPort, {});
-        expectFindSendBSONObjVector(kConfigHostAndPort, {});
-    }
-
-    boost::optional<CachedCollectionRoutingInfo> getRoutingInfo() {
-        auto future = scheduleRoutingInfoRefresh(kNss);
-
-        respondToMetadataRefreshRequests();
-
-        auto routingInfo = future.default_timed_get();
-
-        return routingInfo;
-    }
 };
 
 UUID getCollectionUuid(OperationContext* opCtx, const NamespaceString& nss) {
@@ -377,6 +356,29 @@ TEST_F(MigrationUtilsTest, TestInvalidUUID) {
 }
 
 using SubmitRangeDeletionTaskTest = MigrationUtilsTest;
+
+TEST_F(SubmitRangeDeletionTaskTest,
+       FailsAndDeletesTaskIfFilteringMetadataIsUnknownEvenAfterRefresh) {
+    auto opCtx = operationContext();
+
+    const auto uuid = UUID::gen();
+    auto deletionTask = createDeletionTask(kNss, uuid, 0, 10);
+
+    PersistentTaskStore<RangeDeletionTask> store(opCtx, NamespaceString::kRangeDeletionNamespace);
+    store.add(opCtx, deletionTask);
+    ASSERT_EQ(store.count(opCtx), 1);
+
+    // Make the refresh triggered by submitting the task return an empty result.
+    auto result = stdx::async(stdx::launch::async,
+                              [this, uuid] { respondToMetadataRefreshRequestsWithError(); });
+
+    auto submitTaskFuture = migrationutil::submitRangeDeletionTask(opCtx, deletionTask);
+
+    // The task should not have been submitted, and the task's entry should have been removed from
+    // the persistent store.
+    ASSERT_FALSE(submitTaskFuture.get(opCtx));
+    ASSERT_EQ(store.count(opCtx), 0);
+}
 
 TEST_F(SubmitRangeDeletionTaskTest, SucceedsIfFilteringMetadataUUIDMatchesTaskUUID) {
     auto opCtx = operationContext();

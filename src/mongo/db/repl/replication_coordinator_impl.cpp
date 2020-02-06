@@ -3462,6 +3462,19 @@ ReplicationCoordinatorImpl::_setCurrentRSConfig(WithLock lk,
         log() << startupWarningsLog;
     }
 
+    // Since the ReplSetConfig always has a WriteConcernOptions, the only way to know if it has been
+    // customized is if it's different to the implicit defaults of { w: 1, wtimeout: 0 }.
+    if (const auto& wc = newConfig.getDefaultWriteConcern();
+        !(wc.wNumNodes == 1 && wc.wTimeout == 0)) {
+        log() << startupWarningsLog;
+        log() << "** WARNING: Replica set config contains customized getLastErrorDefaults,"
+              << startupWarningsLog;
+        log() << "**          which are deprecated. Use setDefaultRWConcern instead to set a"
+              << startupWarningsLog;
+        log() << "**          cluster-wide default writeConcern." << startupWarningsLog;
+        log() << startupWarningsLog;
+    }
+
 
     log() << "New replica set config in use: " << _rsConfig.toBSON() << rsLog;
     _selfIndex = myIndex;
@@ -4112,16 +4125,20 @@ Status ReplicationCoordinatorImpl::processHeartbeatV1(const ReplSetHeartbeatArgs
         // a configuration that contains us.  Chances are excellent that it will, since that
         // is the only reason for a remote node to send this node a heartbeat request.
         if (!senderHost.empty() && _seedList.insert(senderHost).second) {
+            log() << "Scheduling heartbeat to fetch a new config from: " << senderHost
+                  << " since we are not a member of our current config.";
             _scheduleHeartbeatToTarget_inlock(senderHost, -1, now);
         }
     } else if (result.isOK() &&
-               (response->getConfigVersion() < args.getConfigVersion() ||
-                (args.getPrimaryId() >= 0 &&
-                 (!response->hasPrimaryId() || response->getPrimaryId() != args.getPrimaryId())))) {
-        // Schedule a heartbeat to the sender to fetch the new config or primary information.
+               response->getConfigVersionAndTerm() < args.getConfigVersionAndTerm()) {
+        // Schedule a heartbeat to the sender to fetch the new config.
+        // Only send this if the sender's config is newer.
         // We cannot cancel the enqueued heartbeat, but either this one or the enqueued heartbeat
         // will trigger reconfig, which cancels and reschedules all heartbeats.
         if (args.hasSender()) {
+            log() << "Scheduling heartbeat to fetch a newer config with term "
+                  << args.getConfigTerm() << " and version " << args.getConfigVersion()
+                  << " from member: " << senderHost;
             int senderIndex = _rsConfig.findMemberIndexByHostAndPort(senderHost);
             _scheduleHeartbeatToTarget_inlock(senderHost, senderIndex, now);
         }

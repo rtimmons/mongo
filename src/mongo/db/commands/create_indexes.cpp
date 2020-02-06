@@ -274,14 +274,18 @@ Status validateTTLOptions(OperationContext* opCtx, const BSONObj& cmdObj) {
  */
 boost::optional<CommitQuorumOptions> parseAndGetCommitQuorum(OperationContext* opCtx,
                                                              const BSONObj& cmdObj) {
+    auto replCoord = repl::ReplicationCoordinator::get(opCtx);
+
     if (cmdObj.hasField(kCommitQuorumFieldName)) {
+        uassert(ErrorCodes::BadValue,
+                str::stream() << "Standalones can't specify commitQuorum",
+                replCoord->isReplEnabled());
         CommitQuorumOptions commitQuorum;
         uassertStatusOK(commitQuorum.parse(cmdObj.getField(kCommitQuorumFieldName)));
         return commitQuorum;
     } else {
         // Retrieve the default commit quorum if one wasn't passed in, which consists of all
         // data-bearing nodes.
-        auto replCoord = repl::ReplicationCoordinator::get(opCtx);
         int numDataBearingMembers =
             replCoord->isReplEnabled() ? replCoord->getConfig().getNumDataBearingMembers() : 1;
         return CommitQuorumOptions(numDataBearingMembers);
@@ -627,7 +631,7 @@ bool runCreateIndexesWithCoordinator(OperationContext* opCtx,
             // The index build will continue to run in the background and will complete when this
             // node receives a commitIndexBuild oplog entry from the new primary.
 
-            if (indexBuildsCoord->supportsTwoPhaseIndexBuild()) {
+            if (IndexBuildProtocol::kTwoPhase == protocol) {
                 log() << "Index build continuing in background: " << buildUUID;
                 throw;
             }
