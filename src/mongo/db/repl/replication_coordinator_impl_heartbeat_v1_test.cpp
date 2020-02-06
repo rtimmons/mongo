@@ -161,7 +161,7 @@ TEST_F(ReplCoordHBV1Test,
 }
 
 TEST_F(ReplCoordHBV1Test,
-       ReceivedHeartbeatRequestWithDifferentPrimaryIdSendsHeartbeatBackToSender) {
+       SecondaryReceivedHeartbeatRequestWithDifferentPrimaryIdSendsHeartbeatBackToSender) {
     setMinimumLoggedSeverity(logger::LogSeverity::Debug(3));
     auto replConfigBson = BSON("_id"
                                << "mySet"
@@ -201,6 +201,47 @@ TEST_F(ReplCoordHBV1Test,
         exitNetwork();
     }
 }
+
+TEST_F(ReplCoordHBV1Test,
+       PrimaryReceivedHeartbeatRequestWithDifferentPrimaryIdSendsHeartbeatBackToSender) {
+    setMinimumLoggedSeverity(logger::LogSeverity::Debug(3));
+    init();
+    auto replConfigBson = BSON("_id"
+                               << "mySet"
+                               << "version" << 2 << "members"
+                               << BSON_ARRAY(BSON("host"
+                                                  << "node1:12345"
+                                                  << "_id" << 0)
+                                             << BSON("host"
+                                                     << "node2:12345"
+                                                     << "_id" << 1))
+                               << "protocolVersion" << 1);
+    assertStartSuccess(replConfigBson, HostAndPort("node1", 12345));
+
+    // Become primary.
+    ASSERT_OK(getReplCoord()->setFollowerMode(MemberState::RS_SECONDARY));
+    replCoordSetMyLastAppliedOpTime(OpTime(Timestamp(100, 1), 0), Date_t() + Seconds(100));
+    replCoordSetMyLastDurableOpTime(OpTime(Timestamp(100, 1), 0), Date_t() + Seconds(100));
+    simulateSuccessfulV1Election();
+    ASSERT(getReplCoord()->getMemberState().primary());
+
+    ReplSetConfig rsConfig = assertMakeRSConfig(replConfigBson);
+    receiveHeartbeatFrom(rsConfig, 1, HostAndPort("node2", 12345), 1);
+
+    {
+        enterNetwork();
+        const auto noi = getNet()->getNextReadyRequest();
+        // 'request' represents the request sent from self(node1) back to node3
+        const RemoteCommandRequest& request = noi->getRequest();
+        ReplSetHeartbeatArgsV1 args;
+        ASSERT_OK(args.initialize(request.cmdObj));
+        ASSERT_EQ(request.target, HostAndPort("node2", 12345));
+        ASSERT_EQ(args.getPrimaryId(), 0);
+
+        exitNetwork();
+    }
+}
+
 
 class ReplCoordHBV1ReconfigTest : public ReplCoordHBV1Test {
 public:
