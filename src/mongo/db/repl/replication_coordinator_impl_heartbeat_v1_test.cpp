@@ -216,7 +216,6 @@ TEST_F(ReplCoordHBV1Test,
 
 }
 
-#if 0
 TEST_F(ReplCoordHBV1Test,
        PrimaryReceivedHeartbeatRequestWithDifferentPrimaryIdRestartsHeartbeats) {
     setMinimumLoggedSeverity(logger::LogSeverity::Debug(3));
@@ -256,7 +255,6 @@ TEST_F(ReplCoordHBV1Test,
         exitNetwork();
     }
 }
-#endif
 
 class ReplCoordHBV1ReconfigTest : public ReplCoordHBV1Test {
 public:
