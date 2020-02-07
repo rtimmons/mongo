@@ -213,11 +213,9 @@ TEST_F(ReplCoordHBV1Test,
 
         exitNetwork();
     }
-
 }
 
-TEST_F(ReplCoordHBV1Test,
-       PrimaryReceivedHeartbeatRequestWithDifferentPrimaryIdRestartsHeartbeats) {
+TEST_F(ReplCoordHBV1Test, PrimaryReceivedHeartbeatRequestWithDifferentPrimaryIdRestartsHeartbeats) {
     setMinimumLoggedSeverity(logger::LogSeverity::Debug(3));
     init();
     auto replConfigBson = BSON("_id"
