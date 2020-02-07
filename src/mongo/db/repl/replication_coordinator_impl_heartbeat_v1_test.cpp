@@ -161,7 +161,7 @@ TEST_F(ReplCoordHBV1Test,
 }
 
 TEST_F(ReplCoordHBV1Test,
-       SecondaryReceivedHeartbeatRequestWithDifferentPrimaryIdSendsHeartbeatBackToSender) {
+       SecondaryReceivedHeartbeatRequestWithDifferentPrimaryIdRestartsHeartbeats) {
     setMinimumLoggedSeverity(logger::LogSeverity::Debug(3));
     auto replConfigBson = BSON("_id"
                                << "mySet"
@@ -195,15 +195,30 @@ TEST_F(ReplCoordHBV1Test,
         const RemoteCommandRequest& request = noi->getRequest();
         ReplSetHeartbeatArgsV1 args;
         ASSERT_OK(args.initialize(request.cmdObj));
+        ASSERT_EQ(request.target, HostAndPort("node2", 12345));
+        ASSERT_EQ(args.getPrimaryId(), -1);
+
+        exitNetwork();
+    }
+
+    {
+        enterNetwork();
+        const auto noi = getNet()->getNextReadyRequest();
+        // 'request' represents the request sent from self(node1) back to node3
+        const RemoteCommandRequest& request = noi->getRequest();
+        ReplSetHeartbeatArgsV1 args;
+        ASSERT_OK(args.initialize(request.cmdObj));
         ASSERT_EQ(request.target, HostAndPort("node3", 12345));
         ASSERT_EQ(args.getPrimaryId(), -1);
 
         exitNetwork();
     }
+
 }
 
+#if 0
 TEST_F(ReplCoordHBV1Test,
-       PrimaryReceivedHeartbeatRequestWithDifferentPrimaryIdSendsHeartbeatBackToSender) {
+       PrimaryReceivedHeartbeatRequestWithDifferentPrimaryIdRestartsHeartbeats) {
     setMinimumLoggedSeverity(logger::LogSeverity::Debug(3));
     init();
     auto replConfigBson = BSON("_id"
@@ -241,7 +256,7 @@ TEST_F(ReplCoordHBV1Test,
         exitNetwork();
     }
 }
-
+#endif
 
 class ReplCoordHBV1ReconfigTest : public ReplCoordHBV1Test {
 public:
