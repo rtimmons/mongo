@@ -188,31 +188,17 @@ TEST_F(ReplCoordHBV1Test,
     ReplSetConfig rsConfig = assertMakeRSConfig(replConfigBson);
     receiveHeartbeatFrom(rsConfig, 3, HostAndPort("node3", 12345), 3);
 
-    {
-        enterNetwork();
+    enterNetwork();
+    for(const auto& host : {"node2", "node3"}) {
         const auto noi = getNet()->getNextReadyRequest();
         // 'request' represents the request sent from self(node1) back to node3
         const RemoteCommandRequest& request = noi->getRequest();
         ReplSetHeartbeatArgsV1 args;
         ASSERT_OK(args.initialize(request.cmdObj));
-        ASSERT_EQ(request.target, HostAndPort("node2", 12345));
+        ASSERT_EQ(request.target, HostAndPort(host, 12345));
         ASSERT_EQ(args.getPrimaryId(), -1);
-
-        exitNetwork();
     }
-
-    {
-        enterNetwork();
-        const auto noi = getNet()->getNextReadyRequest();
-        // 'request' represents the request sent from self(node1) back to node3
-        const RemoteCommandRequest& request = noi->getRequest();
-        ReplSetHeartbeatArgsV1 args;
-        ASSERT_OK(args.initialize(request.cmdObj));
-        ASSERT_EQ(request.target, HostAndPort("node3", 12345));
-        ASSERT_EQ(args.getPrimaryId(), -1);
-
-        exitNetwork();
-    }
+    exitNetwork();
 }
 
 TEST_F(
