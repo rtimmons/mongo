@@ -161,7 +161,7 @@ TEST_F(ReplCoordHBV1Test,
 }
 
 TEST_F(ReplCoordHBV1Test,
-       SecondaryReceivedHeartbeatRequestFromPrimaryWithDifferentPrimaryIdRestartsHeartbeats) {
+       SecondaryReceivesHeartbeatRequestFromPrimaryWithDifferentPrimaryIdRestartsHeartbeats) {
     setMinimumLoggedSeverity(logger::LogSeverity::Debug(3));
     auto replConfigBson = BSON("_id"
                                << "mySet"
@@ -176,20 +176,21 @@ TEST_F(ReplCoordHBV1Test,
     assertStartSuccess(replConfigBson, HostAndPort("node1", 12345));
     ASSERT_OK(getReplCoord()->setFollowerMode(MemberState::RS_SECONDARY));
 
+    enterNetwork();
     // Ignore the first 2 messages.
     for (int j = 0; j < 2; ++j) {
-        enterNetwork();
         const auto noi = getNet()->getNextReadyRequest();
         noi->getRequest();
         getNet()->blackHole(noi);
-        exitNetwork();
     }
+    exitNetwork();
 
     ReplSetConfig rsConfig = assertMakeRSConfig(replConfigBson);
+    // We're a secondary and we receive a request from node3 saying it's the primary.
     receiveHeartbeatFrom(rsConfig, 3, HostAndPort("node3", 12345), 3);
 
     enterNetwork();
-    for(const auto& host : {"node2", "node3"}) {
+    for (const auto& host : {"node2", "node3"}) {
         const auto noi = getNet()->getNextReadyRequest();
         // 'request' represents the request sent from self(node1) back to node3
         const RemoteCommandRequest& request = noi->getRequest();
@@ -198,12 +199,13 @@ TEST_F(ReplCoordHBV1Test,
         ASSERT_EQ(request.target, HostAndPort(host, 12345));
         ASSERT_EQ(args.getPrimaryId(), -1);
     }
+    ASSERT_FALSE(getNet()->hasReadyRequests());
     exitNetwork();
 }
 
 TEST_F(
     ReplCoordHBV1Test,
-    SecondaryReceivedHeartbeatRequestFromSecondaryWithDifferentPrimaryIdDoesNotRestartHeartbeats) {
+    SecondaryReceivesHeartbeatRequestFromSecondaryWithDifferentPrimaryIdDoesNotRestartHeartbeats) {
     setMinimumLoggedSeverity(logger::LogSeverity::Debug(3));
     auto replConfigBson = BSON("_id"
                                << "mySet"
@@ -218,14 +220,14 @@ TEST_F(
     assertStartSuccess(replConfigBson, HostAndPort("node1", 12345));
     ASSERT_OK(getReplCoord()->setFollowerMode(MemberState::RS_SECONDARY));
 
+    enterNetwork();
     // Ignore the first 2 messages.
     for (int j = 0; j < 2; ++j) {
-        enterNetwork();
         const auto noi = getNet()->getNextReadyRequest();
         noi->getRequest();
         getNet()->blackHole(noi);
-        exitNetwork();
     }
+    exitNetwork();
 
     ReplSetConfig rsConfig = assertMakeRSConfig(replConfigBson);
     // Node 2 thinks 3 is the primary. We don't restart heartbeats for that.
@@ -238,7 +240,7 @@ TEST_F(
     }
 }
 
-TEST_F(ReplCoordHBV1Test, PrimaryReceivedHeartbeatRequestWithDifferentPrimaryIdRestartsHeartbeats) {
+TEST_F(ReplCoordHBV1Test, PrimaryReceivesHeartbeatRequestWithDifferentPrimaryIdRestartsHeartbeats) {
     setMinimumLoggedSeverity(logger::LogSeverity::Debug(3));
     init();
     auto replConfigBson = BSON("_id"
@@ -272,6 +274,8 @@ TEST_F(ReplCoordHBV1Test, PrimaryReceivedHeartbeatRequestWithDifferentPrimaryIdR
         ASSERT_OK(args.initialize(request.cmdObj));
         ASSERT_EQ(request.target, HostAndPort("node2", 12345));
         ASSERT_EQ(args.getPrimaryId(), 0);
+
+        ASSERT_FALSE(getNet()->hasReadyRequests());
 
         exitNetwork();
     }
