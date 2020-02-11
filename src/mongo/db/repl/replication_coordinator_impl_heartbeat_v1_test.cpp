@@ -185,9 +185,8 @@ TEST_F(ReplCoordHBV1Test,
     }
     exitNetwork();
 
-    ReplSetConfig rsConfig = assertMakeRSConfig(replConfigBson);
     // We're a secondary and we receive a request from node3 saying it's the primary.
-    receiveHeartbeatFrom(rsConfig, 3, HostAndPort("node3", 12345), 3);
+    receiveHeartbeatFrom(getReplCoord()->getConfig(), 3, HostAndPort("node3", 12345), 3);
 
     enterNetwork();
     for (const auto& host : {"node2", "node3"}) {
@@ -229,9 +228,8 @@ TEST_F(
     }
     exitNetwork();
 
-    ReplSetConfig rsConfig = assertMakeRSConfig(replConfigBson);
     // Node 2 thinks 3 is the primary. We don't restart heartbeats for that.
-    receiveHeartbeatFrom(rsConfig, 2, HostAndPort("node3", 12345), 3);
+    receiveHeartbeatFrom(getReplCoord()->getConfig(), 2, HostAndPort("node3", 12345), 3);
 
     {
         enterNetwork();
@@ -262,8 +260,7 @@ TEST_F(ReplCoordHBV1Test, PrimaryReceivesHeartbeatRequestWithDifferentPrimaryIdR
     simulateSuccessfulV1Election();
     ASSERT(getReplCoord()->getMemberState().primary());
 
-    ReplSetConfig rsConfig = assertMakeRSConfig(replConfigBson);
-    receiveHeartbeatFrom(rsConfig, 1, HostAndPort("node2", 12345), 1);
+    receiveHeartbeatFrom(getReplCoord()->getConfig(), 1, HostAndPort("node2", 12345), 1);
 
     {
         enterNetwork();
