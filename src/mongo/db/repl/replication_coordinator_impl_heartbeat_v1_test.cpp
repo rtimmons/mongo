@@ -268,7 +268,7 @@ TEST_F(ReplCoordHBV1Test, PrimaryReceivesHeartbeatRequestWithDifferentPrimaryIdR
     {
         enterNetwork();
         const auto noi = getNet()->getNextReadyRequest();
-        // 'request' represents the request sent from self(node1) back to node3
+        // 'request' represents the request sent from self(node1) back to node2
         const RemoteCommandRequest& request = noi->getRequest();
         ReplSetHeartbeatArgsV1 args;
         ASSERT_OK(args.initialize(request.cmdObj));
