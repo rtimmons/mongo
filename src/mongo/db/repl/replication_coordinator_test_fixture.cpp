@@ -337,9 +337,7 @@ void ReplCoordTest::simulateSuccessfulV1ElectionWithoutExitingDrainMode(Date_t e
         Status status = hbArgs.initialize(request.cmdObj);
         if (status.isOK()) {
             if (replCoord->getMemberState().primary()) {
-                ASSERT_EQ(hbArgs.getPrimaryId(), replCoord->getMyId())
-                    << "hbArgs.getPrimaryId()=" << hbArgs.getPrimaryId() << " should be our id ("
-                    << replCoord->getMyId() << " if we're primary.";
+                ASSERT_EQ(hbArgs.getPrimaryId(), replCoord->getMyId());
             }
             ReplSetHeartbeatResponse hbResp;
             hbResp.setSetName(rsConfig.getReplSetName());

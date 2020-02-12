@@ -4149,9 +4149,9 @@ Status ReplicationCoordinatorImpl::processHeartbeatV1(const ReplSetHeartbeatArgs
         if (args.hasSender() && args.getSenderId() == args.getPrimaryId()) {
             log() << "Restarting heartbeats to learn of new primary. Sender has primaryId "
                   << args.getPrimaryId() << " and we have "
-                  << std::string(response->hasPrimaryId()
-                                     ? (str::stream() << "primaryId " << response->getPrimaryId())
-                                     : std::string("no primaryId"));
+                  << (response->hasPrimaryId()
+                          ? (str::stream() << "primaryId " << response->getPrimaryId())
+                          : std::string("no primaryId"));
             _restartHeartbeats_inlock();
         }
     }
