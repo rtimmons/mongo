@@ -336,9 +336,15 @@ void ReplCoordTest::simulateSuccessfulV1ElectionWithoutExitingDrainMode(Date_t e
         ReplSetHeartbeatArgsV1 hbArgs;
         Status status = hbArgs.initialize(request.cmdObj);
         if (status.isOK()) {
-            ASSERT_EQ(hbArgs.getPrimaryId() >= 0, replCoord->getMemberState().primary())
-                << "hbArgs.getPrimary()=" << hbArgs.getPrimaryId()
-                << " is positive iff we're primary (state=" << replCoord->getMemberState() << ")";
+            if (replCoord->getMemberState().primary()) {
+                ASSERT_EQ(hbArgs.getPrimaryId(), replCoord->getMyId())
+                    << "hbArgs.getPrimaryId()=" << hbArgs.getPrimaryId() << " should be our id ("
+                    << replCoord->getMyId() << " if we're primary.";
+            } else {
+                ASSERT_TRUE(hbArgs.getPrimaryId() < 0)
+                    << "hbArgs.getPrimaryId()=" << hbArgs.getPrimaryId()
+                    << " should be negative if we're not primary.";
+            }
             ReplSetHeartbeatResponse hbResp;
             hbResp.setSetName(rsConfig.getReplSetName());
             hbResp.setState(MemberState::RS_SECONDARY);
