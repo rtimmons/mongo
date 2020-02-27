@@ -241,30 +241,24 @@ functions:
          file: "work/perf.json"
 
   "analyze":
+    - command: expansions.write
+      params:
+        file: work/expansions.yml
     - command: shell.exec
       type: test
       params:
         working_dir: work
-        script: |
-          ../src/dsi/dsi/run-dsi evergreen-analyze
-    - command: shell.exec
-      params:
-        working_dir: work
-        script: ../src/dsi/dsi/run-dsi evergreen-signal-processing-detect-changes
-    - command: shell.exec
-      params:
-        working_dir: work
-        script: ../src/dsi/dsi/run-dsi evergreen-signal-processing-detect-outliers
+        script: ../src/dsi/dsi/run-dsi evergreen-analyze
     - command: shell.exec
       type: setup
       params:
         working_dir: work
-        script: ../src/dsi/dsi/run-dsi evergreen-signal-processing-outliers-report-setup
+        script: ../src/dsi/dsi/run-dsi evergreen-analyze-report-setup
     - command: shell.exec
       type: test
       params:
         working_dir: work
-        script: ../src/dsi/dsi/run-dsi evergreen-signal-processing-outliers-report-test
+        script: ../src/dsi/dsi/run-dsi evergreen-analyze-report-test
 
   "upload pip requirements":
     command: s3.put

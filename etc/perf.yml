@@ -126,19 +126,26 @@ functions:
           # print the replset config unless this is a standalone
           ./bin/mongo --eval "if( db.isMaster().hosts ) { printjson(rs.config()); }" --username admin --password password admin
           echo "MONGOD STARTED."
+
   "analyze":
     - command: expansions.write
       params:
         file: work/expansions.yml
     - command: shell.exec
+      type: test
       params:
-        working_dir: src
-        script: ./dsi/run-dsi evergreen-signal-processing-detect-changes
+        working_dir: work
+        script: ../src/dsi/dsi/run-dsi evergreen-analyze
+    - command: shell.exec
+      type: setup
+      params:
+        working_dir: work
+        script: ../src/dsi/dsi/run-dsi evergreen-analyze-report-setup
     - command: shell.exec
       type: test
       params:
-        working_dir: src
-        script: ./dsi/run-dsi evergreen-analysis
+        working_dir: work
+        script: ../src/dsi/dsi/run-dsi evergreen-analyze-report-test
 
   # Params:
   #   workload: the path relative to genny/src/workloads to run e.g.
