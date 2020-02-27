@@ -7,9 +7,7 @@ post:
     - command: shell.exec
       params:
         working_dir: work
-        script: |
-          source ./dsienv.sh
-          make_artifact.sh
+        script: ../run-dsi make-artifact
     - command: s3.put
       params:
         aws_key: ${aws_key}
@@ -37,14 +35,13 @@ post:
       params:
          name: "perf"
          file: "work/perf.json"
+    - command: expansions.write
+      params:
+        file: work/expansions.yml
     - command: shell.exec
       params:
         working_dir: work
-        script: |
-          source ./dsienv.sh
-          if [ -e /data/infrastructure_provisioning/terraform/provisioned.${cluster} ]; then
-            mark_idle.sh
-          fi
+        script: ../run-dsi mark-idle
 
     - func: "upload pip requirements"
     - command: shell.exec
@@ -198,63 +195,6 @@ functions:
           done
         fi
 
-  "write yml config": &write_yml_config
-    command: shell.exec
-    params:
-      working_dir: work
-      script: |
-        cat > bootstrap.yml <<EOF
-        auto_genny_workload: ${auto_workload_path}
-        infrastructure_provisioning: ${cluster}
-        platform: ${platform}
-        mongodb_setup: ${setup}
-        storageEngine: ${storageEngine}
-        test_control: ${test}
-        test_name: ${test}
-        production: true
-        authentication: ${authentication}
-        overrides:
-          infrastructure_provisioning:
-            tfvars:
-              # This is currently only used by initialsync-logkeeper. It is empty and not used for other tests.
-              mongod_seeded_ebs_snapshot_id: ${snapshotId}
-          workload_setup:
-            local_repos:
-              workloads: ../src/workloads/workloads
-              ycsb: ../src/YCSB/YCSB
-              linkbench: ../src/linkbench/linkbench
-              tpcc: ../src/tpcc/tpcc
-              genny: ../src/genny/genny
-          mongodb_setup:
-            # This is currently only used by initialsync-logkeeper-short. It is empty and not used for other tests.
-            mongodb_dataset: ${dataset}
-            mongodb_binary_archive: "https://s3.amazonaws.com/mciuploads/${project_dir}/${version_id}/${revision}/${platform}/mongodb${compile-variant|}-${version_id}.tar.gz"
-        EOF
-
-        cat > runtime.yml <<EOF
-        # evergreen default expansions
-        branch_name: ${branch_name}
-        build_id: ${build_id}
-        build_variant: ${build_variant}
-        execution: ${execution}
-        is_patch: ${is_patch|false}
-        order: ${revision_order_id}
-        project: ${project}
-        project_dir: ${project_dir}
-        revision: ${revision}
-        task_id: ${task_id}
-        task_name: ${task_name}
-        version_id: ${version_id}
-        workdir: ${workdir}
-
-        # sys-perf expansions
-        dsi_rev: ${dsi_rev}
-        enterprise_rev: ${enterprise_rev}
-        ext: ${ext}
-        script_flags : ${script_flags}
-        workloads_rev: ${workloads_rev}
-        EOF
-
   "prepare environment":
     - command: shell.exec
       params:
@@ -266,27 +206,6 @@ functions:
     # Calling the git.get_project command here will clone the mongodb/mongo repository, as well as
     # the repositories defined in the build variant's "modules" section.
     - *git_get_project
-    - *write_yml_config
-    - command: shell.exec
-      params:
-        silent: true
-        working_dir: work
-        script: |
-          # AWS ssh secret key
-          echo "${ec2_pem}" > aws_ssh_key.pem
-          chmod 400 aws_ssh_key.pem
-
-          cat > runtime_secret.yml <<EOF
-          # Note that inside system_perf.yml we have ${aws_key} & ${aws_secret}, which are used for
-          # Evergreen resources. The below are used for dsi resources, and are NOT the same!
-          aws_access_key: "${terraform_key}"
-          aws_secret_key: "${terraform_secret}"
-          perf_jira_user: "${perf_jira_user}"
-          perf_jira_pw: "${perf_jira_pw}"
-          dsi_analysis_atlas_user: "${dsi_analysis_atlas_user}"
-          dsi_analysis_atlas_pw: "${dsi_analysis_atlas_pw}"
-          EOF
-          chmod 400 runtime_secret.yml
     - command: expansions.write
       params:
         file: work/expansions.yml
@@ -295,40 +214,27 @@ functions:
         working_dir: work
         # setup execution environment
         # configure environment, has private information, no logging
-        script: |
-          set -e
-          ../src/dsi/dsi/run-dsi python ../src/dsi/dsi/bin/bootstrap.py
-    - command: shell.exec
-      params:
-        script: |
-          set -v
-          set -e
-          source work/dsienv.sh
-          setup-dsi-env.sh
-          ls -a work
+        script: ../src/dsi/dsi/run-dsi evergreen-bootstrap
 
   "deploy cluster":
+    - command: expansions.write
+      params:
+        file: work/expansions.yml
     - command: shell.exec
       params:
         working_dir: work
-        script: |
-          set -e
-          set -v
-          source ./dsienv.sh
-          ../src/dsi/dsi/run-dsi infrastructure_provisioning.py
-          ../src/dsi/dsi/run-dsi workload_setup.py
-          ../src/dsi/dsi/run-dsi mongodb_setup.py
+        script: ../src/dsi/dsi/run-dsi evergreen-deploy-cluster
 
   "run test":
+    - command: expansions.write
+      params:
+        file: work/expansions.yml
     - command: shell.exec
       type: test
       params:
         working_dir: work
         script: |
-          set -e
-          set -v
-          source ./dsienv.sh
-          ../src/dsi/dsi/run-dsi test_control.py
+          ../src/dsi/dsi/run-dsi evergreen-run-test
     - command: "json.send"
       params:
          name: "perf"
@@ -340,59 +246,25 @@ functions:
       params:
         working_dir: work
         script: |
-          set -o verbose
-          source ./dsienv.sh
-          ../src/dsi/dsi/run-dsi analysis.py
-          # detect outliers needs to run, so defer the post_run_check exit status to later
-          echo $? > post_run_check.status
+          ../src/dsi/dsi/run-dsi evergreen-analyze
     - command: shell.exec
       params:
         working_dir: work
-        silent: true
-        script: |
-          set -o errexit
-          is_patch=${is_patch}
-          task_id=${task_id}
-          perf_jira_user=${perf_jira_user}
-          perf_jira_pw=${perf_jira_pw}
-          analysis_user=${dsi_analysis_atlas_user}
-          analysis_password=${dsi_analysis_atlas_pw}
-          evergreen_api_key=${evergreen_api_key}
-          evergreen_api_user=${evergreen_api_user}
-          source ../src/buildscripts/signal_processing_setup.sh
+        script: ../src/dsi/dsi/run-dsi evergreen-signal-processing-detect-changes
     - command: shell.exec
       params:
         working_dir: work
-        script: |
-          set -o verbose
-          source ./signal_processing_venv/bin/activate
-          detect-changes --evergreen-api-config .evergreen.yml
-    - command: shell.exec
-      params:
-        working_dir: work
-        script: |
-          set -o verbose
-          source ./signal_processing_venv/bin/activate
-          detect-outliers --evergreen-api-config .evergreen.yml
+        script: ../src/dsi/dsi/run-dsi evergreen-signal-processing-detect-outliers
     - command: shell.exec
       type: setup
       params:
         working_dir: work
-        script: |
-          set -o verbose
-          filename=rejects.json
-          if [ -s "$filename" ]; then
-            echo "Rejecting task due to the following outliers:"
-            cat "$filename"
-            exit ${detected_outlier_exit_code|0}
-          fi
+        script: ../src/dsi/dsi/run-dsi evergreen-signal-processing-outliers-report-setup
     - command: shell.exec
       type: test
       params:
         working_dir: work
-        script: |
-          set -o verbose
-          exit $(cat post_run_check.status)
+        script: ../src/dsi/dsi/run-dsi evergreen-signal-processing-outliers-report-test
 
   "upload pip requirements":
     command: s3.put

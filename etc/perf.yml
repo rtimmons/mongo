@@ -127,66 +127,18 @@ functions:
           ./bin/mongo --eval "if( db.isMaster().hosts ) { printjson(rs.config()); }" --username admin --password password admin
           echo "MONGOD STARTED."
   "analyze":
+    - command: expansions.write
+      params:
+        file: work/expansions.yml
     - command: shell.exec
       params:
         working_dir: src
-        silent: true
-        script: |
-          set -o errexit
-          is_patch=${is_patch}
-          task_id=${task_id}
-          perf_jira_user=${perf_jira_user}
-          perf_jira_pw=${perf_jira_pw}
-          analysis_user=${dsi_analysis_atlas_user}
-          analysis_password=${dsi_analysis_atlas_pw}
-          evergreen_api_key=${evergreen_api_key}
-          evergreen_api_user=${evergreen_api_user}
-          source ./buildscripts/signal_processing_setup.sh
-    - command: shell.exec
-      params:
-        working_dir: src
-        script: |
-          set -o verbose
-          source ./signal_processing_venv/bin/activate
-          detect-changes --evergreen-api-config .evergreen.yml
-    - command: shell.exec
-      params:
-        working_dir: src
-        script: |
-          set -o errexit
-          set -o verbose
-          cat > overrides.yml <<EOF
-          bootstrap:
-            production: true
-          test_control:
-            reports_dir_basename: ..
-          runtime:
-            # evergreen default expansions
-            is_patch: ${is_patch}
-            task_id: ${task_id}
-          EOF
-
-          cp ./dsi/configurations/analysis/analysis.microbenchmarks.yml  analysis.yml
-    - command: shell.exec
-      params:
-        working_dir: src
-        silent: true
-        script: |
-          cat > runtime_secret.yml <<EOF
-          dsi_analysis_atlas_user: "${dsi_analysis_atlas_user}"
-          dsi_analysis_atlas_pw: "${dsi_analysis_atlas_pw}"
-          EOF
-          chmod 400 runtime_secret.yml
+        script: ./dsi/run-dsi evergreen-signal-processing-detect-changes
     - command: shell.exec
       type: test
       params:
         working_dir: src
-        script: |
-          set -o errexit
-          set -o verbose
-          ./dsi/run-dsi setup
-          source ./dsi/dsi_venv/bin/activate
-          ./dsi/bin/analysis.py
+        script: ./dsi/run-dsi evergreen-analysis
 
   # Params:
   #   workload: the path relative to genny/src/workloads to run e.g.
