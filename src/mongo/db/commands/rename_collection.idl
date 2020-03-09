@@ -24,16 +24,32 @@
 # delete this exception statement from your version. If you delete this
 # exception statement from all source files in the program, then also delete
 # it in the license file.
+#
 
 global:
-    cpp_namespace: mongo
+    cpp_namespace: "mongo"
 
-server_parameters:
-    disableStreamableReplicaSetMonitor:
-        description: >-
-            Disable the StreamableReplicaSetMonitor and revert to the prior behavior with the
-            ScanningReplicaSetMonitor
-        set_at: startup
-        cpp_vartype: AtomicWord<bool>
-        cpp_varname: disableStreamableReplicaSetMonitor
-        default: true 
+imports:
+    - "mongo/idl/basic_types.idl"
+
+commands:
+    renameCollection:
+        description: "Parser for the 'renameCollection' command."
+        cpp_name: RenameCollectionCommand
+        strict: true
+        namespace: type
+        type: namespacestring
+        fields:
+            to:
+                description: "The new namespace for the collection being renamed."
+                type: namespacestring
+            dropTarget:
+                description: "If true, mongod will drop the target of renameCollection prior to
+                renaming the collection."
+                type: bool
+                default: false
+            stayTemp:
+                description: "If true, the original collection will remain temp if it was temp
+                before the rename."
+                type: bool
+                default: false

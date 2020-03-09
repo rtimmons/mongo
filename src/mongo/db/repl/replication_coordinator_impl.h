@@ -218,7 +218,8 @@ public:
 
     virtual ReplSetConfig getConfig() const override;
 
-    virtual void processReplSetGetConfig(BSONObjBuilder* result) override;
+    virtual void processReplSetGetConfig(BSONObjBuilder* result,
+                                         bool commitmentStatus = false) override;
 
     virtual void processReplSetMetadata(const rpc::ReplSetMetadata& replMetadata) override;
 
@@ -240,6 +241,10 @@ public:
     virtual Status processReplSetReconfig(OperationContext* opCtx,
                                           const ReplSetReconfigArgs& args,
                                           BSONObjBuilder* resultObj) override;
+
+    virtual Status doReplSetReconfig(OperationContext* opCtx,
+                                     GetNewConfigFn getNewConfig,
+                                     bool force) override;
 
     virtual Status processReplSetInitiate(OperationContext* opCtx,
                                           const BSONObj& configObj,
@@ -358,6 +363,14 @@ public:
     virtual OpTime getLatestWriteOpTime(OperationContext* opCtx) const override;
 
     virtual HostAndPort getCurrentPrimaryHostAndPort() const override;
+
+    void cancelCbkHandle(executor::TaskExecutor::CallbackHandle activeHandle) override;
+
+    BSONObj runCmdOnPrimaryAndAwaitResponse(OperationContext* opCtx,
+                                            const std::string& dbName,
+                                            const BSONObj& cmdObj,
+                                            OnRemoteCmdScheduledFn onRemoteCmdScheduled,
+                                            OnRemoteCmdCompleteFn onRemoteCmdComplete) override;
 
     // ================== Test support API ===================
 
@@ -752,6 +765,12 @@ private:
     bool getWriteConcernMajorityShouldJournal_inlock() const;
 
     /**
+     * Returns the write concerns used by oplog commitment check and config replication check.
+     */
+    WriteConcernOptions _getOplogCommitmentWriteConcern(WithLock lk);
+    WriteConcernOptions _getConfigReplicationWriteConcern();
+
+    /**
      * Returns the OpTime of the current committed snapshot, if one exists.
      */
     OpTime _getCurrentCommittedSnapshotOpTime_inlock() const;
@@ -1083,11 +1102,6 @@ private:
                                 const HostAndPort& host);
 
     /**
-     * Schedules a request that the given host step down; logs any errors.
-     */
-    void _requestRemotePrimaryStepdown(const HostAndPort& target);
-
-    /**
      * Schedules stepdown to run with the global exclusive lock.
      */
     executor::TaskExecutor::EventHandle _stepDownStart();
@@ -1379,6 +1393,14 @@ private:
      * Returns a pseudorandom number no less than 0 and less than limit (which must be positive).
      */
     int64_t _nextRandomInt64_inlock(int64_t limit);
+
+    /**
+     * Runs the command using DBDirectClient and returns the response received for that command.
+     * Callers of this function should not hold any locks.
+     */
+    BSONObj _runCmdOnSelfOnAlternativeClient(OperationContext* opCtx,
+                                             const std::string& dbName,
+                                             const BSONObj& cmdObj);
 
     //
     // All member variables are labeled with one of the following codes indicating the

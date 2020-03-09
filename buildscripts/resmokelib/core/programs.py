@@ -9,6 +9,7 @@ import os.path
 import stat
 import sys
 
+from buildscripts.resmokelib.multiversionconstants import LAST_STABLE_MONGOD_BINARY
 from . import jasper_process
 from . import process
 from .. import config
@@ -22,11 +23,24 @@ from .. import utils
 
 # The default verbosity setting for any tests that are not started with an Evergreen task id. This
 # will apply to any tests run locally.
-DEFAULT_MONGOD_LOG_COMPONENT_VERBOSITY = {"replication": {"rollback": 2}, "transaction": 4}
+DEFAULT_MONGOD_LOG_COMPONENT_VERBOSITY = {
+    "replication": {"rollback": 2}, "sharding": {"migration": 2}, "transaction": 4
+}
 
-# The default verbosity setting for any tests running in Evergreen i.e. started with an Evergreen
+DEFAULT_LAST_STABLE_MONGOD_LOG_COMPONENT_VERBOSITY = {
+    "replication": {"rollback": 2}, "transaction": 4
+}
+
+# The default verbosity setting for any mongod processes running in Evergreen i.e. started with an Evergreen
 # task id.
 DEFAULT_EVERGREEN_MONGOD_LOG_COMPONENT_VERBOSITY = {
+    "replication": {"election": 4, "heartbeats": 2, "initialSync": 2, "rollback": 2},
+    "sharding": {"migration": 2}, "storage": {"recovery": 2}, "transaction": 4
+}
+
+# The default verbosity setting for any last stable mongod processes running in Evergreen i.e. started
+# with an Evergreen task id.
+DEFAULT_EVERGREEN_LAST_STABLE_MONGOD_LOG_COMPONENT_VERBOSITY = {
     "replication": {"election": 4, "heartbeats": 2, "initialSync": 2, "rollback": 2},
     "storage": {"recovery": 2}, "transaction": 4
 }
@@ -71,11 +85,25 @@ def default_mongod_log_component_verbosity():
     return DEFAULT_MONGOD_LOG_COMPONENT_VERBOSITY
 
 
+def default_last_stable_mongod_log_component_verbosity():
+    """Return the default 'logComponentVerbosity' value to use for last stable mongod processes."""
+    if config.EVERGREEN_TASK_ID:
+        return DEFAULT_EVERGREEN_LAST_STABLE_MONGOD_LOG_COMPONENT_VERBOSITY
+    return DEFAULT_LAST_STABLE_MONGOD_LOG_COMPONENT_VERBOSITY
+
+
 def default_mongos_log_component_verbosity():
     """Return the default 'logComponentVerbosity' value to use for mongos processes."""
     if config.EVERGREEN_TASK_ID:
         return DEFAULT_EVERGREEN_MONGOS_LOG_COMPONENT_VERBOSITY
     return DEFAULT_MONGOS_LOG_COMPONENT_VERBOSITY
+
+
+def get_default_log_component_verbosity_for_mongod(executable):
+    """Return the correct default 'logComponentVerbosity' value for the executable version."""
+    if executable == LAST_STABLE_MONGOD_BINARY:
+        return default_last_stable_mongod_log_component_verbosity()
+    return default_mongod_log_component_verbosity()
 
 
 def mongod_program(  # pylint: disable=too-many-branches
@@ -94,7 +122,8 @@ def mongod_program(  # pylint: disable=too-many-branches
 
     # Set default log verbosity levels if none were specified.
     if "logComponentVerbosity" not in suite_set_parameters:
-        suite_set_parameters["logComponentVerbosity"] = default_mongod_log_component_verbosity()
+        suite_set_parameters[
+            "logComponentVerbosity"] = get_default_log_component_verbosity_for_mongod(executable)
 
     # orphanCleanupDelaySecs controls an artificial delay before cleaning up an orphaned chunk
     # that has migrated off of a shard, meant to allow most dependent queries on secondaries to
@@ -149,7 +178,6 @@ def mongod_program(  # pylint: disable=too-many-branches
 
     shortcut_opts = {
         "enableMajorityReadConcern": config.MAJORITY_READ_CONCERN,
-        "logFormat": config.LOG_FORMAT,
         "nojournal": config.NO_JOURNAL,
         "serviceExecutor": config.SERVICE_EXECUTOR,
         "storageEngine": config.STORAGE_ENGINE,
@@ -225,9 +253,6 @@ def mongos_program(logger, executable=None, process_kwargs=None, **kwargs):
 
     _apply_set_parameters(args, suite_set_parameters)
 
-    if config.LOG_FORMAT is not None:
-        kwargs["logFormat"] = config.LOG_FORMAT
-
     # Apply the rest of the command line arguments.
     _apply_kwargs(args, kwargs)
 
@@ -258,7 +283,6 @@ def mongo_shell_program(  # pylint: disable=too-many-branches,too-many-locals,to
         test_name = None
     shortcut_opts = {
         "enableMajorityReadConcern": (config.MAJORITY_READ_CONCERN, True),
-        "logFormat": (config.LOG_FORMAT, ""),
         "mixedBinVersions": (config.MIXED_BIN_VERSIONS, ""),
         "noJournal": (config.NO_JOURNAL, False),
         "serviceExecutor": (config.SERVICE_EXECUTOR, ""),
@@ -381,9 +405,6 @@ def mongo_shell_program(  # pylint: disable=too-many-branches,too-many-locals,to
 
         if "host" in kwargs:
             kwargs.pop("host")
-
-    if config.LOG_FORMAT is not None:
-        kwargs["logFormat"] = config.LOG_FORMAT
 
     # Apply the rest of the command line arguments.
     _apply_kwargs(args, kwargs)

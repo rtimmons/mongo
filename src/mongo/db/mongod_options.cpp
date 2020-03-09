@@ -56,7 +56,6 @@
 #include "mongo/logv2/log.h"
 #include "mongo/logv2/log_domain_global.h"
 #include "mongo/logv2/log_manager.h"
-#include "mongo/util/log.h"
 #include "mongo/util/net/ssl_options.h"
 #include "mongo/util/options_parser/startup_options.h"
 #include "mongo/util/str.h"
@@ -431,7 +430,6 @@ Status storeMongodOptions(const moe::Environment& params) {
     if (params.count("storage.queryableBackupMode") &&
         params["storage.queryableBackupMode"].as<bool>()) {
         storageGlobalParams.readOnly = true;
-        storageGlobalParams.dur = false;
     }
 
     if (params.count("storage.groupCollections")) {

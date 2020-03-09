@@ -41,6 +41,7 @@
 #include "mongo/db/repl/repl_settings.h"
 #include "mongo/db/repl/split_horizon.h"
 #include "mongo/db/repl/sync_source_selector.h"
+#include "mongo/executor/task_executor.h"
 #include "mongo/rpc/topology_version_gen.h"
 #include "mongo/util/net/hostandport.h"
 #include "mongo/util/time_support.h"
@@ -605,8 +606,11 @@ public:
 
     /**
      * Handles an incoming replSetGetConfig command. Adds BSON to 'result'.
+     *
+     * If commitmentStatus is true, adds a boolean 'commitmentStatus' field to 'result' indicating
+     * whether the current config is committed.
      */
-    virtual void processReplSetGetConfig(BSONObjBuilder* result) = 0;
+    virtual void processReplSetGetConfig(BSONObjBuilder* result, bool commitmentStatus = false) = 0;
 
     /**
      * Processes the ReplSetMetadata returned from a command run against another
@@ -677,7 +681,7 @@ public:
      */
     struct ReplSetReconfigArgs {
         BSONObj newConfigObj;
-        bool force;
+        bool force = false;
     };
 
     /**
@@ -687,6 +691,15 @@ public:
     virtual Status processReplSetReconfig(OperationContext* opCtx,
                                           const ReplSetReconfigArgs& args,
                                           BSONObjBuilder* resultObj) = 0;
+
+    /**
+     * Install the new config returned by the callback "getNewConfig".
+     */
+    using GetNewConfigFn = std::function<StatusWith<ReplSetConfig>(const ReplSetConfig& oldConfig,
+                                                                   long long currentTerm)>;
+    virtual Status doReplSetReconfig(OperationContext* opCtx,
+                                     GetNewConfigFn getNewConfig,
+                                     bool force) = 0;
 
     /*
      * Handles an incoming replSetInitiate command. If "configObj" is empty, generates a default
@@ -994,6 +1007,28 @@ public:
      * stale unless run from the primary with the RSTL held.
      */
     virtual HostAndPort getCurrentPrimaryHostAndPort() const = 0;
+
+    /*
+     * Cancels the callback referenced in the given callback handle.
+     * This function expects the activeHandle to be valid.
+     */
+    virtual void cancelCbkHandle(executor::TaskExecutor::CallbackHandle activeHandle) = 0;
+
+    using OnRemoteCmdScheduledFn = std::function<void(executor::TaskExecutor::CallbackHandle)>;
+    using OnRemoteCmdCompleteFn = std::function<void(executor::TaskExecutor::CallbackHandle)>;
+    /**
+     * Runs the given command 'cmdObj' on primary and waits till the response for that command is
+     * received. If the node is primary, then the command will be executed using DBDirectClient to
+     * avoid tcp network calls. Otherwise, the node will execute the remote command using the repl
+     * task executor (AsyncDBClient).
+     * - 'OnRemoteCmdScheduled' will be called once the remote command is scheduled.
+     * - 'OnRemoteCmdComplete' will be called once the response for the remote command is received.
+     */
+    virtual BSONObj runCmdOnPrimaryAndAwaitResponse(OperationContext* opCtx,
+                                                    const std::string& dbName,
+                                                    const BSONObj& cmdObj,
+                                                    OnRemoteCmdScheduledFn onRemoteCmdScheduled,
+                                                    OnRemoteCmdCompleteFn onRemoteCmdComplete) = 0;
 
 protected:
     ReplicationCoordinator();

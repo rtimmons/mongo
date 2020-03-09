@@ -1,6 +1,6 @@
 // Helper functions for testing index builds.
 
-class IndexBuildTest {
+var IndexBuildTest = class {
     /**
      * Starts an index build in a separate mongo shell process with given options.
      * Ensures the index build worked or failed with one of the expected failures.
@@ -212,10 +212,9 @@ class IndexBuildTest {
     /**
      * Returns true if majority commit quorum is supported by two phase index builds.
      */
-    static supportsIndexBuildMajorityCommitQuorum(conn) {
+    static IndexBuildCommitQuorumEnabled(conn) {
         return assert
-            .commandWorked(
-                conn.adminCommand({getParameter: 1, enableIndexBuildMajorityCommitQuorum: 1}))
-            .enableIndexBuildMajorityCommitQuorum;
+            .commandWorked(conn.adminCommand({getParameter: 1, enableIndexBuildCommitQuorum: 1}))
+            .enableIndexBuildCommitQuorum;
     }
-}
+};

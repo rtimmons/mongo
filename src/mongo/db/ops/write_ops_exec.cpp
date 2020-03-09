@@ -27,7 +27,6 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kWrite
 #define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kWrite
 
 #include "mongo/platform/basic.h"
@@ -669,11 +668,8 @@ static SingleWriteResult performSingleUpdateOp(OperationContext* opCtx,
 
     assertCanWrite_inlock(opCtx, ns);
 
-    auto exec = uassertStatusOK(getExecutorUpdate(opCtx,
-                                                  &curOp.debug(),
-                                                  collection->getCollection(),
-                                                  &parsedUpdate,
-                                                  boost::none /* verbosity */));
+    auto exec = uassertStatusOK(getExecutorUpdate(
+        &curOp.debug(), collection->getCollection(), &parsedUpdate, boost::none /* verbosity */));
 
     {
         stdx::lock_guard<Client> lk(*opCtx->getClient());
@@ -771,8 +767,9 @@ static SingleWriteResult performSingleUpdateOpWithDupKeyRetry(OperationContext* 
                 throw;
             }
 
-            logAndBackoff(::mongo::logger::LogComponent::kWrite,
-                          logger::LogSeverity::Debug(1),
+            logAndBackoff(4640402,
+                          ::mongo::logv2::LogComponent::kWrite,
+                          logv2::LogSeverity::Debug(1),
                           numAttempts,
                           str::stream()
                               << "Caught DuplicateKey exception during upsert for namespace "
@@ -881,6 +878,7 @@ static SingleWriteResult performSingleDeleteOp(OperationContext* opCtx,
     request.setYieldPolicy(opCtx->inMultiDocumentTransaction() ? PlanExecutor::INTERRUPT_ONLY
                                                                : PlanExecutor::YIELD_AUTO);
     request.setStmtId(stmtId);
+    request.setHint(op.getHint());
 
     ParsedDelete parsedDelete(opCtx, &request);
     uassertStatusOK(parsedDelete.parseRequest());
@@ -911,11 +909,8 @@ static SingleWriteResult performSingleDeleteOp(OperationContext* opCtx,
     CurOpFailpointHelpers::waitWhileFailPointEnabled(
         &hangWithLockDuringBatchRemove, opCtx, "hangWithLockDuringBatchRemove");
 
-    auto exec = uassertStatusOK(getExecutorDelete(opCtx,
-                                                  &curOp.debug(),
-                                                  collection.getCollection(),
-                                                  &parsedDelete,
-                                                  boost::none /* verbosity */));
+    auto exec = uassertStatusOK(getExecutorDelete(
+        &curOp.debug(), collection.getCollection(), &parsedDelete, boost::none /* verbosity */));
 
     {
         stdx::lock_guard<Client> lk(*opCtx->getClient());

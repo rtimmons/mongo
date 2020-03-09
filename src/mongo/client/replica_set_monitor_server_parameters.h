@@ -27,54 +27,16 @@
  *    it in the license file.
  */
 
-#include "mongo/s/client/hedging_metrics.h"
+#pragma once
+
+#include "mongo/platform/atomic_word.h"
+#include "mongo/platform/basic.h"
+#include "mongo/util/str.h"
 
 namespace mongo {
 
-namespace {
-const auto HedgingMetricsDecoration = ServiceContext::declareDecoration<HedgingMetrics>();
-}  // namespace
-
-HedgingMetrics* HedgingMetrics::get(ServiceContext* service) {
-    return &HedgingMetricsDecoration(service);
-}
-
-HedgingMetrics* HedgingMetrics::get(OperationContext* opCtx) {
-    return get(opCtx->getServiceContext());
-}
-
-long long HedgingMetrics::getNumTotalOperations() const {
-    return _numTotalOperations.load();
-}
-
-void HedgingMetrics::incrementNumTotalOperations() {
-    _numTotalOperations.fetchAndAdd(1);
-}
-
-long long HedgingMetrics::getNumTotalHedgedOperations() const {
-    return _numTotalHedgedOperations.load();
-}
-
-void HedgingMetrics::incrementNumTotalHedgedOperations() {
-    _numTotalHedgedOperations.fetchAndAdd(1);
-}
-
-long long HedgingMetrics::getNumAdvantageouslyHedgedOperations() const {
-    return _numAdvantageouslyHedgedOperations.load();
-}
-
-void HedgingMetrics::incrementNumAdvantageouslyHedgedOperations() {
-    _numAdvantageouslyHedgedOperations.fetchAndAdd(1);
-}
-
-BSONObj HedgingMetrics::toBSON() const {
-    BSONObjBuilder builder;
-
-    builder.append("numTotalOperations", _numTotalOperations.load());
-    builder.append("numTotalHedgedOperations", _numTotalHedgedOperations.load());
-    builder.append("numAdvantageouslyHedgedOperations", _numAdvantageouslyHedgedOperations.load());
-
-    return builder.obj();
-}
+enum class ReplicaSetMonitorProtocol { kScanning, kSdam };
+extern ReplicaSetMonitorProtocol gReplicaSetMonitorProtocol;
+std::string toString(ReplicaSetMonitorProtocol protocol);
 
 }  // namespace mongo

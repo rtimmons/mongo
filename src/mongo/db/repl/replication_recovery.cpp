@@ -27,8 +27,9 @@
  *    it in the license file.
  */
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kReplication
-#define LOG_FOR_RECOVERY(level) \
-    MONGO_LOG_COMPONENT(level, ::mongo::logger::LogComponent::kStorageRecovery)
+#define LOGV2_FOR_RECOVERY(ID, DLEVEL, MESSAGE, ...) \
+    LOGV2_DEBUG_OPTIONS(ID, DLEVEL, {logv2::LogComponent::kStorageRecovery}, MESSAGE, ##__VA_ARGS__)
+
 
 #include "mongo/platform/basic.h"
 
@@ -51,7 +52,6 @@
 #include "mongo/db/transaction_history_iterator.h"
 #include "mongo/db/transaction_participant.h"
 #include "mongo/logv2/log.h"
-#include "mongo/util/log.h"
 #include "mongo/util/timer.h"
 
 namespace mongo {
@@ -61,6 +61,8 @@ namespace {
 
 const auto kRecoveryBatchLogLevel = logger::LogSeverity::Debug(2);
 const auto kRecoveryOperationLogLevel = logger::LogSeverity::Debug(3);
+const auto kRecoveryBatchLogLevelV2 = logv2::LogSeverity::Debug(2);
+const auto kRecoveryOperationLogLevelV2 = logv2::LogSeverity::Debug(3);
 
 /**
  * Tracks and logs operations applied during recovery.
@@ -69,21 +71,32 @@ class RecoveryOplogApplierStats : public OplogApplier::Observer {
 public:
     void onBatchBegin(const std::vector<OplogEntry>& batch) final {
         _numBatches++;
-        LOG_FOR_RECOVERY(kRecoveryBatchLogLevel)
-            << "Applying operations in batch: " << _numBatches << "(" << batch.size()
-            << " operations from " << batch.front().getOpTime() << " (inclusive) to "
-            << batch.back().getOpTime()
-            << " (inclusive)). Operations applied so far: " << _numOpsApplied;
+        LOGV2_FOR_RECOVERY(24098,
+                           logSeverityV1toV2(kRecoveryBatchLogLevel).toInt(),
+                           "Applying operations in batch: {numBatches}({batch_size} operations "
+                           "from {batch_front_getOpTime} (inclusive) to {batch_back_getOpTime} "
+                           "(inclusive)). Operations applied so far: {numOpsApplied}",
+                           "numBatches"_attr = _numBatches,
+                           "batch_size"_attr = batch.size(),
+                           "batch_front_getOpTime"_attr = batch.front().getOpTime(),
+                           "batch_back_getOpTime"_attr = batch.back().getOpTime(),
+                           "numOpsApplied"_attr = _numOpsApplied);
 
         _numOpsApplied += batch.size();
-        if (shouldLog(::mongo::logger::LogComponent::kStorageRecovery,
-                      kRecoveryOperationLogLevel)) {
+        if (shouldLog(::mongo::logv2::LogComponent::kStorageRecovery,
+                      kRecoveryOperationLogLevelV2)) {
             std::size_t i = 0;
             for (const auto& entry : batch) {
                 i++;
-                LOG_FOR_RECOVERY(kRecoveryOperationLogLevel)
-                    << "Applying op " << i << " of " << batch.size() << " (in batch " << _numBatches
-                    << ") during replication recovery: " << redact(entry.getRaw());
+                LOGV2_FOR_RECOVERY(
+                    24099,
+                    logSeverityV1toV2(kRecoveryOperationLogLevel).toInt(),
+                    "Applying op {i} of {batch_size} (in batch {numBatches}) during replication "
+                    "recovery: {entry_getRaw}",
+                    "i"_attr = i,
+                    "batch_size"_attr = batch.size(),
+                    "numBatches"_attr = _numBatches,
+                    "entry_getRaw"_attr = redact(entry.getRaw()));
             }
         }
     }
@@ -344,34 +357,34 @@ void ReplicationRecoveryImpl::recoverFromOplogUpTo(OperationContext* opCtx, Time
     // This may take an IS lock on the oplog collection.
     _truncateOplogIfNeededAndThenClearOplogTruncateAfterPoint(opCtx, recoveryTS);
 
-    Timestamp startPoint = _consistencyMarkers->getAppliedThrough(opCtx).getTimestamp();
-    if (startPoint.isNull()) {
-        LOGV2(21539, "No stored oplog entries to apply for recovery.");
-        return;
+    boost::optional<Timestamp> startPoint =
+        _storageInterface->getRecoveryTimestamp(opCtx->getServiceContext());
+    if (!startPoint) {
+        fassert(31436, "No recovery timestamp, cannot recover from the oplog.");
     }
 
     invariant(!endPoint.isNull());
 
-    if (startPoint == endPoint) {
+    if (*startPoint == endPoint) {
         LOGV2(21540,
               "No oplog entries to apply for recovery. Start point '{startPoint}' is at the end "
               "point '{endPoint}' in the oplog.",
               "startPoint"_attr = startPoint,
               "endPoint"_attr = endPoint);
         return;
-    } else if (startPoint > endPoint) {
+    } else if (*startPoint > endPoint) {
         uasserted(ErrorCodes::BadValue,
                   str::stream() << "No oplog entries to apply for recovery. Start point '"
-                                << startPoint.toString() << "' is beyond the end point '"
+                                << startPoint->toString() << "' is beyond the end point '"
                                 << endPoint.toString() << "' in the oplog.");
     }
 
-    Timestamp appliedUpTo = _applyOplogOperations(opCtx, startPoint, endPoint);
+    Timestamp appliedUpTo = _applyOplogOperations(opCtx, *startPoint, endPoint);
     if (appliedUpTo.isNull()) {
         LOGV2(21541,
               "No stored oplog entries to apply for recovery between {startPoint} (inclusive) and "
               "{endPoint} (inclusive).",
-              "startPoint"_attr = startPoint.toString(),
+              "startPoint"_attr = startPoint->toString(),
               "endPoint"_attr = endPoint.toString());
     } else {
         invariant(appliedUpTo <= endPoint);

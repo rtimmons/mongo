@@ -289,7 +289,8 @@ ReplSetConfig ReplicationCoordinatorNoOp::getConfig() const {
     MONGO_UNREACHABLE;
 }
 
-void ReplicationCoordinatorNoOp::processReplSetGetConfig(BSONObjBuilder*) {
+void ReplicationCoordinatorNoOp::processReplSetGetConfig(BSONObjBuilder* result,
+                                                         bool commitmentStatus) {
     MONGO_UNREACHABLE;
 }
 
@@ -318,6 +319,12 @@ Status ReplicationCoordinatorNoOp::processReplSetFreeze(int, BSONObjBuilder*) {
 Status ReplicationCoordinatorNoOp::processReplSetReconfig(OperationContext*,
                                                           const ReplSetReconfigArgs&,
                                                           BSONObjBuilder*) {
+    MONGO_UNREACHABLE;
+}
+
+Status ReplicationCoordinatorNoOp::doReplSetReconfig(OperationContext* opCtx,
+                                                     GetNewConfigFn getNewConfig,
+                                                     bool force) {
     MONGO_UNREACHABLE;
 }
 
@@ -493,6 +500,20 @@ OpTime ReplicationCoordinatorNoOp::getLatestWriteOpTime(OperationContext* opCtx)
 }
 
 HostAndPort ReplicationCoordinatorNoOp::getCurrentPrimaryHostAndPort() const {
+    MONGO_UNREACHABLE;
+}
+
+void ReplicationCoordinatorNoOp::cancelCbkHandle(
+    executor::TaskExecutor::CallbackHandle activeHandle) {
+    MONGO_UNREACHABLE;
+}
+
+BSONObj ReplicationCoordinatorNoOp::runCmdOnPrimaryAndAwaitResponse(
+    OperationContext* opCtx,
+    const std::string& dbName,
+    const BSONObj& cmdObj,
+    OnRemoteCmdScheduledFn onRemoteCmdScheduled,
+    OnRemoteCmdCompleteFn onRemoteCmdComplete) {
     MONGO_UNREACHABLE;
 }
 

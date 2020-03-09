@@ -17,6 +17,8 @@ var setLogVerbosity;
 var stopReplicationAndEnforceNewPrimaryToCatchUp;
 var setFailPoint;
 var clearFailPoint;
+var isConfigCommitted;
+var waitForConfigReplication;
 
 (function() {
 "use strict";
@@ -509,5 +511,35 @@ setFailPoint = function(node, failpoint, data = {}) {
 clearFailPoint = function(node, failpoint) {
     jsTestLog("Clearing fail point " + failpoint);
     assert.commandWorked(node.adminCommand({configureFailPoint: failpoint, mode: "off"}));
+};
+
+/**
+ * Returns the replSetGetConfig field 'commitmentStatus', which is true or false.
+ */
+isConfigCommitted = function(node) {
+    let adminDB = node.getDB('admin');
+    return assert.commandWorked(adminDB.runCommand({replSetGetConfig: 1, commitmentStatus: true}))
+        .commitmentStatus;
+};
+
+/**
+ * Wait until the config on the primary becomes committed.
+ */
+waitForConfigReplication = function(primary, nodes) {
+    const nodeHosts = nodes == null ? "all nodes" : tojson(nodes.map((n) => n.host));
+    jsTestLog("Waiting for the config on " + primary.host + " to replicate to " + nodeHosts);
+    assert.soon(function() {
+        const res = primary.adminCommand({replSetGetStatus: 1});
+        const primaryMember = res.members.find((m) => m.self);
+        function hasSameConfig(member) {
+            return member.configVersion === primaryMember.configVersion &&
+                member.configTerm === primaryMember.configTerm;
+        }
+        let members = res.members;
+        if (nodes != null) {
+            members = res.members.filter((m) => nodes.some((node) => m.name === node.host));
+        }
+        return members.every((m) => hasSameConfig(m));
+    });
 };
 }());

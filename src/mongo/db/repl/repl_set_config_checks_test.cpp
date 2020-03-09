@@ -31,6 +31,7 @@
 
 #include "mongo/base/status.h"
 #include "mongo/db/jsobj.h"
+#include "mongo/db/repl/optime.h"
 #include "mongo/db/repl/repl_set_config.h"
 #include "mongo/db/repl/repl_set_config_checks.h"
 #include "mongo/db/repl/replication_coordinator_external_state.h"
@@ -38,11 +39,14 @@
 #include "mongo/db/server_options.h"
 #include "mongo/db/service_context.h"
 #include "mongo/db/service_context_test_fixture.h"
+#include "mongo/unittest/ensure_fcv.h"
 #include "mongo/unittest/unittest.h"
 
 namespace mongo {
 namespace repl {
 namespace {
+
+using unittest::EnsureFCV;
 
 TEST_F(ServiceContextTest, ValidateConfigForInitiate_VersionMustBe1) {
     ReplicationCoordinatorExternalStateMock rses;
@@ -59,20 +63,19 @@ TEST_F(ServiceContextTest, ValidateConfigForInitiate_VersionMustBe1) {
                   validateConfigForInitiate(&rses, config, getGlobalServiceContext()).getStatus());
 }
 
-TEST_F(ServiceContextTest, ValidateConfigForInitiate_TermIsAlwaysInitialTerm) {
+TEST_F(ServiceContextTest, ValidateConfigForInitiate_TermIsAlwaysUninitializedTerm) {
     ReplicationCoordinatorExternalStateMock rses;
     rses.addSelf(HostAndPort("h1"));
 
     ReplSetConfig config;
-    ASSERT_OK(
-        config.initializeForInitiate(BSON("_id"
-                                          << "rs0"
-                                          << "version" << 1 << "term" << (OpTime::kInitialTerm + 1)
-                                          << "protocolVersion" << 1 << "members"
-                                          << BSON_ARRAY(BSON("_id" << 1 << "host"
-                                                                   << "h1")))));
+    ASSERT_OK(config.initializeForInitiate(BSON("_id"
+                                                << "rs0"
+                                                << "version" << 1 << "term" << 999
+                                                << "protocolVersion" << 1 << "members"
+                                                << BSON_ARRAY(BSON("_id" << 1 << "host"
+                                                                         << "h1")))));
     ASSERT_OK(validateConfigForInitiate(&rses, config, getGlobalServiceContext()).getStatus());
-    ASSERT_EQUALS(config.getConfigTerm(), OpTime::kInitialTerm);
+    ASSERT_EQUALS(config.getConfigTerm(), OpTime::kUninitializedTerm);
 }
 
 TEST_F(ServiceContextTest, ValidateConfigForInitiate_MustFindSelf) {
@@ -244,21 +247,11 @@ TEST_F(ServiceContextTest, ValidateConfigForReconfig_NewConfigVersionNumberMustB
                   validateConfigForReconfig(
                       &externalState, oldConfig, oldConfig, getGlobalServiceContext(), false)
                       .getStatus());
-    // Forced reconfigs also do not allow this.
-    ASSERT_EQUALS(ErrorCodes::NewReplicaSetConfigurationIncompatible,
-                  validateConfigForReconfig(
-                      &externalState, oldConfig, oldConfig, getGlobalServiceContext(), true)
-                      .getStatus());
 
     // Cannot reconfig from new to old (versions must increase).
     ASSERT_EQUALS(ErrorCodes::NewReplicaSetConfigurationIncompatible,
                   validateConfigForReconfig(
                       &externalState, newConfig, oldConfig, getGlobalServiceContext(), false)
-                      .getStatus());
-    // Forced reconfigs also do not allow this.
-    ASSERT_EQUALS(ErrorCodes::NewReplicaSetConfigurationIncompatible,
-                  validateConfigForReconfig(
-                      &externalState, newConfig, oldConfig, getGlobalServiceContext(), true)
                       .getStatus());
 }
 
@@ -1108,6 +1101,20 @@ TEST_F(ServiceContextTest, ValidateForReconfig_MultiNodeRemovalDisallowed) {
     BSONArray newMembers = BSON_ARRAY(m1 << m2);  // remove 2 voting nodes.
     ASSERT_EQUALS(ErrorCodes::InvalidReplicaSetConfig,
                   validateMemberReconfig(oldMembers, newMembers, m1));
+}
+
+TEST_F(ServiceContextTest, ValidateForReconfig_MultiNodeAdditionAllowedFCV42) {
+    EnsureFCV fcv{ServerGlobalParams::FeatureCompatibility::Version::kFullyDowngradedTo42};
+    BSONArray oldMembers = BSON_ARRAY(m1 << m2);
+    BSONArray newMembers = BSON_ARRAY(m1 << m2 << m3 << m4);  // add 2 voting nodes.
+    ASSERT_OK(validateMemberReconfig(oldMembers, newMembers, m1));
+}
+
+TEST_F(ServiceContextTest, ValidateForReconfig_MultiNodeRemovalAllowedFCV42) {
+    EnsureFCV fcv{ServerGlobalParams::FeatureCompatibility::Version::kFullyDowngradedTo42};
+    BSONArray oldMembers = BSON_ARRAY(m1 << m2 << m3 << m4);
+    BSONArray newMembers = BSON_ARRAY(m1 << m2);  // remove 2 voting nodes.
+    ASSERT_OK(validateMemberReconfig(oldMembers, newMembers, m1));
 }
 
 TEST_F(ServiceContextTest, ValidateForReconfig_MultiNodeAdditionOfNonVotingNodesAllowed) {

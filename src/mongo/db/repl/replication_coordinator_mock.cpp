@@ -332,7 +332,8 @@ void ReplicationCoordinatorMock::setGetConfigReturnValue(ReplSetConfig returnVal
     _getConfigReturnValue = std::move(returnValue);
 }
 
-void ReplicationCoordinatorMock::processReplSetGetConfig(BSONObjBuilder* result) {
+void ReplicationCoordinatorMock::processReplSetGetConfig(BSONObjBuilder* result,
+                                                         bool commitmentStatus) {
     // TODO
 }
 
@@ -376,6 +377,12 @@ Status ReplicationCoordinatorMock::processReplSetFreeze(int secs, BSONObjBuilder
 Status ReplicationCoordinatorMock::processReplSetReconfig(OperationContext* opCtx,
                                                           const ReplSetReconfigArgs& args,
                                                           BSONObjBuilder* resultObj) {
+    return Status::OK();
+}
+
+Status ReplicationCoordinatorMock::doReplSetReconfig(OperationContext* opCtx,
+                                                     GetNewConfigFn getNewConfig,
+                                                     bool force) {
     return Status::OK();
 }
 
@@ -596,5 +603,18 @@ HostAndPort ReplicationCoordinatorMock::getCurrentPrimaryHostAndPort() const {
     return HostAndPort();
 }
 
+void ReplicationCoordinatorMock::cancelCbkHandle(
+    executor::TaskExecutor::CallbackHandle activeHandle) {
+    MONGO_UNREACHABLE;
+}
+
+BSONObj ReplicationCoordinatorMock::runCmdOnPrimaryAndAwaitResponse(
+    OperationContext* opCtx,
+    const std::string& dbName,
+    const BSONObj& cmdObj,
+    OnRemoteCmdScheduledFn onRemoteCmdScheduled,
+    OnRemoteCmdCompleteFn onRemoteCmdComplete) {
+    return BSON("ok" << 1);
+}
 }  // namespace repl
 }  // namespace mongo

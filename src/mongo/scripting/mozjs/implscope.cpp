@@ -52,7 +52,6 @@
 #include "mongo/scripting/mozjs/valuereader.h"
 #include "mongo/scripting/mozjs/valuewriter.h"
 #include "mongo/util/assert_util.h"
-#include "mongo/util/log.h"
 #include "mongo/util/scopeguard.h"
 
 #if !defined(__has_feature)
@@ -137,6 +136,7 @@ void MozJSImplScope::registerOperation(OperationContext* opCtx) {
 
     _opCtx = opCtx;
     _opId = opCtx->getOpID();
+    _opCtxThreadId = stdx::this_thread::get_id();
 
     _engine->registerOperation(opCtx, this);
 }
@@ -154,7 +154,7 @@ void MozJSImplScope::kill() {
 
         // If we are on the right thread, in the middle of an operation, and we have a registered
         // opCtx, then we should check the opCtx for interrupts.
-        if (_mr._thread.get_id() == stdx::this_thread::get_id() && _inOp > 0 && _opCtx) {
+        if (_opCtxThreadId == stdx::this_thread::get_id() && _inOp > 0 && _opCtx) {
             _killStatus = _opCtx->checkForInterruptNoAssert();
         }
 
@@ -220,7 +220,7 @@ bool MozJSImplScope::_interruptCallback(JSContext* cx) {
 }
 
 void MozJSImplScope::_gcCallback(JSContext* rt, JSGCStatus status, void* data) {
-    if (!shouldLog(logger::LogSeverity::Debug(1))) {
+    if (!shouldLog(logv2::LogSeverity::Debug(1))) {
         // don't collect stats unless verbose
         return;
     }

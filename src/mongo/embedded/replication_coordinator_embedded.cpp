@@ -314,7 +314,8 @@ ReplSetConfig ReplicationCoordinatorEmbedded::getConfig() const {
     UASSERT_NOT_IMPLEMENTED;
 }
 
-void ReplicationCoordinatorEmbedded::processReplSetGetConfig(BSONObjBuilder*) {
+void ReplicationCoordinatorEmbedded::processReplSetGetConfig(BSONObjBuilder*,
+                                                             bool commitmentStatus) {
     UASSERT_NOT_IMPLEMENTED;
 }
 
@@ -343,6 +344,12 @@ Status ReplicationCoordinatorEmbedded::processReplSetFreeze(int, BSONObjBuilder*
 Status ReplicationCoordinatorEmbedded::processReplSetReconfig(OperationContext*,
                                                               const ReplSetReconfigArgs&,
                                                               BSONObjBuilder*) {
+    UASSERT_NOT_IMPLEMENTED;
+}
+
+Status ReplicationCoordinatorEmbedded::doReplSetReconfig(OperationContext* opCtx,
+                                                         GetNewConfigFn getNewConfig,
+                                                         bool force) {
     UASSERT_NOT_IMPLEMENTED;
 }
 
@@ -519,6 +526,20 @@ OpTime ReplicationCoordinatorEmbedded::getLatestWriteOpTime(OperationContext* op
 
 HostAndPort ReplicationCoordinatorEmbedded::getCurrentPrimaryHostAndPort() const {
     UASSERT_NOT_IMPLEMENTED;
+}
+
+void ReplicationCoordinatorEmbedded::cancelCbkHandle(
+    executor::TaskExecutor::CallbackHandle activeHandle) {
+    MONGO_UNREACHABLE;
+}
+
+BSONObj ReplicationCoordinatorEmbedded::runCmdOnPrimaryAndAwaitResponse(
+    OperationContext* opCtx,
+    const std::string& dbName,
+    const BSONObj& cmdObj,
+    OnRemoteCmdScheduledFn onRemoteCmdScheduled,
+    OnRemoteCmdCompleteFn onRemoteCmdComplete) {
+    MONGO_UNREACHABLE;
 }
 
 }  // namespace embedded

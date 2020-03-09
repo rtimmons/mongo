@@ -146,7 +146,10 @@ BSONObj createCommandForMergingShard(Document serializedCommand,
         mergeCmd.remove("readConcern");
     }
 
-    return mergeCmd.freeze().toBson();
+    return applyReadWriteConcern(mergeCtx->opCtx,
+                                 !(txnRouter && mergingShardContributesData), /* appendRC */
+                                 !mergeCtx->explain,                          /* appendWC */
+                                 mergeCmd.freeze().toBson());
 }
 
 Status dispatchMergingPipeline(const boost::intrusive_ptr<ExpressionContext>& expCtx,
@@ -389,7 +392,10 @@ DispatchShardPipelineResults dispatchExchangeConsumerPipeline(
             expCtx, serializedCommand, consumerPipelines.back(), boost::none, false);
 
         requests.emplace_back(shardDispatchResults->exchangeSpec->consumerShards[idx],
-                              consumerCmdObj);
+                              applyReadWriteConcern(opCtx,
+                                                    true,             /* appendRC */
+                                                    !expCtx->explain, /* appendWC */
+                                                    consumerCmdObj));
     }
     auto cursors = establishCursors(opCtx,
                                     Grid::get(opCtx)->getExecutorPool()->getArbitraryExecutor(),
@@ -459,77 +465,6 @@ ClusterClientCursorGuard convertPipelineToRouterStages(
         std::make_unique<RouterStageRemoveMetadataFields>(
             opCtx, std::move(root), Document::allMetadataFieldNames),
         std::move(cursorParams));
-}
-
-Status appendExplainResults(DispatchShardPipelineResults&& dispatchResults,
-                            const boost::intrusive_ptr<ExpressionContext>& mergeCtx,
-                            BSONObjBuilder* result) {
-    if (dispatchResults.splitPipeline) {
-        auto* mergePipeline = dispatchResults.splitPipeline->mergePipeline.get();
-        const char* mergeType = [&]() {
-            if (mergePipeline->canRunOnMongos()) {
-                return "mongos";
-            } else if (dispatchResults.exchangeSpec) {
-                return "exchange";
-            } else if (mergePipeline->needsPrimaryShardMerger()) {
-                return "primaryShard";
-            } else {
-                return "anyShard";
-            }
-        }();
-
-        *result << "mergeType" << mergeType;
-
-        MutableDocument pipelinesDoc;
-        // We specify "queryPlanner" verbosity when building the output for "shardsPart" because
-        // execution stats are reported by each shard individually.
-        pipelinesDoc.addField("shardsPart",
-                              Value(dispatchResults.splitPipeline->shardsPipeline->writeExplainOps(
-                                  ExplainOptions::Verbosity::kQueryPlanner)));
-        if (dispatchResults.exchangeSpec) {
-            BSONObjBuilder bob;
-            dispatchResults.exchangeSpec->exchangeSpec.serialize(&bob);
-            bob.append("consumerShards", dispatchResults.exchangeSpec->consumerShards);
-            pipelinesDoc.addField("exchange", Value(bob.obj()));
-        }
-        // We specify "queryPlanner" verbosity because execution stats are not currently
-        // supported when building the output for "mergerPart".
-        pipelinesDoc.addField(
-            "mergerPart",
-            Value(mergePipeline->writeExplainOps(ExplainOptions::Verbosity::kQueryPlanner)));
-
-        *result << "splitPipeline" << pipelinesDoc.freeze();
-    } else {
-        *result << "splitPipeline" << BSONNULL;
-    }
-
-    BSONObjBuilder shardExplains(result->subobjStart("shards"));
-    for (const auto& shardResult : dispatchResults.remoteExplainOutput) {
-        invariant(shardResult.shardHostAndPort);
-
-        uassertStatusOK(shardResult.swResponse.getStatus());
-        uassertStatusOK(getStatusFromCommandResult(shardResult.swResponse.getValue().data));
-
-        auto shardId = shardResult.shardId.toString();
-        const auto& data = shardResult.swResponse.getValue().data;
-        BSONObjBuilder explain(shardExplains.subobjStart(shardId));
-        explain << "host" << shardResult.shardHostAndPort->toString();
-        if (auto stagesElement = data["stages"]) {
-            explain << "stages" << stagesElement;
-        } else {
-            auto queryPlannerElement = data["queryPlanner"];
-            uassert(51157,
-                    str::stream() << "Malformed explain response received from shard " << shardId
-                                  << ": " << data.toString(),
-                    queryPlannerElement);
-            explain << "queryPlanner" << queryPlannerElement;
-            if (auto executionStatsElement = data["executionStats"]) {
-                explain << "executionStats" << executionStatsElement;
-            }
-        }
-    }
-
-    return Status::OK();
 }
 
 /**
@@ -768,7 +703,8 @@ Status dispatchPipelineAndMerge(OperationContext* opCtx,
     // If the operation is an explain, then we verify that it succeeded on all targeted
     // shards, write the results to the output builder, and return immediately.
     if (expCtx->explain) {
-        return appendExplainResults(std::move(shardDispatchResults), expCtx, result);
+        return sharded_agg_helpers::appendExplainResults(
+            std::move(shardDispatchResults), expCtx, result);
     }
 
     // If this isn't an explain, then we must have established cursors on at least one

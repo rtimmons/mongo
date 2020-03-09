@@ -19,6 +19,11 @@ const secondary = rst.getSecondary();
 const primaryAdminDB = primary.getDB("admin");
 const secondaryAdminDB = secondary.getDB("admin");
 
+// This test manually runs isMaster with internalClient, which means that to the mongod, the
+// connection appears to be from another server. Since mongod expects other cluster members to
+// always include explicit read/write concern (on commands that accept read/write concern), this
+// test must be careful to mimic this behavior.
+
 // Get the server topologyVersion, minWireVersion, and maxWireversion.
 const primaryResult = assert.commandWorked(primaryAdminDB.runCommand(
     {isMaster: 1, internalClient: {minWireVersion: NumberInt(0), maxWireVersion: NumberInt(9)}}));
@@ -40,7 +45,7 @@ assert(secondaryTopologyVersion.hasOwnProperty("counter"), tojson(secondaryTopol
 function runAwaitableIsMasterBeforeFCVChange(
     topologyVersionField, isUpgrade, isPrimary, prevMinWireVersion, serverMaxWireVersion) {
     db.getMongo().setSlaveOk();
-    const firstResponse = assert.commandWorked(db.runCommand({
+    let response = assert.commandWorked(db.runCommand({
         isMaster: 1,
         topologyVersion: topologyVersionField,
         maxAwaitTimeMS: 99999999,
@@ -48,26 +53,37 @@ function runAwaitableIsMasterBeforeFCVChange(
             {minWireVersion: NumberInt(0), maxWireVersion: NumberInt(serverMaxWireVersion)},
     }));
 
+    // On downgrade from 4.4 to 4.2, the primary will reconfig the replset and signal isMaster.
+    if (prevMinWireVersion === response.minWireVersion) {
+        jsTestLog("Min wire version didn't change: " + prevMinWireVersion + ". Retry isMaster.");
+        topologyVersionField = response.topologyVersion;
+        response = assert.commandWorked(db.runCommand({
+            isMaster: 1,
+            topologyVersion: topologyVersionField,
+            maxAwaitTimeMS: 99999999,
+            internalClient:
+                {minWireVersion: NumberInt(0), maxWireVersion: NumberInt(serverMaxWireVersion)},
+        }));
+    }
     // We only expect to increment the server TopologyVersion when the minWireVersion has changed.
     // This can only happen in two scenarios:
     // 1. Setting featureCompatibilityVersion from downgrading to fullyDowngraded.
     // 2. Setting featureCompatibilityVersion from fullyDowngraded to upgrading.
-    assert.eq(
-        topologyVersionField.counter + 1, firstResponse.topologyVersion.counter, firstResponse);
+    assert.eq(topologyVersionField.counter + 1, response.topologyVersion.counter, response);
     const expectedIsMasterValue = isPrimary;
     const expectedSecondaryValue = !isPrimary;
 
-    assert.eq(expectedIsMasterValue, firstResponse.ismaster, firstResponse);
-    assert.eq(expectedSecondaryValue, firstResponse.secondary, firstResponse);
+    assert.eq(expectedIsMasterValue, response.ismaster, response);
+    assert.eq(expectedSecondaryValue, response.secondary, response);
 
-    const minWireVersion = firstResponse.minWireVersion;
-    const maxWireVersion = firstResponse.maxWireVersion;
+    const minWireVersion = response.minWireVersion;
+    const maxWireVersion = response.maxWireVersion;
     assert.neq(prevMinWireVersion, minWireVersion);
     if (isUpgrade) {
         // minWireVersion should always equal maxWireVersion if we have not fully downgraded FCV.
-        assert.eq(minWireVersion, maxWireVersion, firstResponse);
+        assert.eq(minWireVersion, maxWireVersion, response);
     } else {
-        assert.eq(minWireVersion + 1, maxWireVersion, firstResponse);
+        assert.eq(minWireVersion + 1, maxWireVersion, response);
     }
 }
 
@@ -98,13 +114,15 @@ primaryFailPoint.wait();
 secondaryFailPoint.wait();
 
 // Setting the FCV to the same version will not trigger an isMaster response.
-assert.commandWorked(primaryAdminDB.runCommand({setFeatureCompatibilityVersion: latestFCV}));
+assert.commandWorked(
+    primaryAdminDB.runCommand({setFeatureCompatibilityVersion: latestFCV, writeConcern: {w: 1}}));
 checkFCV(primaryAdminDB, latestFCV);
 checkFCV(secondaryAdminDB, latestFCV);
 
 jsTestLog("Downgrade the featureCompatibilityVersion.");
 // Downgrading the FCV will cause the isMaster requests to respond on both primary and secondary.
-assert.commandWorked(primaryAdminDB.runCommand({setFeatureCompatibilityVersion: lastStableFCV}));
+assert.commandWorked(primaryAdminDB.runCommand(
+    {setFeatureCompatibilityVersion: lastStableFCV, writeConcern: {w: 1}}));
 awaitIsMasterBeforeDowngradeFCVOnPrimary();
 awaitIsMasterBeforeDowngradeFCVOnSecondary();
 // Ensure the featureCompatibilityVersion document update has been replicated.
@@ -151,13 +169,15 @@ primaryFailPoint.wait();
 secondaryFailPoint.wait();
 
 // Setting the FCV to the same version will not trigger an isMaster response.
-assert.commandWorked(primaryAdminDB.runCommand({setFeatureCompatibilityVersion: lastStableFCV}));
+assert.commandWorked(primaryAdminDB.runCommand(
+    {setFeatureCompatibilityVersion: lastStableFCV, writeConcern: {w: 1}}));
 checkFCV(primaryAdminDB, lastStableFCV);
 checkFCV(secondaryAdminDB, lastStableFCV);
 
 jsTestLog("Upgrade the featureCompatibilityVersion.");
 // Upgrading the FCV will cause the isMaster requests to respond on both primary and secondary.
-assert.commandWorked(primaryAdminDB.runCommand({setFeatureCompatibilityVersion: latestFCV}));
+assert.commandWorked(
+    primaryAdminDB.runCommand({setFeatureCompatibilityVersion: latestFCV, writeConcern: {w: 1}}));
 awaitIsMasterBeforeUpgradeFCVOnPrimary();
 awaitIsMasterBeforeUpgradeFCVOnSecondary();
 // Ensure the featureCompatibilityVersion document update has been replicated.

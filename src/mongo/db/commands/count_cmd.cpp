@@ -168,10 +168,13 @@ public:
 
         // Prevent chunks from being cleaned up during yields - this allows us to only check the
         // version on initial entry into count.
-        auto rangePreserver = CollectionShardingState::get(opCtx, nss)->getCurrentMetadata();
+        auto rangePreserver = CollectionShardingState::get(opCtx, nss)->getCollectionDescription();
+
+        auto expCtx = makeExpressionContextForGetExecutor(
+            opCtx, request.getCollation().value_or(BSONObj()), nss);
 
         auto statusWithPlanExecutor =
-            getExecutorCount(opCtx, collection, request, true /*explain*/, nss);
+            getExecutorCount(expCtx, collection, request, true /*explain*/, nss);
         if (!statusWithPlanExecutor.isOK()) {
             return statusWithPlanExecutor.getStatus();
         }
@@ -225,10 +228,15 @@ public:
 
         // Prevent chunks from being cleaned up during yields - this allows us to only check the
         // version on initial entry into count.
-        auto rangePreserver = CollectionShardingState::get(opCtx, nss)->getCurrentMetadata();
+        auto rangePreserver = CollectionShardingState::get(opCtx, nss)->getCollectionDescription();
 
         auto statusWithPlanExecutor =
-            getExecutorCount(opCtx, collection, request, false /*explain*/, nss);
+            getExecutorCount(makeExpressionContextForGetExecutor(
+                                 opCtx, request.getCollation().value_or(BSONObj()), nss),
+                             collection,
+                             request,
+                             false /*explain*/,
+                             nss);
         uassertStatusOK(statusWithPlanExecutor.getStatus());
 
         auto exec = std::move(statusWithPlanExecutor.getValue());

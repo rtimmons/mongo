@@ -47,6 +47,7 @@
 #include "mongo/platform/random.h"
 #include "mongo/util/base64.h"
 #include "mongo/util/concurrency/mutex.h"
+#include "mongo/util/fail_point.h"
 #include "mongo/util/net/cidr.h"
 #include "mongo/util/net/private/ssl_expiration.h"
 #include "mongo/util/net/socket_exception.h"
@@ -69,6 +70,9 @@ extern "C" SecIdentityRef SecIdentityCreate(CFAllocatorRef, SecCertificateRef, S
 namespace mongo {
 
 namespace {
+
+// This failpoint is a no-op on OSX.
+MONGO_FAIL_POINT_DEFINE(disableStapling);
 
 template <typename T>
 constexpr T cf_cast(::CFTypeRef val) {
@@ -1508,6 +1512,19 @@ Future<SSLPeerInfo> SSLManagerApple::parseAndValidatePeerCertificate(
     auto swCIDRRemoteHost = CIDR::parse(remoteHost);
     if (swCIDRRemoteHost.isOK() && remoteHost.find(':') != std::string::npos) {
         ipv6 = true;
+    }
+
+    if (tlsOCSPEnabled && !remoteHost.empty()) {
+        CFArrayRef policies = nullptr;
+        ::SecTrustCopyPolicies(cftrust.get(), &policies);
+        CFUniquePtr<::CFArrayRef> cfpolicies(policies);
+
+        CFUniquePtr<::CFMutableArrayRef> policiesMutable(
+            ::CFArrayCreateMutableCopy(NULL, 0, policies));
+        CFUniquePtr<::SecPolicyRef> cfRevPolicy(
+            ::SecPolicyCreateRevocation(kSecRevocationOCSPMethod));
+        ::CFArrayAppendValue(policiesMutable.get(), cfRevPolicy.get());
+        ::SecTrustSetPolicies(cftrust.get(), policiesMutable.get());
     }
 
     auto result = ::kSecTrustResultInvalid;

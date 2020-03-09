@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2020-present MongoDB, Inc.
+ *    Copyright (C) 2019-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -26,34 +26,12 @@
  *    exception statement from all source files in the program, then also delete
  *    it in the license file.
  */
-
 #pragma once
 
-namespace mongo {
-
-class NamespaceString;
-class OperationContext;
-struct ValidateResults;
-
-/**
- * Helpers to facilitate unit test debugging in the case of test failure.
- */
-namespace StorageDebugUtil {
-
-/**
- * Prints all the document entries in the collection table and index tables associated with
- * 'coll'.
- *
- * This is useful to facilitate debugging validate unit test failures: to more easily
- * distinguish between validate code bugs and test or data persistence bugs.
- */
-void printCollectionAndIndexTableEntries(OperationContext* opCtx, const NamespaceString& nss);
-
-/**
- * Prints the parsed contents of 'results'.
- */
-void printValidateResults(const ValidateResults& results);
-
-}  // namespace StorageDebugUtil
-
-}  // namespace mongo
+#include "mongo/client/sdam/sdam.h"
+#include "mongo/client/sdam/sdam_datatypes.h"
+#include "mongo/client/sdam/server_description.h"
+#include "mongo/client/sdam/server_selector.h"
+#include "mongo/client/sdam/topology_description.h"
+#include "mongo/client/sdam/topology_listener.h"
+#include "mongo/client/sdam/topology_manager.h"

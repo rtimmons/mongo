@@ -875,7 +875,7 @@ Status _updateWithQuery(OperationContext* opCtx,
         }
 
         auto planExecutorResult = mongo::getExecutorUpdate(
-            opCtx, nullptr, collection, &parsedUpdate, boost::none /* verbosity */);
+            nullptr, collection, &parsedUpdate, boost::none /* verbosity */);
         if (!planExecutorResult.isOK()) {
             return planExecutorResult.getStatus();
         }
@@ -1004,7 +1004,7 @@ Status StorageInterfaceImpl::deleteByFilter(OperationContext* opCtx,
         auto collection = collectionResult.getValue();
 
         auto planExecutorResult = mongo::getExecutorDelete(
-            opCtx, nullptr, collection, &parsedDelete, boost::none /* verbosity */);
+            nullptr, collection, &parsedDelete, boost::none /* verbosity */);
         if (!planExecutorResult.isOK()) {
             return planExecutorResult.getStatus();
         }
@@ -1046,12 +1046,34 @@ boost::optional<BSONObj> StorageInterfaceImpl::findOplogEntryLessThanOrEqualToTi
 }
 
 Timestamp StorageInterfaceImpl::getLatestOplogTimestamp(OperationContext* opCtx) {
-    AutoGetCollectionForReadCommand autoColl(opCtx, NamespaceString::kRsOplogNamespace);
-    auto statusWithTimestamp =
-        autoColl.getCollection()->getRecordStore()->getLatestOplogTimestamp(opCtx);
+    auto statusWithTimestamp = [&]() {
+        AutoGetCollectionForReadCommand autoColl(opCtx, NamespaceString::kRsOplogNamespace);
+        return autoColl.getCollection()->getRecordStore()->getLatestOplogTimestamp(opCtx);
+    }();
+
+    // If the storage engine does not support getLatestOplogTimestamp, then fall back to higher
+    // level (above the storage engine) logic to fetch the latest oplog entry timestamp.
+    if (statusWithTimestamp.getStatus() == ErrorCodes::OplogOperationUnsupported) {
+        // Reset the snapshot so that it is ensured to see the latest oplog entries.
+        opCtx->recoveryUnit()->abandonSnapshot();
+
+        // Helpers::getLast will bypass the oplog visibility rules by doing a backwards collection
+        // scan.
+        BSONObj oplogEntryBSON;
+        invariant(Helpers::getLast(
+            opCtx, NamespaceString::kRsOplogNamespace.ns().c_str(), oplogEntryBSON));
+
+        auto optime = OpTime::parseFromOplogEntry(oplogEntryBSON);
+        invariant(optime.isOK(),
+                  str::stream() << "Found an invalid oplog entry: " << oplogEntryBSON
+                                << ", error: " << optime.getStatus());
+        return optime.getValue().getTimestamp();
+    }
+
     invariant(statusWithTimestamp.isOK(),
               str::stream() << "Expected oplog entries to exist: "
                             << statusWithTimestamp.getStatus());
+
     return statusWithTimestamp.getValue();
 }
 

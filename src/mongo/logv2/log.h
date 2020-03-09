@@ -80,7 +80,7 @@ const ::mongo::logv2::LogComponent MongoLogV2DefaultComponent_component =
 namespace mongo {
 
 #define LOGV2_IMPL(ID, SEVERITY, OPTIONS, MESSAGE, ...) \
-    logv2::detail::doLog(ID, SEVERITY, OPTIONS, FMT_STRING(MESSAGE), ##__VA_ARGS__)
+    ::mongo::logv2::detail::doLog(ID, SEVERITY, OPTIONS, FMT_STRING(MESSAGE), ##__VA_ARGS__)
 
 #define LOGV2(ID, MESSAGE, ...)                                                  \
     LOGV2_IMPL(ID,                                                               \
@@ -174,6 +174,15 @@ namespace mongo {
                         ::mongo::logv2::LogOptions{MongoLogV2DefaultComponent_component}, \
                         MESSAGE,                                                          \
                         ##__VA_ARGS__)
+
+inline bool shouldLog(logv2::LogSeverity severity) {
+    return logv2::LogManager::global().getGlobalSettings().shouldLog(
+        MongoLogV2DefaultComponent_component, severity);
+}
+
+inline bool shouldLog(logv2::LogComponent logComponent, logv2::LogSeverity severity) {
+    return logv2::LogManager::global().getGlobalSettings().shouldLog(logComponent, severity);
+}
 
 }  // namespace mongo
 

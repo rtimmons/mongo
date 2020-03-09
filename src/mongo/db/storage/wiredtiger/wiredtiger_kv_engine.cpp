@@ -28,10 +28,12 @@
  */
 
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
-#define LOG_FOR_RECOVERY(level) \
-    MONGO_LOG_COMPONENT(level, ::mongo::logger::LogComponent::kStorageRecovery)
-#define LOG_FOR_ROLLBACK(level) \
-    MONGO_LOG_COMPONENT(level, ::mongo::logger::LogComponent::kReplicationRollback)
+
+#define LOGV2_FOR_RECOVERY(ID, DLEVEL, MESSAGE, ...) \
+    LOGV2_DEBUG_OPTIONS(ID, DLEVEL, {logv2::LogComponent::kStorageRecovery}, MESSAGE, ##__VA_ARGS__)
+#define LOGV2_FOR_ROLLBACK(ID, DLEVEL, MESSAGE, ...) \
+    LOGV2_DEBUG_OPTIONS(                             \
+        ID, DLEVEL, {logv2::LogComponent::kReplicationRollback}, MESSAGE, ##__VA_ARGS__)
 
 #include "mongo/platform/basic.h"
 
@@ -90,7 +92,6 @@
 #include "mongo/util/concurrency/ticketholder.h"
 #include "mongo/util/debug_util.h"
 #include "mongo/util/exit.h"
-#include "mongo/util/log.h"
 #include "mongo/util/processinfo.h"
 #include "mongo/util/quick_exit.h"
 #include "mongo/util/scopeguard.h"
@@ -251,6 +252,11 @@ public:
 
         // Initialize the thread's opCtx.
         _uniqueCtx.emplace(tc->makeOperationContext());
+
+        // Updates to a non-replicated collection, oplogTruncateAfterPoint, are made by this thread.
+        // Non-replicated writes will not contribute to replication lag and can be safely excluded
+        // from Flow Control.
+        _uniqueCtx->get()->setShouldParticipateInFlowControl(false);
         while (true) {
 
             pauseJournalFlusherThread.pauseWhileSet(_uniqueCtx->get());
@@ -267,6 +273,7 @@ public:
                     stdx::lock_guard<Latch> lk(_opCtxMutex);
                     _uniqueCtx.reset();
                     _uniqueCtx.emplace(tc->makeOperationContext());
+                    _uniqueCtx->get()->setShouldParticipateInFlowControl(false);
                 });
 
                 _sessionCache->waitUntilDurable(
@@ -515,17 +522,24 @@ public:
                     _wiredTigerKVEngine->clearIndividuallyCheckpointedIndexesList();
                     invariantWTOK(s->checkpoint(s, "use_timestamp=false"));
                 } else if (stableTimestamp < initialDataTimestamp) {
-                    LOG_FOR_RECOVERY(2)
-                        << "Stable timestamp is behind the initial data timestamp, skipping "
-                           "a checkpoint. StableTimestamp: "
-                        << stableTimestamp.toString()
-                        << " InitialDataTimestamp: " << initialDataTimestamp.toString();
+                    LOGV2_FOR_RECOVERY(
+                        23985,
+                        2,
+                        "Stable timestamp is behind the initial data timestamp, skipping "
+                        "a checkpoint. StableTimestamp: {stableTimestamp} InitialDataTimestamp: "
+                        "{initialDataTimestamp}",
+                        "stableTimestamp"_attr = stableTimestamp.toString(),
+                        "initialDataTimestamp"_attr = initialDataTimestamp.toString());
                 } else {
                     auto oplogNeededForRollback = _wiredTigerKVEngine->getOplogNeededForRollback();
 
-                    LOG_FOR_RECOVERY(2)
-                        << "Performing stable checkpoint. StableTimestamp: " << stableTimestamp
-                        << ", OplogNeededForRollback: " << toString(oplogNeededForRollback);
+                    LOGV2_FOR_RECOVERY(
+                        23986,
+                        2,
+                        "Performing stable checkpoint. StableTimestamp: {stableTimestamp}, "
+                        "OplogNeededForRollback: {oplogNeededForRollback}",
+                        "stableTimestamp"_attr = stableTimestamp,
+                        "oplogNeededForRollback"_attr = toString(oplogNeededForRollback));
 
                     UniqueWiredTigerSession session = _sessionCache->getSession();
                     WT_SESSION* s = session->getSession();
@@ -830,47 +844,46 @@ WiredTigerKVEngine::WiredTigerKVEngine(const std::string& canonicalName,
     // The setting may have a later setting override it if not using the journal.  We make it
     // unconditional here because even nojournal may need this setting if it is a transition
     // from using the journal.
-    if (!_readOnly) {
-        // If we're readOnly skip all WAL-related settings.
-        ss << "log=(enabled=true,archive=true,path=journal,compressor=";
-        ss << wiredTigerGlobalOptions.journalCompressor << "),";
-        ss << "file_manager=(close_idle_time=" << gWiredTigerFileHandleCloseIdleTime
-           << ",close_scan_interval=" << gWiredTigerFileHandleCloseScanInterval
-           << ",close_handle_minimum=" << gWiredTigerFileHandleCloseMinimum << "),";
-        ss << "statistics_log=(wait=" << wiredTigerGlobalOptions.statisticsLogDelaySecs << "),";
+    ss << "log=(enabled=true,archive=" << (_readOnly ? "false" : "true")
+       << ",path=journal,compressor=";
+    ss << wiredTigerGlobalOptions.journalCompressor << "),";
+    ss << "file_manager=(close_idle_time=" << gWiredTigerFileHandleCloseIdleTime
+       << ",close_scan_interval=" << gWiredTigerFileHandleCloseScanInterval
+       << ",close_handle_minimum=" << gWiredTigerFileHandleCloseMinimum << "),";
+    ss << "statistics_log=(wait=" << wiredTigerGlobalOptions.statisticsLogDelaySecs << "),";
 
-        if (shouldLog(::mongo::logger::LogComponent::kStorageRecovery,
-                      logger::LogSeverity::Debug(3))) {
-            ss << "verbose=[recovery_progress,checkpoint_progress,compact_progress,recovery],";
-        } else {
-            ss << "verbose=[recovery_progress,checkpoint_progress,compact_progress],";
-        }
-
-        if (kDebugBuild) {
-            // Enable debug write-ahead logging for all tables under debug build.
-            ss << "debug_mode=(table_logging=true,";
-            // For select debug builds, support enabling WiredTiger eviction debug mode. This uses
-            // more aggressive eviction tactics, but may have a negative performance impact.
-            if (gWiredTigerEvictionDebugMode) {
-                ss << "eviction=true,";
-            }
-            ss << "),";
-        }
+    if (shouldLog(::mongo::logv2::LogComponent::kStorageRecovery, logv2::LogSeverity::Debug(3))) {
+        ss << "verbose=[recovery_progress,checkpoint_progress,compact_progress,recovery],";
+    } else {
+        ss << "verbose=[recovery_progress,checkpoint_progress,compact_progress],";
     }
+
+    if (kDebugBuild) {
+        // Enable debug write-ahead logging for all tables under debug build.
+        ss << "debug_mode=(table_logging=true,";
+        // For select debug builds, support enabling WiredTiger eviction debug mode. This uses
+        // more aggressive eviction tactics, but may have a negative performance impact.
+        if (gWiredTigerEvictionDebugMode) {
+            ss << "eviction=true,";
+        }
+        ss << "),";
+    }
+
     ss << WiredTigerCustomizationHooks::get(getGlobalServiceContext())
               ->getTableCreateConfig("system");
     ss << WiredTigerExtensions::get(getGlobalServiceContext())->getOpenExtensionsConfig();
     ss << extraOpenOptions;
 
-    if (!_durable && !_readOnly) {
+    if (!_durable) {
         // If we started without the journal, but previously used the journal then open with the
         // WT log enabled to perform any unclean shutdown recovery and then close and reopen in
         // the normal path without the journal.
         if (boost::filesystem::exists(journalPath)) {
             string config = ss.str();
-            LOGV2(22313, "Detected WT journal files.  Running recovery from last checkpoint.");
-            LOGV2(
-                22314, "journal to nojournal transition config: {config}", "config"_attr = config);
+            LOGV2(22313,
+                  "Detected WT journal files. Running recovery from last checkpoint. journal to "
+                  "nojournal transition config",
+                  "config"_attr = config);
             int ret = wiredtiger_open(
                 path.c_str(), _eventHandler.getWtEventHandler(), config.c_str(), &_conn);
             if (ret == EINVAL) {
@@ -896,7 +909,7 @@ WiredTigerKVEngine::WiredTigerKVEngine(const std::string& canonicalName,
     }
 
     string config = ss.str();
-    LOGV2(22315, "wiredtiger_open config: {config}", "config"_attr = config);
+    LOGV2(22315, "wiredtiger_open config", "config"_attr = config);
     _openWiredTiger(path, config);
     _eventHandler.setStartupSuccessful();
     _wtOpenConfig = config;
@@ -908,7 +921,10 @@ WiredTigerKVEngine::WiredTigerKVEngine(const std::string& canonicalName,
         std::uint64_t tmp;
         fassert(50758, NumberParser().base(16)(buf, &tmp));
         _recoveryTimestamp = Timestamp(tmp);
-        LOG_FOR_RECOVERY(0) << "WiredTiger recoveryTimestamp. Ts: " << _recoveryTimestamp;
+        LOGV2_FOR_RECOVERY(23987,
+                           0,
+                           "WiredTiger recoveryTimestamp",
+                           "recoveryTimestamp"_attr = _recoveryTimestamp);
     }
 
     _sessionCache.reset(new WiredTigerSessionCache(this));
@@ -1092,8 +1108,12 @@ void WiredTigerKVEngine::cleanShutdown() {
         _checkpointThread->shutdown();
         LOGV2(22323, "Finished shutting down checkpoint thread");
     }
-    LOG_FOR_RECOVERY(2) << "Shutdown timestamps. StableTimestamp: " << _stableTimestamp.load()
-                        << " Initial data timestamp: " << _initialDataTimestamp.load();
+    LOGV2_FOR_RECOVERY(23988,
+                       2,
+                       "Shutdown timestamps. StableTimestamp: {stableTimestamp_load} Initial data "
+                       "timestamp: {initialDataTimestamp_load}",
+                       "stableTimestamp_load"_attr = _stableTimestamp.load(),
+                       "initialDataTimestamp_load"_attr = _initialDataTimestamp.load());
 
     _sizeStorer.reset();
     _sessionCache->shuttingDown();
@@ -2146,12 +2166,15 @@ StatusWith<Timestamp> WiredTigerKVEngine::recoverToStableTimestamp(OperationCont
                           << ", Stable timestamp: " << stableTS.toString());
     }
 
-    LOG_FOR_ROLLBACK(2) << "WiredTiger::RecoverToStableTimestamp syncing size storer to disk.";
+    LOGV2_FOR_ROLLBACK(
+        23989, 2, "WiredTiger::RecoverToStableTimestamp syncing size storer to disk.");
     syncSizeInfo(true);
 
     if (!_ephemeral) {
-        LOG_FOR_ROLLBACK(2)
-            << "WiredTiger::RecoverToStableTimestamp shutting down journal and checkpoint threads.";
+        LOGV2_FOR_ROLLBACK(
+            23990,
+            2,
+            "WiredTiger::RecoverToStableTimestamp shutting down journal and checkpoint threads.");
         // Shutdown WiredTigerKVEngine owned accesses into the storage engine.
         if (_durable) {
             _journalFlusher->shutdown();
@@ -2162,8 +2185,12 @@ StatusWith<Timestamp> WiredTigerKVEngine::recoverToStableTimestamp(OperationCont
     const Timestamp stableTimestamp(_stableTimestamp.load());
     const Timestamp initialDataTimestamp(_initialDataTimestamp.load());
 
-    LOG_FOR_ROLLBACK(0) << "Rolling back to the stable timestamp. StableTimestamp: "
-                        << stableTimestamp << " Initial Data Timestamp: " << initialDataTimestamp;
+    LOGV2_FOR_ROLLBACK(23991,
+                       0,
+                       "Rolling back to the stable timestamp. StableTimestamp: {stableTimestamp} "
+                       "Initial Data Timestamp: {initialDataTimestamp}",
+                       "stableTimestamp"_attr = stableTimestamp,
+                       "initialDataTimestamp"_attr = initialDataTimestamp);
     int ret = _conn->rollback_to_stable(_conn, nullptr);
     if (ret) {
         return {ErrorCodes::UnrecoverableRollbackError,

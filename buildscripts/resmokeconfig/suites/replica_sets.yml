@@ -4,9 +4,8 @@ selector:
   roots:
   - jstests/replsets/*.js
   exclude_files:
-  # Relies on the currently disabled config quorum checker for replSetReconfig.
-  - jstests/replsets/disallow_adding_initialized_node1.js
-  - jstests/replsets/disallow_adding_initialized_node2.js
+  # TODO SERVER-46534 will make this work with mirrored reads on
+  - jstests/replsets/read_operations_during_step_up.js
 
 executor:
   config:

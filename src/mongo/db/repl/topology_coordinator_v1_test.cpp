@@ -48,6 +48,7 @@
 #include "mongo/logv2/log.h"
 #include "mongo/rpc/metadata/oplog_query_metadata.h"
 #include "mongo/rpc/metadata/repl_set_metadata.h"
+#include "mongo/unittest/log_test.h"
 #include "mongo/unittest/unittest.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/log_global_settings.h"
@@ -1909,14 +1910,19 @@ public:
                           << "rs0"
                           << "version" << initConfigVersion << "term" << initConfigTerm << "members"
                           << BSON_ARRAY(BSON("_id" << 10 << "host"
-                                                   << "hself")
+                                                   << "hself"
+                                                   << "arbiterOnly" << useArbiter)
                                         << BSON("_id" << 20 << "host"
                                                       << "h2")
                                         << BSON("_id" << 30 << "host"
                                                       << "h3"))
                           << "settings" << BSON("protocolVersion" << 1)),
                      0);
-        setSelfMemberState(MemberState::RS_SECONDARY);
+        if (useArbiter) {
+            ASSERT_EQUALS(MemberState::RS_ARBITER, getTopoCoord().getMemberState().s);
+        } else {
+            setSelfMemberState(MemberState::RS_SECONDARY);
+        }
     }
 
     void prepareHeartbeatResponseV1(const ReplSetHeartbeatArgsV1& args,
@@ -1927,6 +1933,15 @@ public:
 
     int initConfigVersion = 1;
     int initConfigTerm = 1;
+    bool useArbiter = false;
+};
+
+class ArbiterPrepareHeartbeatResponseV1Test : public PrepareHeartbeatResponseV1Test {
+public:
+    void setUp() override {
+        useArbiter = true;
+        PrepareHeartbeatResponseV1Test::setUp();
+    }
 };
 
 TEST_F(PrepareHeartbeatResponseV1Test,
@@ -2091,6 +2106,28 @@ TEST_F(PrepareHeartbeatResponseV1Test,
     ASSERT_EQUALS(1, response.getConfigVersion());
 }
 
+TEST_F(ArbiterPrepareHeartbeatResponseV1Test,
+       ArbiterPopulateHeartbeatResponseWithFullConfigWhenHeartbeatRequestHasAnOldConfigTerm) {
+    // set up args with a config version lower than ours
+    ReplSetHeartbeatArgsV1 args;
+    args.setConfigVersion(initConfigVersion);
+    args.setConfigTerm(initConfigTerm - 1);
+    args.setSetName("rs0");
+    args.setSenderId(20);
+    ReplSetHeartbeatResponse response;
+    Status result(ErrorCodes::InternalError, "prepareHeartbeatResponse didn't set result");
+
+    // prepare response and check the results
+    prepareHeartbeatResponseV1(args, &response, &result);
+    ASSERT_OK(result);
+    ASSERT_TRUE(response.hasConfig());
+    ASSERT_EQUALS("rs0", response.getReplicaSetName());
+    ASSERT_EQUALS(MemberState::RS_ARBITER, response.getState().s);
+    ASSERT_EQUALS(OpTime(), response.getDurableOpTime());
+    ASSERT_EQUALS(0, response.getTerm());
+    ASSERT_EQUALS(1, response.getConfigVersion());
+}
+
 TEST_F(PrepareHeartbeatResponseV1Test,
        PopulateHeartbeatResponseWithFullConfigWhenHeartbeatRequestHasAnOlderTermButNewerVersion) {
     // set up args with a config version lower than ours
@@ -2247,6 +2284,41 @@ TEST_F(TopoCoordTest, OmitUninitializedConfigTermFromHeartbeat) {
     ReplSetHeartbeatResponse response;
     ASSERT_OK(getTopoCoord().prepareHeartbeatResponseV1(now()++, args, "rs0", &response));
     ASSERT_FALSE(response.toBSON().hasField("configTerm"_sd));
+}
+
+TEST_F(TopoCoordTest, RespondToHeartbeatsWithNullLastAppliedAndLastDurableWhileInInitialSync) {
+    ASSERT_TRUE(TopologyCoordinator::Role::kFollower == getTopoCoord().getRole());
+    ASSERT_EQUALS(MemberState::RS_STARTUP, getTopoCoord().getMemberState().s);
+    updateConfig(BSON("_id"
+                      << "rs0"
+                      << "version" << 1 << "members"
+                      << BSON_ARRAY(BSON("_id" << 0 << "host"
+                                               << "h0")
+                                    << BSON("_id" << 1 << "host"
+                                                  << "h1"))),
+                 1);
+
+    ASSERT_TRUE(TopologyCoordinator::Role::kFollower == getTopoCoord().getRole());
+    ASSERT_EQUALS(MemberState::RS_STARTUP2, getTopoCoord().getMemberState().s);
+
+    heartbeatFromMember(
+        HostAndPort("h0"), "rs0", MemberState::RS_SECONDARY, OpTime(Timestamp(3, 0), 0));
+
+    // The lastApplied and lastDurable should be null for any heartbeat responses we send while in
+    // STARTUP_2, even when they are otherwise initialized.
+    OpTime lastOpTime(Timestamp(2, 0), 0);
+    topoCoordSetMyLastAppliedOpTime(lastOpTime, Date_t(), false);
+    topoCoordSetMyLastDurableOpTime(lastOpTime, Date_t(), false);
+
+    ReplSetHeartbeatArgsV1 args;
+    args.setConfigVersion(1);
+    args.setSetName("rs0");
+    args.setSenderId(0);
+    ReplSetHeartbeatResponse response;
+
+    ASSERT_OK(getTopoCoord().prepareHeartbeatResponseV1(now()++, args, "rs0", &response));
+    ASSERT_EQUALS(OpTime(), response.getAppliedOpTime());
+    ASSERT_EQUALS(OpTime(), response.getDurableOpTime());
 }
 
 TEST_F(TopoCoordTest, BecomeCandidateWhenBecomingSecondaryInSingleNodeSet) {
@@ -2845,68 +2917,76 @@ TEST_F(TopoCoordTest, NodeDoesNotGrantVoteWhenReplSetNameDoesNotMatch) {
     ASSERT_FALSE(response.getVoteGranted());
 }
 
-TEST_F(TopoCoordTest, NodeDoesNotGrantVoteWhenConfigVersionIsLower) {
-    updateConfig(BSON("_id"
-                      << "rs0"
-                      << "version" << 1 << "term" << 1LL << "members"
-                      << BSON_ARRAY(BSON("_id" << 10 << "host"
-                                               << "hself")
-                                    << BSON("_id" << 20 << "host"
-                                                  << "h2")
-                                    << BSON("_id" << 30 << "host"
-                                                  << "h3"))),
-                 0);
-    setSelfMemberState(MemberState::RS_SECONDARY);
+class ConfigTermAndVersionVoteTest : public TopoCoordTest {
+public:
+    auto testWithArbiter(bool useArbiter,
+                         long long requestVotesConfigVersion,
+                         long long requestVotesConfigTerm) {
+        updateConfig(BSON("_id"
+                          << "rs0"
+                          << "version" << 2 << "term" << 2LL << "members"
+                          << BSON_ARRAY(BSON("_id" << 10 << "host"
+                                                   << "hself"
+                                                   << "arbiterOnly" << useArbiter)
+                                        << BSON("_id" << 20 << "host"
+                                                      << "h2")
+                                        << BSON("_id" << 30 << "host"
+                                                      << "h3"))),
+                     0);
+        if (useArbiter) {
+            ASSERT_EQUALS(MemberState::RS_ARBITER, getTopoCoord().getMemberState().s);
+        } else {
+            setSelfMemberState(MemberState::RS_SECONDARY);
+        }
 
-    // mismatched configVersion
-    ReplSetRequestVotesArgs args;
-    args.initialize(BSON("replSetRequestVotes" << 1 << "setName"
-                                               << "rs0"
-                                               << "term" << 1LL << "candidateIndex" << 1LL
-                                               << "configVersion" << 0LL << "configTerm" << 1LL
-                                               << "lastAppliedOpTime"
-                                               << BSON("ts" << Timestamp(10, 0) << "term" << 0LL)))
-        .transitional_ignore();
-    ReplSetRequestVotesResponse response;
+        // mismatched configVersion
+        ReplSetRequestVotesArgs args;
+        args.initialize(BSON("replSetRequestVotes"
+                             << 1 << "setName"
+                             << "rs0"
+                             << "term" << 1LL << "configVersion" << requestVotesConfigVersion
+                             << "configTerm" << requestVotesConfigTerm << "candidateIndex" << 1LL
+                             << "lastAppliedOpTime"
+                             << BSON("ts" << Timestamp(10, 0) << "term" << 0LL)))
+            .transitional_ignore();
+        ReplSetRequestVotesResponse response;
 
-    getTopoCoord().processReplSetRequestVotes(args, &response);
+        getTopoCoord().processReplSetRequestVotes(args, &response);
+        ASSERT_FALSE(response.getVoteGranted());
+        return response;
+    }
+};
+
+TEST_F(ConfigTermAndVersionVoteTest, DataNodeDoesNotGrantVoteWhenConfigVersionIsLower) {
+    auto response = testWithArbiter(false, 1, 2);
     ASSERT_EQUALS(
-        "candidate's config with {version: 0, term: 1} is older than mine with {version: 1, term: "
-        "1}",
+        "candidate's config with {version: 1, term: 2} is older than mine with"
+        " {version: 2, term: 2}",
         response.getReason());
-    ASSERT_FALSE(response.getVoteGranted());
 }
 
-TEST_F(TopoCoordTest, NodeDoesNotGrantVoteWhenConfigTermIsLower) {
-    updateConfig(BSON("_id"
-                      << "rs0"
-                      << "version" << 1 << "term" << 2LL << "members"
-                      << BSON_ARRAY(BSON("_id" << 10 << "host"
-                                               << "hself")
-                                    << BSON("_id" << 20 << "host"
-                                                  << "h2")
-                                    << BSON("_id" << 30 << "host"
-                                                  << "h3"))),
-                 0);
-    setSelfMemberState(MemberState::RS_SECONDARY);
-
-    // lower configTerm
-    ReplSetRequestVotesArgs args;
-    args.initialize(BSON("replSetRequestVotes" << 1 << "setName"
-                                               << "rs0"
-                                               << "term" << 1LL << "candidateIndex" << 1LL
-                                               << "configVersion" << 1LL << "configTerm" << 1LL
-                                               << "lastAppliedOpTime"
-                                               << BSON("ts" << Timestamp(10, 0) << "term" << 0LL)))
-        .transitional_ignore();
-    ReplSetRequestVotesResponse response;
-
-    getTopoCoord().processReplSetRequestVotes(args, &response);
+TEST_F(ConfigTermAndVersionVoteTest, ArbiterDoesNotGrantVoteWhenConfigVersionIsLower) {
+    auto response = testWithArbiter(true, 1, 2);
     ASSERT_EQUALS(
-        "candidate's config with {version: 1, term: 1} is older than mine with {version: 1, term: "
-        "2}",
+        "candidate's config with {version: 1, term: 2} is older than mine with"
+        " {version: 2, term: 2}",
         response.getReason());
-    ASSERT_FALSE(response.getVoteGranted());
+}
+
+TEST_F(ConfigTermAndVersionVoteTest, DataNodeDoesNotGrantVoteWhenConfigTermIsLower) {
+    auto response = testWithArbiter(false, 2, 1);
+    ASSERT_EQUALS(
+        "candidate's config with {version: 2, term: 1} is older than mine with"
+        " {version: 2, term: 2}",
+        response.getReason());
+}
+
+TEST_F(ConfigTermAndVersionVoteTest, ArbiterDoesNotGrantVoteWhenConfigTermIsLower) {
+    auto response = testWithArbiter(true, 2, 1);
+    ASSERT_EQUALS(
+        "candidate's config with {version: 2, term: 1} is older than mine with"
+        " {version: 2, term: 2}",
+        response.getReason());
 }
 
 TEST_F(TopoCoordTest, NodeDoesNotGrantVoteWhenTermIsStale) {
@@ -5034,7 +5114,31 @@ TEST_F(TopoCoordTest, TwoNodesEligibleForElectionHandoffEqualPriorityResolveByMe
     ASSERT_EQUALS(1, getTopoCoord().chooseElectionHandoffCandidate());
 }
 
-TEST_F(TopoCoordTest, MajorityReplicatedConfigChecks) {
+class ConfigReplicationTest : public TopoCoordTest {
+public:
+    void setUp() override {
+        TopoCoordTest::setUp();
+    }
+
+    void simulateHBWithConfigVersionAndTerm(size_t remoteIndex) {
+        // Simulate a heartbeat to the remote.
+        auto member = getCurrentConfig().getMemberAt(remoteIndex);
+        getTopoCoord().prepareHeartbeatRequestV1(
+            now(), getCurrentConfig().getReplSetName(), member.getHostAndPort());
+        // Simulate heartbeat response from the remote.
+        // This will call setUpValues, which will update the memberData for the remote.
+        ReplSetHeartbeatResponse hb;
+        hb.setConfigVersion(getCurrentConfig().getConfigVersion());
+        hb.setConfigTerm(getCurrentConfig().getConfigTerm());
+        hb.setState(member.isArbiter() ? MemberState::RS_ARBITER : MemberState::RS_SECONDARY);
+        StatusWith<ReplSetHeartbeatResponse> hbResponse = StatusWith<ReplSetHeartbeatResponse>(hb);
+
+        getTopoCoord().processHeartbeatResponse(
+            now(), Milliseconds(0), member.getHostAndPort(), hbResponse);
+    }
+};
+
+TEST_F(ConfigReplicationTest, MajorityReplicatedConfigChecks) {
     // Config with three nodes requires at least 2 nodes to replicate the config.
     updateConfig(BSON("_id"
                       << "rs0"
@@ -5050,27 +5154,21 @@ TEST_F(TopoCoordTest, MajorityReplicatedConfigChecks) {
     // makeSelfPrimary() doesn't actually conduct a true election, so the term will still be 0.
     makeSelfPrimary();
 
+    auto tagPatternStatus =
+        getCurrentConfig().findCustomWriteMode(ReplSetConfig::kConfigMajorityWriteConcernModeName);
+    ASSERT_TRUE(tagPatternStatus.isOK());
+    auto tagPattern = tagPatternStatus.getValue();
+    auto pred = getTopoCoord().makeConfigPredicate();
+
     // Currently, only we have config 2 (the initial config).
     // This simulates a reconfig where only the primary has written down the configVersion and
     // configTerm.
-    ASSERT_FALSE(getTopoCoord().haveMajorityReplicatedConfig());
+    ASSERT_FALSE(getTopoCoord().haveTaggedNodesSatisfiedCondition(pred, tagPattern));
 
     // Simulate a heartbeat to one of the other nodes.
-    getTopoCoord().prepareHeartbeatRequestV1(now(), "rs0", HostAndPort("host1"));
-    // Simulate heartbeat response from host1. This will call setUpValues, which will update the
-    // memberData for host1.
-    ReplSetHeartbeatResponse hb;
-    hb.setConfigVersion(2);
-    hb.setConfigTerm(0);
-    hb.setState(MemberState::RS_SECONDARY);
-    StatusWith<ReplSetHeartbeatResponse> hbResponse = StatusWith<ReplSetHeartbeatResponse>(hb);
-
-    now() += Milliseconds(1);
-    getTopoCoord().processHeartbeatResponse(
-        now(), Milliseconds(1), HostAndPort("host1"), hbResponse);
-
+    simulateHBWithConfigVersionAndTerm(1);
     // Now, node 0 and node 1 should have the current config.
-    ASSERT_TRUE(getTopoCoord().haveMajorityReplicatedConfig());
+    ASSERT_TRUE(getTopoCoord().haveTaggedNodesSatisfiedCondition(pred, tagPattern));
 
     // Update _rsConfig with config(v: 3, t: 0). configTerms are the same but configVersion 3 is
     // higher than 2.
@@ -5088,24 +5186,12 @@ TEST_F(TopoCoordTest, MajorityReplicatedConfigChecks) {
     // Currently, only we have config 3.
     // This simulates a reconfig where only the primary has written down the configVersion and
     // configTerm.
-    ASSERT_FALSE(getTopoCoord().haveMajorityReplicatedConfig());
+    ASSERT_FALSE(getTopoCoord().haveTaggedNodesSatisfiedCondition(pred, tagPattern));
 
     // Simulate a heartbeat to one of the other nodes.
-    getTopoCoord().prepareHeartbeatRequestV1(now(), "rs0", HostAndPort("host2"));
-    // Simulate heartbeat response from host2. This will call setUpValues, which will update the
-    // memberData for host2.
-    ReplSetHeartbeatResponse hb2;
-    hb2.setConfigVersion(3);
-    hb2.setConfigTerm(0);
-    hb2.setState(MemberState::RS_SECONDARY);
-    StatusWith<ReplSetHeartbeatResponse> hbResponse2 = StatusWith<ReplSetHeartbeatResponse>(hb2);
-
-    now() += Milliseconds(1);
-    getTopoCoord().processHeartbeatResponse(
-        now(), Milliseconds(1), HostAndPort("host2"), hbResponse2);
-
+    simulateHBWithConfigVersionAndTerm(2);
     // Now, node 0 and node 2 should have the current config.
-    ASSERT_TRUE(getTopoCoord().haveMajorityReplicatedConfig());
+    ASSERT_TRUE(getTopoCoord().haveTaggedNodesSatisfiedCondition(pred, tagPattern));
 
     // Update _rsConfig with config(v: 4, t: 1). configTerm 1 is higher than configTerm 0.
     updateConfig(BSON("_id"
@@ -5120,30 +5206,14 @@ TEST_F(TopoCoordTest, MajorityReplicatedConfigChecks) {
                  0);
 
     // Currently, only we have config 4.
-    // This simulates a reconfig where only the primary has written down the configVersion and
-    // configTerm.
-    ASSERT_FALSE(getTopoCoord().haveMajorityReplicatedConfig());
+    ASSERT_FALSE(getTopoCoord().haveTaggedNodesSatisfiedCondition(pred, tagPattern));
 
-    // Simulate a heartbeat to one of the other nodes.
-    getTopoCoord().prepareHeartbeatRequestV1(now(), "rs0", HostAndPort("host1"));
-    // Simulate heartbeat response from host1. This will call setUpValues, which will update the
-    // memberData for host1.
-    ReplSetHeartbeatResponse hb3;
-    hb3.setConfigVersion(4);
-    hb3.setConfigTerm(1);
-    hb3.setState(MemberState::RS_SECONDARY);
-    StatusWith<ReplSetHeartbeatResponse> hbResponse3 = StatusWith<ReplSetHeartbeatResponse>(hb3);
-
-    now() += Milliseconds(1);
-    getTopoCoord().processHeartbeatResponse(
-        now(), Milliseconds(1), HostAndPort("host1"), hbResponse3);
-
+    simulateHBWithConfigVersionAndTerm(1);
     // Now, node 0 and node 1 should have the current config.
-    ASSERT_TRUE(getTopoCoord().haveMajorityReplicatedConfig());
+    ASSERT_TRUE(getTopoCoord().haveTaggedNodesSatisfiedCondition(pred, tagPattern));
 }
 
-TEST_F(TopoCoordTest, ArbiterNotIncludedInMajorityReplicatedConfigChecks) {
-    // Config with only one data-bearing node only needs one node to majority replicate config.
+TEST_F(ConfigReplicationTest, ArbiterIncludedInMajorityReplicatedConfigChecks) {
     updateConfig(BSON("_id"
                       << "rs0"
                       << "version" << 2 << "term" << 0 << "members"
@@ -5151,15 +5221,174 @@ TEST_F(TopoCoordTest, ArbiterNotIncludedInMajorityReplicatedConfigChecks) {
                                                << "host0:27017")
                                     << BSON("_id" << 1 << "host"
                                                   << "host1:27017"
+                                                  << "arbiterOnly" << true)
+                                    << BSON("_id" << 2 << "host"
+                                                  << "host2:27017"))),
+                 0);
+
+    // makeSelfPrimary() doesn't actually conduct a true election, so the term will still be 0.
+    makeSelfPrimary();
+
+    // Currently, only the primary has config 2 (the initial config).
+    auto tagPattern =
+        getCurrentConfig().findCustomWriteMode(ReplSetConfig::kConfigMajorityWriteConcernModeName);
+    ASSERT_TRUE(tagPattern.isOK());
+    auto pred = getTopoCoord().makeConfigPredicate();
+    ASSERT_FALSE(getTopoCoord().haveTaggedNodesSatisfiedCondition(pred, tagPattern.getValue()));
+
+    simulateHBWithConfigVersionAndTerm(1);
+    ASSERT_TRUE(getTopoCoord().haveTaggedNodesSatisfiedCondition(pred, tagPattern.getValue()));
+}
+
+TEST_F(ConfigReplicationTest, NonVotingNodeExcludedFromMajorityReplicatedConfigChecks) {
+    updateConfig(BSON("_id"
+                      << "rs0"
+                      << "version" << 2 << "term" << 0 << "members"
+                      << BSON_ARRAY(BSON("_id" << 0 << "host"
+                                               << "host0:27017")
+                                    << BSON("_id" << 1 << "host"
+                                                  << "host1:27017"
+                                                  << "votes" << 0 << "priority" << 0)
+                                    << BSON("_id" << 2 << "host"
+                                                  << "host2:27017"
                                                   << "arbiterOnly" << true))),
                  0);
 
     // makeSelfPrimary() doesn't actually conduct a true election, so the term will still be 0.
     makeSelfPrimary();
 
-    // Currently, only the primary has config 2 (the initial config). But, since arbiters do not
-    // count towards the config majority, haveMajorityReplicatedConfig() should still return true.
-    ASSERT_TRUE(getTopoCoord().haveMajorityReplicatedConfig());
+    // Currently, only the primary has config 2 (the initial config).
+    auto tagPattern =
+        getCurrentConfig().findCustomWriteMode(ReplSetConfig::kConfigMajorityWriteConcernModeName);
+    ASSERT_TRUE(tagPattern.isOK());
+    auto pred = getTopoCoord().makeConfigPredicate();
+    ASSERT_FALSE(getTopoCoord().haveTaggedNodesSatisfiedCondition(pred, tagPattern.getValue()));
+
+    // Receive a heartbeat from the non-voting node, but haveTaggedNodesSatisfiedCondition should
+    // still return false.
+    simulateHBWithConfigVersionAndTerm(1);
+    ASSERT_FALSE(getTopoCoord().haveTaggedNodesSatisfiedCondition(pred, tagPattern.getValue()));
+
+    // After receiving a heartbeat from the arbiter, we have 2/3 nodes that count towards the
+    // config commitment check.
+    simulateHBWithConfigVersionAndTerm(2);
+    ASSERT_TRUE(getTopoCoord().haveTaggedNodesSatisfiedCondition(pred, tagPattern.getValue()));
+}
+
+
+TEST_F(ConfigReplicationTest, ArbiterIncludedInAllReplicatedConfigChecks) {
+    updateConfig(BSON("_id"
+                      << "rs0"
+                      << "version" << 2 << "term" << 0 << "members"
+                      << BSON_ARRAY(BSON("_id" << 0 << "host"
+                                               << "host0:27017")
+                                    << BSON("_id" << 1 << "host"
+                                                  << "host1:27017")
+                                    << BSON("_id" << 2 << "host"
+                                                  << "host2:27017"
+                                                  << "arbiterOnly" << true))),
+                 0);
+
+    // makeSelfPrimary() doesn't actually conduct a true election, so the term will still be 0.
+    makeSelfPrimary();
+
+    // Currently, only the primary has config 2 (the initial config).
+    auto tagPattern =
+        getCurrentConfig().findCustomWriteMode(ReplSetConfig::kConfigAllWriteConcernName);
+    ASSERT_TRUE(tagPattern.isOK());
+    auto pred = getTopoCoord().makeConfigPredicate();
+    ASSERT_FALSE(getTopoCoord().haveTaggedNodesSatisfiedCondition(pred, tagPattern.getValue()));
+
+    simulateHBWithConfigVersionAndTerm(1);
+    ASSERT_FALSE(getTopoCoord().haveTaggedNodesSatisfiedCondition(pred, tagPattern.getValue()));
+
+    simulateHBWithConfigVersionAndTerm(2);
+    ASSERT_TRUE(getTopoCoord().haveTaggedNodesSatisfiedCondition(pred, tagPattern.getValue()));
+}
+
+TEST_F(ConfigReplicationTest, ArbiterAndNonVotingNodeIncludedInAllReplicatedConfigChecks) {
+    updateConfig(BSON("_id"
+                      << "rs0"
+                      << "version" << 2 << "term" << 0 << "members"
+                      << BSON_ARRAY(BSON("_id" << 0 << "host"
+                                               << "host0:27017")
+                                    << BSON("_id" << 1 << "host"
+                                                  << "host1:27017")
+                                    << BSON("_id" << 2 << "host"
+                                                  << "host2:27017"
+                                                  << "votes" << 0 << "priority" << 0)
+                                    << BSON("_id" << 3 << "host"
+                                                  << "host3:27017"
+                                                  << "arbiterOnly" << true))),
+                 0);
+
+    // makeSelfPrimary() doesn't actually conduct a true election, so the term will still be 0.
+    makeSelfPrimary();
+
+    // Currently, only the primary has config 2 (the initial config).
+    auto tagPattern =
+        getCurrentConfig().findCustomWriteMode(ReplSetConfig::kConfigAllWriteConcernName);
+    ASSERT_TRUE(tagPattern.isOK());
+    auto pred = getTopoCoord().makeConfigPredicate();
+    ASSERT_FALSE(getTopoCoord().haveTaggedNodesSatisfiedCondition(pred, tagPattern.getValue()));
+
+    simulateHBWithConfigVersionAndTerm(1);
+    ASSERT_FALSE(getTopoCoord().haveTaggedNodesSatisfiedCondition(pred, tagPattern.getValue()));
+
+    simulateHBWithConfigVersionAndTerm(2);
+    ASSERT_FALSE(getTopoCoord().haveTaggedNodesSatisfiedCondition(pred, tagPattern.getValue()));
+
+    simulateHBWithConfigVersionAndTerm(3);
+    ASSERT_TRUE(getTopoCoord().haveTaggedNodesSatisfiedCondition(pred, tagPattern.getValue()));
+}
+
+TEST_F(TopoCoordTest, OnlyDataBearingVoterIncludedInInternalMajorityWriteConcern) {
+    // The config has 3 voting members including an arbiter, so the majority
+    // number is 2.
+    updateConfig(BSON("_id"
+                      << "rs0"
+                      << "version" << 2 << "term" << 0 << "members"
+                      << BSON_ARRAY(BSON("_id" << 0 << "host"
+                                               << "host0:27017")
+                                    << BSON("_id" << 1 << "host"
+                                                  << "host1:27017")
+                                    << BSON("_id" << 2 << "host"
+                                                  << "host2:27017"
+                                                  << "votes" << 0 << "priority" << 0)
+                                    << BSON("_id" << 3 << "host"
+                                                  << "host3:27017"
+                                                  << "arbiterOnly" << true))),
+                 0);
+
+    const auto term = getTopoCoord().getTerm();
+    makeSelfPrimary();
+
+    auto caughtUpOpTime = OpTime(Timestamp(100, 0), term);
+    auto laggedOpTime = OpTime(Timestamp(50, 0), term);
+
+    auto tagPatternStatus =
+        getCurrentConfig().findCustomWriteMode(ReplSetConfig::kMajorityWriteConcernModeName);
+    ASSERT_TRUE(tagPatternStatus.isOK());
+    auto tagPattern = tagPatternStatus.getValue();
+    auto durable = false;
+
+    setMyOpTime(caughtUpOpTime);
+    ASSERT_FALSE(getTopoCoord().haveTaggedNodesReachedOpTime(caughtUpOpTime, tagPattern, durable));
+    // One secondary is not caught up.
+    heartbeatFromMember(HostAndPort("host1"), "rs0", MemberState::RS_SECONDARY, laggedOpTime);
+    ASSERT_FALSE(getTopoCoord().haveTaggedNodesReachedOpTime(caughtUpOpTime, tagPattern, durable));
+
+    // The non-voter is caught up, but should not count towards the majority.
+    heartbeatFromMember(HostAndPort("host2"), "rs0", MemberState::RS_SECONDARY, caughtUpOpTime);
+    ASSERT_FALSE(getTopoCoord().haveTaggedNodesReachedOpTime(caughtUpOpTime, tagPattern, durable));
+
+    // The arbiter is caught up, but should not count towards the majority.
+    heartbeatFromMember(HostAndPort("host3"), "rs0", MemberState::RS_ARBITER, caughtUpOpTime);
+    ASSERT_FALSE(getTopoCoord().haveTaggedNodesReachedOpTime(caughtUpOpTime, tagPattern, durable));
+
+    // The secondary is caught up and counts towards the majority.
+    heartbeatFromMember(HostAndPort("host1"), "rs0", MemberState::RS_SECONDARY, caughtUpOpTime);
+    ASSERT_TRUE(getTopoCoord().haveTaggedNodesReachedOpTime(caughtUpOpTime, tagPattern, durable));
 }
 
 TEST_F(TopoCoordTest, ArbiterNotIncludedInW3WriteInPSSAReplSet) {
@@ -6398,12 +6627,12 @@ public:
     virtual void setUp() {
         HeartbeatResponseTestV1::setUp();
         // set verbosity as high as the highest verbosity log message we'd like to check for
-        setMinimumLoggedSeverity(logger::LogSeverity::Debug(3));
+        setMinimumLoggedSeverity(logv2::LogSeverity::Debug(3));
     }
 
     virtual void tearDown() {
         HeartbeatResponseTestV1::tearDown();
-        setMinimumLoggedSeverity(logger::LogSeverity::Log());
+        setMinimumLoggedSeverity(logv2::LogSeverity::Log());
     }
 };
 

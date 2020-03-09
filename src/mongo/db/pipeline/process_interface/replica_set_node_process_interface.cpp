@@ -39,6 +39,7 @@
 #include "mongo/db/db_raii.h"
 #include "mongo/db/dbdirectclient.h"
 #include "mongo/db/index_builds_coordinator.h"
+#include "mongo/db/logical_session_id_helpers.h"
 #include "mongo/rpc/get_status_from_command_result.h"
 #include "mongo/s/write_ops/batched_command_response.h"
 #include "mongo/util/future.h"
@@ -209,10 +210,14 @@ StatusWith<BSONObj> ReplicaSetNodeProcessInterface::_executeCommandOnPrimary(
 
 void ReplicaSetNodeProcessInterface::_attachGenericCommandArgs(OperationContext* opCtx,
                                                                BSONObjBuilder* cmd) const {
-    auto writeConcern = opCtx->getWriteConcern();
-    if (!writeConcern.usedDefault) {
-        cmd->append(WriteConcernOptions::kWriteConcernField, writeConcern.toBSON());
+    cmd->append(WriteConcernOptions::kWriteConcernField, opCtx->getWriteConcern().toBSON());
+
+    auto maxTimeMS = opCtx->getRemainingMaxTimeMillis();
+    if (maxTimeMS != Milliseconds::max()) {
+        cmd->append(QueryRequest::cmdOptionMaxTimeMS, durationCount<Milliseconds>(maxTimeMS));
     }
+
+    logical_session_id_helpers::serializeLsidAndTxnNumber(opCtx, cmd);
 }
 
 bool ReplicaSetNodeProcessInterface::_canWriteLocally(OperationContext* opCtx,

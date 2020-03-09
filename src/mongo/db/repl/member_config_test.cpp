@@ -32,6 +32,7 @@
 
 #include "mongo/db/jsobj.h"
 #include "mongo/db/repl/member_config.h"
+#include "mongo/db/repl/repl_server_parameters_gen.h"
 #include "mongo/unittest/unittest.h"
 #include "mongo/util/time_support.h"
 
@@ -51,8 +52,9 @@ TEST(MemberConfig, ParseMinimalMemberConfigAndCheckDefaults) {
     ASSERT_TRUE(mc.isVoter());
     ASSERT_FALSE(mc.isHidden());
     ASSERT_FALSE(mc.isArbiter());
+    ASSERT_FALSE(mc.isNewlyAdded());
     ASSERT_TRUE(mc.shouldBuildIndexes());
-    ASSERT_EQUALS(3U, mc.getNumTags());
+    ASSERT_EQUALS(5U, mc.getNumTags());
     ASSERT_OK(mc.validate());
 }
 
@@ -144,6 +146,32 @@ TEST(MemberConfig, ParseArbiterOnly) {
                         &tagConfig);
         ASSERT_TRUE(!mc.isArbiter());
         ASSERT_EQUALS(1.0, mc.getPriority());
+    }
+}
+
+TEST(MemberConfig, ParseAndSetNewlyAddedField) {
+    // Set the flag to add the `newlyAdded` field to MemberConfigs.
+    enableAutomaticReconfig = true;
+    // Set the flag back to false after this test exits.
+    ON_BLOCK_EXIT([] { enableAutomaticReconfig = false; });
+
+    ReplSetTagConfig tagConfig;
+    {
+        MemberConfig mc(BSON("_id" << 0 << "host"
+                                   << "h"),
+                        &tagConfig);
+        // Verify that the `newlyAdded` field is not added by default.
+        ASSERT_FALSE(mc.isNewlyAdded());
+
+        mc.setNewlyAdded(true);
+        ASSERT_TRUE(mc.isNewlyAdded().get());
+    }
+    {
+        MemberConfig mc(BSON("_id" << 0 << "host"
+                                   << "h"
+                                   << "newlyAdded" << true),
+                        &tagConfig);
+        ASSERT_TRUE(mc.isNewlyAdded().get());
     }
 }
 
@@ -289,14 +317,18 @@ TEST(MemberConfig, ParseTags) {
                                        << "k2"
                                        << "v2")),
                     &tagConfig);
-    ASSERT_EQUALS(5U, mc.getNumTags());
-    ASSERT_EQUALS(5, std::distance(mc.tagsBegin(), mc.tagsEnd()));
+    ASSERT_EQUALS(7U, mc.getNumTags());
+    ASSERT_EQUALS(7, std::distance(mc.tagsBegin(), mc.tagsEnd()));
     ASSERT_EQUALS(1, std::count(mc.tagsBegin(), mc.tagsEnd(), tagConfig.findTag("k1", "v1")));
     ASSERT_EQUALS(1, std::count(mc.tagsBegin(), mc.tagsEnd(), tagConfig.findTag("k2", "v2")));
     ASSERT_EQUALS(1, std::count(mc.tagsBegin(), mc.tagsEnd(), tagConfig.findTag("$voter", "0")));
     ASSERT_EQUALS(1,
                   std::count(mc.tagsBegin(), mc.tagsEnd(), tagConfig.findTag("$electable", "0")));
     ASSERT_EQUALS(1, std::count(mc.tagsBegin(), mc.tagsEnd(), tagConfig.findTag("$all", "0")));
+    ASSERT_EQUALS(1,
+                  std::count(mc.tagsBegin(), mc.tagsEnd(), tagConfig.findTag("$configAll", "0")));
+    ASSERT_EQUALS(1,
+                  std::count(mc.tagsBegin(), mc.tagsEnd(), tagConfig.findTag("$configVoter", "0")));
 }
 
 TEST(MemberConfig, ParseHorizonFields) {

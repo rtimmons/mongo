@@ -64,6 +64,7 @@ public:
         kReplicationRollback,
         kSharding,
         kShardingCatalogRefresh,
+        kShardingMigration,
         kStorage,
         kStorageRecovery,
         kJournal,
@@ -118,6 +119,8 @@ public:
 private:
     Value _value;
 };
+
+std::ostream& operator<<(std::ostream& os, LogComponent component);
 
 }  // namespace logv2
 }  // namespace mongo

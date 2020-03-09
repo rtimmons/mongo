@@ -53,7 +53,6 @@
 #include "mongo/rpc/metadata/tracking_metadata.h"
 #include "mongo/s/client/shard_remote_gen.h"
 #include "mongo/s/grid.h"
-#include "mongo/util/log.h"
 #include "mongo/util/str.h"
 #include "mongo/util/time_support.h"
 
@@ -164,14 +163,17 @@ std::string ShardRemote::toString() const {
 BSONObj ShardRemote::_appendMetadataForCommand(OperationContext* opCtx,
                                                const ReadPreferenceSetting& readPref) {
     BSONObjBuilder builder;
-    if (shouldLog(logger::LogComponent::kTracking,
-                  logger::LogSeverity::Debug(1))) {  // avoid performance overhead if not logging
+    if (shouldLog(logv2::LogComponent::kTracking,
+                  logv2::LogSeverity::Debug(1))) {  // avoid performance overhead if not logging
         if (!TrackingMetadata::get(opCtx).getIsLogged()) {
             if (!TrackingMetadata::get(opCtx).getOperId()) {
                 TrackingMetadata::get(opCtx).initWithOperName("NotSet");
             }
-            MONGO_LOG_COMPONENT(1, logger::LogComponent::kTracking)
-                << TrackingMetadata::get(opCtx).toString();
+            LOGV2_DEBUG_OPTIONS(20164,
+                                1,
+                                logv2::LogOptions{logv2::LogComponent::kTracking},
+                                "{trackingMetadata}",
+                                "trackingMetadata"_attr = TrackingMetadata::get(opCtx));
             TrackingMetadata::get(opCtx).setIsLogged(true);
         }
 

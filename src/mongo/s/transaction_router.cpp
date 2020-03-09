@@ -54,7 +54,6 @@
 #include "mongo/s/router_transactions_metrics.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/fail_point.h"
-#include "mongo/util/log.h"
 #include "mongo/util/log_with_sampling.h"
 #include "mongo/util/net/socket_utils.h"
 
@@ -130,9 +129,9 @@ BSONObjBuilder appendFieldsForStartTransaction(BSONObj cmd,
                                                repl::ReadConcernArgs readConcernArgs,
                                                boost::optional<LogicalTime> atClusterTime,
                                                bool doAppendStartTransaction) {
-    auto cmdWithReadConcern = !readConcernArgs.isEmpty()
-        ? appendReadConcernForTxn(std::move(cmd), readConcernArgs, atClusterTime)
-        : std::move(cmd);
+    // startTransaction: true always requires readConcern, even if it's empty.
+    auto cmdWithReadConcern =
+        appendReadConcernForTxn(std::move(cmd), readConcernArgs, atClusterTime);
 
     BSONObjBuilder bob(std::move(cmdWithReadConcern));
 
@@ -669,8 +668,8 @@ void TransactionRouter::Router::_assertAbortStatusIsOkOrNoSuchTransaction(
                           << " from shard: " << response.shardId,
             status.isOK() || status.code() == ErrorCodes::NoSuchTransaction);
 
-    // abortTransaction is sent with no write concern, so there's no need to check for a write
-    // concern error.
+    // abortTransaction is sent with "local" write concern (w: 1), so there's no need to check for a
+    // write concern error.
 }
 
 std::vector<ShardId> TransactionRouter::Router::_getPendingParticipants() const {
@@ -690,7 +689,10 @@ void TransactionRouter::Router::_clearPendingParticipants(OperationContext* opCt
     // transactions will be left open if the retry does not re-target any of these shards.
     std::vector<AsyncRequestsSender::Request> abortRequests;
     for (const auto& participant : pendingParticipants) {
-        abortRequests.emplace_back(participant, BSON("abortTransaction" << 1));
+        abortRequests.emplace_back(participant,
+                                   BSON("abortTransaction"
+                                        << 1 << WriteConcernOptions::kWriteConcernField
+                                        << WriteConcernOptions().toBSON()));
     }
     auto responses = gatherResponses(opCtx,
                                      NamespaceString::kAdminDb,
@@ -1225,7 +1227,8 @@ void TransactionRouter::Router::implicitlyAbortTransaction(OperationContext* opC
 
     p().terminationInitiated = true;
 
-    auto abortCmd = BSON("abortTransaction" << 1);
+    auto abortCmd = BSON("abortTransaction" << 1 << WriteConcernOptions::kWriteConcernField
+                                            << WriteConcernOptions().toBSON());
     std::vector<AsyncRequestsSender::Request> abortRequests;
     for (const auto& participantEntry : o().participants) {
         abortRequests.emplace_back(ShardId(participantEntry.first), abortCmd);
@@ -1334,6 +1337,7 @@ BSONObj TransactionRouter::Router::_commitWithRecoveryToken(OperationContext* op
 
 void TransactionRouter::Router::_logSlowTransaction(OperationContext* opCtx,
                                                     TerminationCause terminationCause) const {
+
     logv2::DynamicAttributes attrs;
     BSONObjBuilder parametersBuilder;
 
@@ -1391,15 +1395,12 @@ void TransactionRouter::Router::_logSlowTransaction(OperationContext* opCtx,
         commitTypeTemp = commitTypeToString(o().commitType);
         attrs.add("commitType", commitTypeTemp);
 
-        attrs.add("commitDuration",
-                  durationCount<Microseconds>(timingStats.getCommitDuration(tickSource, curTicks)));
+        attrs.add("commitDuration", timingStats.getCommitDuration(tickSource, curTicks));
     }
 
-    attrs.add("timeActive",
-              durationCount<Microseconds>(timingStats.getTimeActiveMicros(tickSource, curTicks)));
+    attrs.add("timeActive", timingStats.getTimeActiveMicros(tickSource, curTicks));
 
-    attrs.add("timeInactive",
-              durationCount<Microseconds>(timingStats.getTimeInactiveMicros(tickSource, curTicks)));
+    attrs.add("timeInactive", timingStats.getTimeInactiveMicros(tickSource, curTicks));
 
     // Total duration of the transaction. Logged at the end of the line for consistency with
     // slow command logging.
@@ -1407,12 +1408,6 @@ void TransactionRouter::Router::_logSlowTransaction(OperationContext* opCtx,
               duration_cast<Milliseconds>(timingStats.getDuration(tickSource, curTicks)));
 
     LOGV2(51805, "transaction", attrs);
-
-    // TODO SERVER-46219: Log also with old log system to not break unit tests
-    LOGV2(22899,
-          "transaction {transactionInfoForLog_opCtx_terminationCause}",
-          "transactionInfoForLog_opCtx_terminationCause"_attr =
-              _transactionInfoForLog(opCtx, terminationCause));
 }
 
 std::string TransactionRouter::Router::_transactionInfoForLog(

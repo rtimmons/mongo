@@ -62,7 +62,8 @@
 #include "mongo/logv2/log.h"
 #include "mongo/logv2/log_domain_global.h"
 #include "mongo/platform/process_id.h"
-#include "mongo/util/log.h"
+#include "mongo/util/exit_code.h"
+#include "mongo/util/log_global_settings.h"
 #include "mongo/util/processinfo.h"
 #include "mongo/util/quick_exit.h"
 #include "mongo/util/signal_handlers_synchronous.h"
@@ -374,7 +375,6 @@ MONGO_INITIALIZER_GENERAL(ServerLogRedirection,
 
 
     if (logV2Enabled()) {
-        lv2Config.format = serverGlobalParams.logFormat;
         lv2Config.timestampFormat = serverGlobalParams.logTimestampFormat;
         Status result = lv2Manager.getGlobalDomainInternal().configure(lv2Config);
         if (result.isOK() && writeServerRestartedAfterLogConfig)

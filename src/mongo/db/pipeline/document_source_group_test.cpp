@@ -75,9 +75,8 @@ TEST_F(DocumentSourceGroupTest, ShouldBeAbleToPauseLoading) {
                               // This is the only way to do this in a debug build.
     auto&& parser = AccumulationStatement::getParser("$sum");
     auto accumulatorArg = BSON("" << 1);
-    auto [expression, factory] =
-        parser(expCtx, accumulatorArg.firstElement(), expCtx->variablesParseState);
-    AccumulationStatement countStatement{"count", expression, factory};
+    auto accExpr = parser(expCtx, accumulatorArg.firstElement(), expCtx->variablesParseState);
+    AccumulationStatement countStatement{"count", accExpr};
     auto group = DocumentSourceGroup::create(
         expCtx, ExpressionConstant::create(expCtx, Value(BSONNULL)), {countStatement});
     auto mock =
@@ -87,7 +86,8 @@ TEST_F(DocumentSourceGroupTest, ShouldBeAbleToPauseLoading) {
                                            Document(),
                                            Document(),
                                            DocumentSource::GetNextResult::makePauseExecution(),
-                                           Document()});
+                                           Document()},
+                                          expCtx);
     group->setSource(mock.get());
 
     // There were 3 pauses, so we should expect 3 paused results before any results can be returned.
@@ -113,9 +113,8 @@ TEST_F(DocumentSourceGroupTest, ShouldBeAbleToPauseLoadingWhileSpilled) {
     auto&& parser = AccumulationStatement::getParser("$push");
     auto accumulatorArg = BSON(""
                                << "$largeStr");
-    auto [expression, factory] =
-        parser(expCtx, accumulatorArg.firstElement(), expCtx->variablesParseState);
-    AccumulationStatement pushStatement{"spaceHog", expression, factory};
+    auto accExpr = parser(expCtx, accumulatorArg.firstElement(), expCtx->variablesParseState);
+    AccumulationStatement pushStatement{"spaceHog", accExpr};
     auto groupByExpression =
         ExpressionFieldPath::parse(expCtx, "$_id", expCtx->variablesParseState);
     auto group = DocumentSourceGroup::create(
@@ -127,7 +126,8 @@ TEST_F(DocumentSourceGroupTest, ShouldBeAbleToPauseLoadingWhileSpilled) {
                                            DocumentSource::GetNextResult::makePauseExecution(),
                                            Document{{"_id", 1}, {"largeStr", largeStr}},
                                            DocumentSource::GetNextResult::makePauseExecution(),
-                                           Document{{"_id", 2}, {"largeStr", largeStr}}});
+                                           Document{{"_id", 2}, {"largeStr", largeStr}}},
+                                          expCtx);
     group->setSource(mock.get());
 
     // There were 2 pauses, so we should expect 2 paused results before any results can be returned.
@@ -156,9 +156,8 @@ TEST_F(DocumentSourceGroupTest, ShouldErrorIfNotAllowedToSpillToDiskAndResultSet
     auto&& parser = AccumulationStatement::getParser("$push");
     auto accumulatorArg = BSON(""
                                << "$largeStr");
-    auto [expression, factory] =
-        parser(expCtx, accumulatorArg.firstElement(), expCtx->variablesParseState);
-    AccumulationStatement pushStatement{"spaceHog", expression, factory};
+    auto accExpr = parser(expCtx, accumulatorArg.firstElement(), expCtx->variablesParseState);
+    AccumulationStatement pushStatement{"spaceHog", accExpr};
     auto groupByExpression =
         ExpressionFieldPath::parse(expCtx, "$_id", expCtx->variablesParseState);
     auto group = DocumentSourceGroup::create(
@@ -166,10 +165,12 @@ TEST_F(DocumentSourceGroupTest, ShouldErrorIfNotAllowedToSpillToDiskAndResultSet
 
     string largeStr(maxMemoryUsageBytes, 'x');
     auto mock = DocumentSourceMock::createForTest({Document{{"_id", 0}, {"largeStr", largeStr}},
-                                                   Document{{"_id", 1}, {"largeStr", largeStr}}});
+                                                   Document{{"_id", 1}, {"largeStr", largeStr}}},
+                                                  expCtx);
     group->setSource(mock.get());
 
-    ASSERT_THROWS_CODE(group->getNext(), AssertionException, 16945);
+    ASSERT_THROWS_CODE(
+        group->getNext(), AssertionException, ErrorCodes::QueryExceededMemoryLimitNoDiskUseAllowed);
 }
 
 TEST_F(DocumentSourceGroupTest, ShouldCorrectlyTrackMemoryUsageBetweenPauses) {
@@ -181,9 +182,8 @@ TEST_F(DocumentSourceGroupTest, ShouldCorrectlyTrackMemoryUsageBetweenPauses) {
     auto&& parser = AccumulationStatement::getParser("$push");
     auto accumulatorArg = BSON(""
                                << "$largeStr");
-    auto [expression, factory] =
-        parser(expCtx, accumulatorArg.firstElement(), expCtx->variablesParseState);
-    AccumulationStatement pushStatement{"spaceHog", expression, factory};
+    auto accExpr = parser(expCtx, accumulatorArg.firstElement(), expCtx->variablesParseState);
+    AccumulationStatement pushStatement{"spaceHog", accExpr};
     auto groupByExpression =
         ExpressionFieldPath::parse(expCtx, "$_id", expCtx->variablesParseState);
     auto group = DocumentSourceGroup::create(
@@ -194,14 +194,16 @@ TEST_F(DocumentSourceGroupTest, ShouldCorrectlyTrackMemoryUsageBetweenPauses) {
         DocumentSourceMock::createForTest({Document{{"_id", 0}, {"largeStr", largeStr}},
                                            DocumentSource::GetNextResult::makePauseExecution(),
                                            Document{{"_id", 1}, {"largeStr", largeStr}},
-                                           Document{{"_id", 2}, {"largeStr", largeStr}}});
+                                           Document{{"_id", 2}, {"largeStr", largeStr}}},
+                                          expCtx);
     group->setSource(mock.get());
 
     // The first getNext() should pause.
     ASSERT_TRUE(group->getNext().isPaused());
 
     // The next should realize it's used too much memory.
-    ASSERT_THROWS_CODE(group->getNext(), AssertionException, 16945);
+    ASSERT_THROWS_CODE(
+        group->getNext(), AssertionException, ErrorCodes::QueryExceededMemoryLimitNoDiskUseAllowed);
 }
 
 TEST_F(DocumentSourceGroupTest, ShouldReportSingleFieldGroupKeyAsARename) {
@@ -323,7 +325,7 @@ public:
     virtual ~ExpressionBase() {}
     void _doTest() final {
         createGroup(spec());
-        auto source = DocumentSourceMock::createForTest(Document(doc()));
+        auto source = DocumentSourceMock::createForTest(Document(doc()), ctx());
         group()->setSource(source.get());
         // A group result is available.
         auto next = group()->getNext();
@@ -561,7 +563,7 @@ public:
     }
     void runSharded(bool sharded) {
         createGroup(groupSpec());
-        auto source = DocumentSourceMock::createForTest(inputData());
+        auto source = DocumentSourceMock::createForTest(inputData(), ctx());
         group()->setSource(source.get());
 
         intrusive_ptr<DocumentSource> sink = group();
@@ -787,7 +789,8 @@ public:
         auto source = DocumentSourceMock::createForTest({"{_id:0,list:[1,2]}",
                                                          "{_id:1,list:[3,4]}",
                                                          "{_id:0,list:[10,20]}",
-                                                         "{_id:1,list:[30,40]}]}"});
+                                                         "{_id:1,list:[30,40]}]}"},
+                                                        ctx());
 
         // Create a group source.
         createGroup(BSON("_id"

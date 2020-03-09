@@ -81,7 +81,7 @@ class UpdateStage : public RequiresMutableCollectionStage {
     UpdateStage& operator=(const UpdateStage&) = delete;
 
 public:
-    UpdateStage(OperationContext* opCtx,
+    UpdateStage(ExpressionContext* expCtx,
                 const UpdateStageParams& params,
                 WorkingSet* ws,
                 Collection* collection,
@@ -126,7 +126,7 @@ public:
                                                  const DuplicateKeyErrorInfo& errorInfo);
 
 protected:
-    UpdateStage(OperationContext* opCtx,
+    UpdateStage(ExpressionContext* expCtx,
                 const UpdateStageParams& params,
                 WorkingSet* ws,
                 Collection* collection);
@@ -190,7 +190,7 @@ private:
      * If the update changes shard key fields but the new shard key remains on the same node,
      * returns true. If the update does not change shard key fields, returns false.
      */
-    bool checkUpdateChangesShardKeyFields(ScopedCollectionMetadata metadata,
+    bool checkUpdateChangesShardKeyFields(ScopedCollectionDescription collDesc,
                                           const Snapshotted<BSONObj>& oldObj);
 
     // If not WorkingSet::INVALID_ID, we use this rather than asking our child what to do next.

@@ -59,7 +59,7 @@ bool isNamespaceAlwaysUnsharded(const NamespaceString& nss) {
     return nss.isNamespaceAlwaysUnsharded();
 }
 
-class UnshardedCollection : public ScopedCollectionMetadata::Impl {
+class UnshardedCollection : public ScopedCollectionDescription::Impl {
 public:
     UnshardedCollection() = default;
 
@@ -123,16 +123,26 @@ CollectionShardingRuntime* CollectionShardingRuntime::get_UNSAFE(ServiceContext*
 }
 
 ScopedCollectionFilter CollectionShardingRuntime::getOwnershipFilter(OperationContext* opCtx) {
+    const auto optReceivedShardVersion = getOperationReceivedVersion(opCtx, _nss);
+    if (!optReceivedShardVersion)
+        return {kUnshardedCollection};
+
     const auto atClusterTime = repl::ReadConcernArgs::get(opCtx).getArgsAtClusterTime();
     auto optMetadata = _getMetadataWithVersionCheckAt(opCtx, atClusterTime);
 
-    if (!optMetadata)
-        return {kUnshardedCollection};
+    uassert(StaleConfigInfo(_nss,
+                            *optReceivedShardVersion,
+                            getCurrentShardVersionIfKnown(),
+                            ShardingState::get(opCtx)->shardId()),
+            str::stream() << "sharding status of collection " << _nss.ns()
+                          << " is not currently available for filtering and needs to be recovered "
+                          << "from the config server",
+            optMetadata);
 
     return {std::move(*optMetadata)};
 }
 
-ScopedCollectionMetadata CollectionShardingRuntime::getCurrentMetadata() {
+ScopedCollectionDescription CollectionShardingRuntime::getCollectionDescription() {
     auto optMetadata = _getCurrentMetadataIfKnown(boost::none);
     if (!optMetadata)
         return {kUnshardedCollection};
@@ -140,7 +150,8 @@ ScopedCollectionMetadata CollectionShardingRuntime::getCurrentMetadata() {
     return *optMetadata;
 }
 
-boost::optional<ScopedCollectionMetadata> CollectionShardingRuntime::getCurrentMetadataIfKnown() {
+boost::optional<ScopedCollectionDescription>
+CollectionShardingRuntime::getCurrentMetadataIfKnown() {
     return _getCurrentMetadataIfKnown(boost::none);
 }
 
@@ -269,18 +280,20 @@ Status CollectionShardingRuntime::waitForClean(OperationContext* opCtx,
 
             stillScheduled = self->_metadataManager->trackOrphanedDataCleanup(orphanRange);
             if (!stillScheduled) {
-                LOGV2(21918,
-                      "Finished deleting {nss_ns} range {orphanRange}",
-                      "nss_ns"_attr = nss.ns(),
-                      "orphanRange"_attr = redact(orphanRange.toString()));
+                LOGV2_OPTIONS(21918,
+                              {logv2::LogComponent::kShardingMigration},
+                              "Finished waiting for deletion of {nss_ns} range {orphanRange}",
+                              "nss_ns"_attr = nss.ns(),
+                              "orphanRange"_attr = redact(orphanRange.toString()));
                 return Status::OK();
             }
         }
 
-        LOGV2(21919,
-              "Waiting for deletion of {nss_ns} range {orphanRange}",
-              "nss_ns"_attr = nss.ns(),
-              "orphanRange"_attr = orphanRange);
+        LOGV2_OPTIONS(21919,
+                      {logv2::LogComponent::kShardingMigration},
+                      "Waiting for deletion of {nss_ns} range {orphanRange}",
+                      "nss_ns"_attr = nss.ns(),
+                      "orphanRange"_attr = orphanRange);
 
         Status result = stillScheduled->getNoThrow(opCtx);
 
@@ -303,21 +316,22 @@ boost::optional<ChunkRange> CollectionShardingRuntime::getNextOrphanRange(BSONOb
     return _metadataManager->getNextOrphanRange(from);
 }
 
-boost::optional<ScopedCollectionMetadata> CollectionShardingRuntime::_getCurrentMetadataIfKnown(
+boost::optional<ScopedCollectionDescription> CollectionShardingRuntime::_getCurrentMetadataIfKnown(
     const boost::optional<LogicalTime>& atClusterTime) {
     stdx::lock_guard lk(_metadataManagerLock);
     switch (_metadataType) {
         case MetadataType::kUnknown:
             return boost::none;
         case MetadataType::kUnsharded:
-            return ScopedCollectionMetadata{kUnshardedCollection};
+            return ScopedCollectionDescription{kUnshardedCollection};
         case MetadataType::kSharded:
             return _metadataManager->getActiveMetadata(atClusterTime);
     };
     MONGO_UNREACHABLE;
 }
 
-boost::optional<ScopedCollectionMetadata> CollectionShardingRuntime::_getMetadataWithVersionCheckAt(
+boost::optional<ScopedCollectionDescription>
+CollectionShardingRuntime::_getMetadataWithVersionCheckAt(
     OperationContext* opCtx, const boost::optional<mongo::LogicalTime>& atClusterTime) {
     const auto optReceivedShardVersion = getOperationReceivedVersion(opCtx, _nss);
     if (!optReceivedShardVersion) {
@@ -361,7 +375,9 @@ boost::optional<ScopedCollectionMetadata> CollectionShardingRuntime::_getMetadat
 
     if (ChunkVersion::isIgnoredVersion(receivedShardVersion)) {
         uassert(std::move(sci),
-                "no metadata found on multi-write operation, need to refresh",
+                str::stream()
+                    << "sharding status of collection " << _nss.ns()
+                    << " is not currently known and needs to be recovered from the config server",
                 !receivedShardVersion.getCanThrowSSVOnIgnored() ||
                     _getCurrentMetadataIfKnown(atClusterTime));
         return boost::none;
@@ -396,6 +412,13 @@ boost::optional<ScopedCollectionMetadata> CollectionShardingRuntime::_getMetadat
 
     // Those are all the reasons the versions can mismatch
     MONGO_UNREACHABLE;
+}
+
+void CollectionShardingRuntime::appendInfoForServerStatus(BSONArrayBuilder* builder) {
+    stdx::lock_guard lk(_metadataManagerLock);
+    if (_metadataManager) {
+        _metadataManager->appendForServerStatus(builder);
+    }
 }
 
 CollectionCriticalSection::CollectionCriticalSection(OperationContext* opCtx, NamespaceString ns)

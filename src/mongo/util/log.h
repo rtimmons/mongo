@@ -38,8 +38,7 @@
 
 #if defined(MONGO_UTIL_LOG_H_)
 #error \
-    "mongo/util/log.h cannot be included multiple times. " \
-       "This may occur when log.h is included in a header. " \
+    "This may occur when log.h is included in a header. " \
        "Please check your #include's."
 #else  // MONGO_UTIL_LOG_H_
 #define MONGO_UTIL_LOG_H_
@@ -83,9 +82,7 @@ namespace {
 const ::mongo::logger::LogComponent MongoLogDefaultComponent_component =
     MONGO_LOG_DEFAULT_COMPONENT;
 #else
-#error \
-    "mongo/util/log.h requires MONGO_LOG_DEFAULT_COMPONENT to be defined. " \
-       "Please see http://www.mongodb.org/about/contributors/reference/server-logging-rules/ "
+#error "Please see http://www.mongodb.org/about/contributors/reference/server-logging-rules/ "
 #endif  // MONGO_LOG_DEFAULT_COMPONENT
 
 using logger::LogstreamBuilderDeprecated;
@@ -175,57 +172,38 @@ inline LogstreamBuilderDeprecated log(logger::LogComponent::Value componentValue
 }  // namespace
 
 // this can't be in log_global_settings.h because it utilizes MongoLogDefaultComponent_component
-inline bool shouldLog(logger::LogSeverity severity) {
+inline bool shouldLogV1(logger::LogSeverity severity) {
     if (logV2Enabled())
         return logv2::LogManager::global().getGlobalSettings().shouldLog(
             logComponentV1toV2(MongoLogDefaultComponent_component), logSeverityV1toV2(severity));
-    return mongo::shouldLog(MongoLogDefaultComponent_component, severity);
+    return mongo::shouldLogV1(MongoLogDefaultComponent_component, severity);
 }
 
 // MONGO_LOG uses log component from MongoLogDefaultComponent from current or global namespace.
-#define MONGO_LOG(DLEVEL)                                                                 \
-    if (!::mongo::shouldLog(MongoLogDefaultComponent_component,                           \
-                            ::mongo::LogstreamBuilderDeprecated::severityCast(DLEVEL))) { \
-    } else                                                                                \
-        ::mongo::logger::LogstreamBuilderDeprecated(                                      \
-            ::mongo::logger::globalLogDomain(),                                           \
-            ::mongo::getThreadName(),                                                     \
-            ::mongo::LogstreamBuilderDeprecated::severityCast(DLEVEL),                    \
+#define MONGO_LOG(DLEVEL)                                                                   \
+    if (!::mongo::shouldLogV1(MongoLogDefaultComponent_component,                           \
+                              ::mongo::LogstreamBuilderDeprecated::severityCast(DLEVEL))) { \
+    } else                                                                                  \
+        ::mongo::logger::LogstreamBuilderDeprecated(                                        \
+            ::mongo::logger::globalLogDomain(),                                             \
+            ::mongo::getThreadName(),                                                       \
+            ::mongo::LogstreamBuilderDeprecated::severityCast(DLEVEL),                      \
             MongoLogDefaultComponent_component)
 
 #define LOG MONGO_LOG
 
-#define MONGO_LOG_COMPONENT(DLEVEL, COMPONENT1)                                           \
-    if (!::mongo::shouldLog((COMPONENT1),                                                 \
-                            ::mongo::LogstreamBuilderDeprecated::severityCast(DLEVEL))) { \
-    } else                                                                                \
-        ::mongo::logger::LogstreamBuilderDeprecated(                                      \
-            ::mongo::logger::globalLogDomain(),                                           \
-            ::mongo::getThreadName(),                                                     \
-            ::mongo::LogstreamBuilderDeprecated::severityCast(DLEVEL),                    \
+#define MONGO_LOG_COMPONENT(DLEVEL, COMPONENT1)                                             \
+    if (!::mongo::shouldLogV1((COMPONENT1),                                                 \
+                              ::mongo::LogstreamBuilderDeprecated::severityCast(DLEVEL))) { \
+    } else                                                                                  \
+        ::mongo::logger::LogstreamBuilderDeprecated(                                        \
+            ::mongo::logger::globalLogDomain(),                                             \
+            ::mongo::getThreadName(),                                                       \
+            ::mongo::LogstreamBuilderDeprecated::severityCast(DLEVEL),                      \
             (COMPONENT1))
-
-
-/**
- * Rotates the log files.  Returns true if all logs rotate successfully.
- *
- * renameFiles - true means we rename files, false means we expect the file to be renamed
- *               externally
- *
- * logrotate on *nix systems expects us not to rename the file, it is expected that the program
- * simply open the file again with the same name.
- * We expect logrotate to rename the existing file before we rotate, and so the next open
- * we do should result in a file create.
- */
-bool rotateLogs(bool renameFiles);
 
 extern Tee* const warnings;            // Things put here go in serverStatus
 extern Tee* const startupWarningsLog;  // Things put here get reported in MMS
-
-/**
- * Write the current context (backtrace), along with the optional "msg".
- */
-void logContext(const char* msg = nullptr);
 
 }  // namespace mongo
 

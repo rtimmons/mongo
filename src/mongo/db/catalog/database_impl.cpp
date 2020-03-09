@@ -703,6 +703,7 @@ Collection* DatabaseImpl::createCollection(OperationContext* opCtx,
                                               std::move(catalogIdRecordStorePair.second));
     auto collection = ownedCollection.get();
     ownedCollection->init(opCtx);
+    ownedCollection->setCommitted(false);
     UncommittedCollections::addToTxn(opCtx, std::move(ownedCollection), createTime);
     openCreateCollectionWindowFp.executeIf([&](const BSONObj& data) { sleepsecs(3); },
                                            [&](const BSONObj& data) {
@@ -877,7 +878,7 @@ Status DatabaseImpl::userCreateNS(OperationContext* opCtx,
 
     if (!collectionOptions.validator.isEmpty()) {
         boost::intrusive_ptr<ExpressionContext> expCtx(
-            new ExpressionContext(opCtx, collator.get(), nss));
+            new ExpressionContext(opCtx, std::move(collator), nss));
 
         // Save this to a variable to avoid reading the atomic variable multiple times.
         const auto currentFCV = serverGlobalParams.featureCompatibility.getVersion();

@@ -1080,7 +1080,7 @@ extern int __wt_msg(WT_SESSION_IMPL *session, const char *fmt, ...)
     WT_GCC_FUNC_DECL_ATTRIBUTE((warn_unused_result));
 extern int __wt_multi_to_ref(WT_SESSION_IMPL *session, WT_PAGE *page, WT_MULTI *multi,
   WT_REF **refp, size_t *incrp, bool closing) WT_GCC_FUNC_DECL_ATTRIBUTE((warn_unused_result));
-extern int __wt_name_check(WT_SESSION_IMPL *session, const char *str, size_t len)
+extern int __wt_name_check(WT_SESSION_IMPL *session, const char *str, size_t len, bool check_uri)
   WT_GCC_FUNC_DECL_ATTRIBUTE((warn_unused_result));
 extern int __wt_nfilename(WT_SESSION_IMPL *session, const char *name, size_t namelen, char **path)
   WT_GCC_FUNC_DECL_ATTRIBUTE((warn_unused_result));
@@ -1695,7 +1695,6 @@ extern void __wt_readlock(WT_SESSION_IMPL *session, WT_RWLOCK *l);
 extern void __wt_readunlock(WT_SESSION_IMPL *session, WT_RWLOCK *l);
 extern void __wt_rec_dictionary_free(WT_SESSION_IMPL *session, WT_RECONCILE *r);
 extern void __wt_rec_dictionary_reset(WT_RECONCILE *r);
-extern void __wt_ref_addr_free(WT_SESSION_IMPL *session, WT_REF *ref);
 extern void __wt_ref_out(WT_SESSION_IMPL *session, WT_REF *ref);
 extern void __wt_root_ref_init(
   WT_SESSION_IMPL *session, WT_REF *root_ref, WT_PAGE *root, bool is_recno);
@@ -2137,6 +2136,7 @@ static inline void __wt_rec_cell_build_addr(
 static inline void __wt_rec_image_copy(WT_SESSION_IMPL *session, WT_RECONCILE *r, WT_REC_KV *kv);
 static inline void __wt_rec_incr(
   WT_SESSION_IMPL *session, WT_RECONCILE *r, uint32_t v, size_t size);
+static inline void __wt_ref_addr_free(WT_SESSION_IMPL *session, WT_REF *ref);
 static inline void __wt_ref_info(
   WT_SESSION_IMPL *session, WT_REF *ref, const uint8_t **addrp, size_t *sizep, bool *is_leafp);
 static inline void __wt_ref_info_lock(

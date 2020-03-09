@@ -34,6 +34,7 @@
 #include <algorithm>
 #include <iterator>
 
+#include "mongo/db/repl/repl_server_parameters_gen.h"
 #include "mongo/db/repl/repl_set_config.h"
 #include "mongo/db/repl/replication_coordinator_external_state.h"
 #include "mongo/db/service_context.h"
@@ -195,19 +196,23 @@ Status validateSingleNodeChange(const ReplSetConfig& oldConfig, const ReplSetCon
  * primary under "oldConfig" and is electable under "newConfig".  Such checks that
  * require knowledge of which node is executing the configuration are out of scope
  * for this function.
+ *
+ * When "force" is true, skips config version check, since the version is guaranteed
+ * to be valid either by "force" reconfig command or by internal use.
  */
 Status validateOldAndNewConfigsCompatible(const ReplSetConfig& oldConfig,
                                           const ReplSetConfig& newConfig) {
     invariant(newConfig.isInitialized());
     invariant(oldConfig.isInitialized());
 
-    if (oldConfig.getConfigVersion() >= newConfig.getConfigVersion()) {
-        return Status(ErrorCodes::NewReplicaSetConfigurationIncompatible,
-                      str::stream()
-                          << "New replica set configuration version must be greater than old, but "
-                          << newConfig.getConfigVersion() << " is not greater than "
-                          << oldConfig.getConfigVersion() << " for replica set "
-                          << newConfig.getReplSetName());
+    if (oldConfig.getConfigVersionAndTerm() >= newConfig.getConfigVersionAndTerm()) {
+        return Status(
+            ErrorCodes::NewReplicaSetConfigurationIncompatible,
+            str::stream()
+                << "New replica set configuration version and term must be greater than old, but "
+                << newConfig.getConfigVersionAndTerm().toString() << " is not greater than "
+                << oldConfig.getConfigVersionAndTerm().toString() << " for replica set "
+                << newConfig.getReplSetName());
     }
 
     if (oldConfig.getReplSetName() != newConfig.getReplSetName()) {
@@ -325,11 +330,12 @@ StatusWith<int> validateConfigForInitiate(ReplicationCoordinatorExternalState* e
                                              << newConfig.getConfigVersion());
     }
 
-    if (newConfig.getConfigTerm() != OpTime::kInitialTerm) {
-        return StatusWith<int>(
-            ErrorCodes::NewReplicaSetConfigurationIncompatible,
-            str::stream() << "Configuration used to initiate a replica set must have term "
-                          << OpTime::kInitialTerm << ", but found " << newConfig.getConfigTerm());
+    if (newConfig.getConfigTerm() != OpTime::kUninitializedTerm) {
+        return StatusWith<int>(ErrorCodes::NewReplicaSetConfigurationIncompatible,
+                               str::stream()
+                                   << "Configuration used to initiate a replica set must have term "
+                                   << OpTime::kUninitializedTerm << ", but found "
+                                   << newConfig.getConfigTerm());
     }
     return findSelfInConfigIfElectable(externalState, newConfig, ctx);
 }
@@ -357,7 +363,10 @@ StatusWith<int> validateConfigForReconfig(ReplicationCoordinatorExternalState* e
 
     // For non-force reconfigs, verify that the reconfig only adds or removes a single node. This
     // ensures that all quorums of the new config overlap with all quorums of the old config.
-    if (!force) {
+    if (!force &&
+        serverGlobalParams.featureCompatibility.getVersion() ==
+            ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo44 &&
+        enableSafeReplicaSetReconfig) {
         status = validateSingleNodeChange(oldConfig, newConfig);
         if (!status.isOK()) {
             return StatusWith<int>(status);

@@ -40,7 +40,6 @@
 #include "mongo/scripting/mozjs/engine_gen.h"
 #include "mongo/scripting/mozjs/implscope.h"
 #include "mongo/scripting/mozjs/proxyscope.h"
-#include "mongo/util/log.h"
 
 namespace js {
 void DisableExtraThreads();
@@ -106,7 +105,7 @@ void MozJSScriptEngine::interrupt(unsigned opId) {
 std::string MozJSScriptEngine::printKnownOps_inlock() {
     str::stream out;
 
-    if (shouldLog(logger::LogSeverity::Debug(2))) {
+    if (shouldLog(logv2::LogSeverity::Debug(2))) {
         out << "  known ops: \n";
 
         for (auto&& iSc : _opToScopeMap) {

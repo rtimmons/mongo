@@ -95,8 +95,7 @@ public:
 
         boost::intrusive_ptr<ExpressionContext> _expCtx;
 
-        std::unique_ptr<CollatorInterface> _originalCollatorOwned;
-        const CollatorInterface* _originalCollatorUnowned{nullptr};
+        std::unique_ptr<CollatorInterface> _originalCollator;
     };
 
     /**
@@ -136,7 +135,7 @@ public:
      * If 'collator' is null, the simple collator will be used.
      */
     ExpressionContext(OperationContext* opCtx,
-                      const CollatorInterface* collator,
+                      std::unique_ptr<CollatorInterface> collator,
                       const NamespaceString& ns,
                       const boost::optional<RuntimeConstants>& runtimeConstants = boost::none);
 
@@ -168,7 +167,11 @@ public:
     }
 
     const CollatorInterface* getCollator() const {
-        return _unownedCollator;
+        return _collator.get();
+    }
+
+    bool shouldCollectExecStats() const {
+        return static_cast<bool>(explain);
     }
 
     /**
@@ -181,10 +184,22 @@ public:
      * the ExpressionContext.
      */
     BSONObj getCollatorBSON() const {
-        return _unownedCollator ? _unownedCollator->getSpec().toBSON() : CollationSpec::kSimpleSpec;
+        return _collator ? _collator->getSpec().toBSON() : CollationSpec::kSimpleSpec;
     }
 
-    void setCollator(const CollatorInterface* collator);
+    /**
+     * Sets '_collator' and resets 'documentComparator' and 'valueComparator'.
+     *
+     * Use with caution - '_collator' is used in the context of a Pipeline, and it is illegal
+     * to change the collation once a Pipeline has been parsed with this ExpressionContext.
+     */
+    void setCollator(std::unique_ptr<CollatorInterface> collator) {
+        _collator = std::move(collator);
+
+        // Document/Value comparisons must be aware of the collation.
+        _documentComparator = DocumentComparator(_collator.get());
+        _valueComparator = ValueComparator(_collator.get());
+    }
 
     const DocumentComparator& getDocumentComparator() const {
         return _documentComparator;
@@ -264,12 +279,19 @@ public:
             invariant(!forceLoadOfStoredProcedures);
             invariant(!isMapReduceCommand);
         }
+
+        // Stored procedures are only loaded for the $where expression and MapReduce command.
+        const bool loadStoredProcedures = forceLoadOfStoredProcedures || isMapReduceCommand;
+
+        if (hasWhereClause && !loadStoredProcedures) {
+            uasserted(4649200,
+                      "A single operation cannot use both JavaScript aggregation expressions and "
+                      "$where.");
+        }
+
         const boost::optional<mongo::BSONObj>& scope = runtimeConstants.getJsScope();
-        return JsExecution::get(opCtx,
-                                scope.get_value_or(BSONObj()),
-                                ns.db(),
-                                forceLoadOfStoredProcedures || isMapReduceCommand,
-                                jsHeapLimitMB);
+        return JsExecution::get(
+            opCtx, scope.get_value_or(BSONObj()), ns.db(), loadStoredProcedures, jsHeapLimitMB);
     }
 
     // The explain verbosity requested by the user, or boost::none if no explain was requested.
@@ -281,6 +303,7 @@ public:
     bool allowDiskUse = false;
     bool bypassDocumentValidation = false;
     bool inMultiDocumentTransaction = false;
+    bool hasWhereClause = false;
 
     NamespaceString ns;
 
@@ -343,27 +366,10 @@ public:
 protected:
     static const int kInterruptCheckPeriod = 128;
 
-    /**
-     * Sets '_ownedCollator' and resets '_unownedCollator', 'documentComparator' and
-     * 'valueComparator'.
-     *
-     * Use with caution - '_ownedCollator' is used in the context of a Pipeline, and it is illegal
-     * to change the collation once a Pipeline has been parsed with this ExpressionContext.
-     */
-    void setCollator(std::unique_ptr<CollatorInterface> collator) {
-        _ownedCollator = std::move(collator);
-        setCollator(_ownedCollator.get());
-    }
-
     friend class CollatorStash;
 
-    // Collator used for comparisons. This is owned in the context of a Pipeline.
-    // TODO SERVER-31294: Move ownership of an aggregation's collator elsewhere.
-    std::unique_ptr<CollatorInterface> _ownedCollator;
-
-    // Collator used for comparisons. If '_ownedCollator' is non-null, then this must point to the
-    // same collator object.
-    const CollatorInterface* _unownedCollator = nullptr;
+    // Collator used for comparisons.
+    std::unique_ptr<CollatorInterface> _collator;
 
     // Used for all comparisons of Document/Value during execution of the aggregation operation.
     // Must not be changed after parsing a Pipeline with this ExpressionContext.

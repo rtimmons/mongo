@@ -60,6 +60,7 @@
 #include "mongo/db/s/collection_sharding_state.h"
 #include "mongo/db/s/database_sharding_state.h"
 #include "mongo/db/server_options.h"
+#include "mongo/db/storage/two_phase_index_build_knobs_gen.h"
 #include "mongo/db/views/view_catalog.h"
 #include "mongo/logv2/log.h"
 #include "mongo/platform/compiler.h"
@@ -205,7 +206,9 @@ void appendFinalIndexFieldsToResult(int numIndexesBefore,
         result.append(kNoteFieldName, "index already exists");
     }
 
-    commitQuorum->append("commitQuorum", &result);
+    // commitQuorum will be populated only when two phase index build is enabled.
+    if (commitQuorum)
+        commitQuorum->appendToBuilder(kCommitQuorumFieldName, &result);
 }
 
 
@@ -273,23 +276,32 @@ Status validateTTLOptions(OperationContext* opCtx, const BSONObj& cmdObj) {
  * commit quorum, which consists of all the data-bearing nodes.
  */
 boost::optional<CommitQuorumOptions> parseAndGetCommitQuorum(OperationContext* opCtx,
+                                                             IndexBuildProtocol protocol,
                                                              const BSONObj& cmdObj) {
     auto replCoord = repl::ReplicationCoordinator::get(opCtx);
+    auto commitQuorumEnabled = (enableIndexBuildCommitQuorum) ? true : false;
 
     if (cmdObj.hasField(kCommitQuorumFieldName)) {
         uassert(ErrorCodes::BadValue,
                 str::stream() << "Standalones can't specify commitQuorum",
                 replCoord->isReplEnabled());
+        uassert(ErrorCodes::BadValue,
+                str::stream() << "commitQuorum is supported only for two phase index builds with "
+                                 "majority commit quorum support enabled ",
+                (IndexBuildProtocol::kTwoPhase == protocol && commitQuorumEnabled));
         CommitQuorumOptions commitQuorum;
         uassertStatusOK(commitQuorum.parse(cmdObj.getField(kCommitQuorumFieldName)));
         return commitQuorum;
-    } else {
-        // Retrieve the default commit quorum if one wasn't passed in, which consists of all
-        // data-bearing nodes.
-        int numDataBearingMembers =
-            replCoord->isReplEnabled() ? replCoord->getConfig().getNumDataBearingMembers() : 1;
-        return CommitQuorumOptions(numDataBearingMembers);
     }
+
+    if (IndexBuildProtocol::kTwoPhase == protocol) {
+        // Setting CommitQuorum to 0 will make the index build to opt out of voting proces.
+        return (replCoord->isReplEnabled() && commitQuorumEnabled)
+            ? CommitQuorumOptions(CommitQuorumOptions::kMajority)
+            : CommitQuorumOptions(CommitQuorumOptions::kDisabled);
+    }
+
+    return boost::none;
 }
 
 /**
@@ -314,11 +326,11 @@ void checkUniqueIndexConstraints(OperationContext* opCtx,
                                  const BSONObj& newIdxKey) {
     invariant(opCtx->lockState()->isCollectionLockedForMode(nss, MODE_X));
 
-    const auto metadata = CollectionShardingState::get(opCtx, nss)->getCurrentMetadata();
-    if (!metadata->isSharded())
+    const auto collDesc = CollectionShardingState::get(opCtx, nss)->getCollectionDescription();
+    if (!collDesc.isSharded())
         return;
 
-    const ShardKeyPattern shardKeyPattern(metadata->getKeyPattern());
+    const ShardKeyPattern shardKeyPattern(collDesc.getKeyPattern());
     uassert(ErrorCodes::CannotCreateIndex,
             str::stream() << "cannot create unique index over " << newIdxKey
                           << " with shard key pattern " << shardKeyPattern.toBSON(),
@@ -486,7 +498,13 @@ bool runCreateIndexesWithCoordinator(OperationContext* opCtx,
 
     auto specs = uassertStatusOK(
         parseAndValidateIndexSpecs(opCtx, ns, cmdObj, serverGlobalParams.featureCompatibility));
-    boost::optional<CommitQuorumOptions> commitQuorum = parseAndGetCommitQuorum(opCtx, cmdObj);
+    auto replCoord = repl::ReplicationCoordinator::get(opCtx);
+    auto indexBuildsCoord = IndexBuildsCoordinator::get(opCtx);
+    auto protocol = IndexBuildsCoordinator::supportsTwoPhaseIndexBuild() &&
+            !replCoord->isOplogDisabledFor(opCtx, ns)
+        ? IndexBuildProtocol::kTwoPhase
+        : IndexBuildProtocol::kSinglePhase;
+    auto commitQuorum = parseAndGetCommitQuorum(opCtx, protocol, cmdObj);
 
     Status validateTTL = validateTTLOptions(opCtx, cmdObj);
     uassertStatusOK(validateTTL);
@@ -553,11 +571,7 @@ bool runCreateIndexesWithCoordinator(OperationContext* opCtx,
                          AutoStatsTracker::LogMode::kUpdateTopAndCurOp,
                          dbProfilingLevel);
 
-    auto indexBuildsCoord = IndexBuildsCoordinator::get(opCtx);
     auto buildUUID = UUID::gen();
-    auto protocol = IndexBuildsCoordinator::supportsTwoPhaseIndexBuild()
-        ? IndexBuildProtocol::kTwoPhase
-        : IndexBuildProtocol::kSinglePhase;
     LOGV2(20438, "Registering index build: {buildUUID}", "buildUUID"_attr = buildUUID);
     ReplIndexBuildState::IndexCatalogStats stats;
     IndexBuildsCoordinator::IndexBuildOptions indexBuildOptions = {commitQuorum};
@@ -625,12 +639,7 @@ bool runCreateIndexesWithCoordinator(OperationContext* opCtx,
             // this be a no-op.
             // Use a null abort timestamp because the index build will generate its own timestamp
             // on cleanup.
-            indexBuildsCoord->abortIndexBuildByBuildUUIDNoWait(
-                opCtx,
-                buildUUID,
-                Timestamp(),
-                str::stream() << "Index build interrupted: " << buildUUID << ": "
-                              << interruptionEx.toString());
+            indexBuildsCoord->abortIndexBuildOnError(opCtx, buildUUID, interruptionEx.toStatus());
             LOGV2(20443, "Index build aborted: {buildUUID}", "buildUUID"_attr = buildUUID);
 
             throw;
@@ -650,14 +659,7 @@ bool runCreateIndexesWithCoordinator(OperationContext* opCtx,
                 throw;
             }
 
-            // Use a null abort timestamp because the index build will generate a ghost timestamp
-            // for the single-phase build on cleanup.
-            indexBuildsCoord->abortIndexBuildByBuildUUIDNoWait(
-                opCtx,
-                buildUUID,
-                Timestamp(),
-                str::stream() << "Index build interrupted due to change in replication state: "
-                              << buildUUID << ": " << ex.toString());
+            indexBuildsCoord->abortIndexBuildOnError(opCtx, buildUUID, ex.toStatus());
             LOGV2(20446,
                   "Index build aborted due to NotMaster error: {buildUUID}",
                   "buildUUID"_attr = buildUUID);

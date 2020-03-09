@@ -33,6 +33,7 @@
 #include <vector>
 
 #include "mongo/client/replica_set_change_notifier.h"
+#include "mongo/executor/network_connection_hook.h"
 #include "mongo/executor/task_executor.h"
 #include "mongo/platform/mutex.h"
 #include "mongo/util/hierarchical_acquisition.h"
@@ -44,6 +45,22 @@ class BSONObjBuilder;
 class ConnectionString;
 class ReplicaSetMonitor;
 class MongoURI;
+
+class ReplicaSetMonitorManagerNetworkConnectionHook final : public executor::NetworkConnectionHook {
+public:
+    ReplicaSetMonitorManagerNetworkConnectionHook() = default;
+    virtual ~ReplicaSetMonitorManagerNetworkConnectionHook() = default;
+
+    Status validateHost(const HostAndPort& remoteHost,
+                        const BSONObj& isMasterRequest,
+                        const executor::RemoteCommandResponse& isMasterReply) override;
+
+    StatusWith<boost::optional<executor::RemoteCommandRequest>> makeRequest(
+        const HostAndPort& remoteHost) override;
+
+    Status handleReply(const HostAndPort& remoteHost,
+                       executor::RemoteCommandResponse&& response) override;
+};
 
 /**
  * Manages the lifetime of a set of replica set monitors.
@@ -78,6 +95,8 @@ public:
      */
     void removeMonitor(StringData setName);
 
+    std::shared_ptr<ReplicaSetMonitor> getMonitorForHost(const HostAndPort& host);
+
     /**
      * Removes and destroys all replica set monitors. Should be used for unit tests only.
      */
@@ -97,7 +116,7 @@ public:
     /**
      * Returns an executor for running RSM tasks.
      */
-    executor::TaskExecutor* getExecutor();
+    std::shared_ptr<executor::TaskExecutor> getExecutor();
 
     ReplicaSetChangeNotifier& getNotifier();
 
@@ -108,10 +127,10 @@ private:
 
     // Protects access to the replica set monitors
     mutable Mutex _mutex =
-        MONGO_MAKE_LATCH(HierarchicalAcquisitionLevel(4), "ReplicaSetMonitorManager::_mutex");
+        MONGO_MAKE_LATCH(HierarchicalAcquisitionLevel(6), "ReplicaSetMonitorManager::_mutex");
 
     // Executor for monitoring replica sets.
-    std::unique_ptr<executor::TaskExecutor> _taskExecutor;
+    std::shared_ptr<executor::TaskExecutor> _taskExecutor;
 
     // Widget to notify listeners when a RSM notices a change
     ReplicaSetChangeNotifier _notifier;

@@ -55,6 +55,7 @@
 #include "mongo/stdx/future.h"
 #include "mongo/unittest/barrier.h"
 #include "mongo/unittest/death_test.h"
+#include "mongo/unittest/log_test.h"
 #include "mongo/unittest/unittest.h"
 #include "mongo/util/clock_source_mock.h"
 #include "mongo/util/fail_point.h"
@@ -3112,6 +3113,152 @@ std::string buildTransactionInfoString(OperationContext* opCtx,
     return expectedTransactionInfo.str();
 }
 
+
+/*
+ * Builds expected parameters info BSON.
+ */
+void buildParametersInfoBSON(BSONObjBuilder* builder,
+                             LogicalSessionId sessionId,
+                             const TxnNumber txnNum,
+                             const repl::ReadConcernArgs readConcernArgs,
+                             bool autocommitVal) {
+    BSONObjBuilder lsidBuilder;
+    sessionId.serialize(&lsidBuilder);
+    auto autocommitString = autocommitVal ? "true" : "false";
+
+    BSONObjBuilder params = builder->subobjStart("parameters");
+    params.append("lsid", lsidBuilder.obj());
+    params.append("txnNumber", txnNum);
+    params.append("autocommit", autocommitString);
+    readConcernArgs.appendInfo(&params);
+}
+
+/*
+ * Builds expected single transaction stats info string.
+ */
+void buildSingleTransactionStatsBSON(BSONObjBuilder* builder, const int metricValue) {
+    builder->append("keysExamined", metricValue);
+    builder->append("docsExamined", metricValue);
+    builder->append("nMatched", metricValue);
+    builder->append("nModified", metricValue);
+    builder->append("ninserted", metricValue);
+    builder->append("ndeleted", metricValue);
+    builder->append("keysInserted", metricValue);
+    builder->append("keysDeleted", metricValue);
+    builder->append("prepareReadConflicts", metricValue);
+    builder->append("writeConflicts", metricValue);
+}
+
+/*
+ * Builds the time active and time inactive info BSON.
+ */
+void buildTimeActiveInactiveBSON(BSONObjBuilder* builder,
+                                 TransactionParticipant::Participant txnParticipant,
+                                 TickSource* tickSource,
+                                 TickSource::Tick curTick) {
+    // Add time active micros to string.
+    builder->append("timeActiveMicros",
+                    durationCount<Microseconds>(
+                        txnParticipant.getSingleTransactionStatsForTest().getTimeActiveMicros(
+                            tickSource, curTick)));
+
+    // Add time inactive micros to string.
+    builder->append("timeInactiveMicros",
+                    durationCount<Microseconds>(
+                        txnParticipant.getSingleTransactionStatsForTest().getTimeInactiveMicros(
+                            tickSource, curTick)));
+}
+
+/*
+ * Builds the total prepared duration info BSON.
+ */
+void buildPreparedDurationBSON(BSONObjBuilder* builder,
+                               TransactionParticipant::Participant txnParticipant,
+                               TickSource* tickSource,
+                               TickSource::Tick curTick) {
+    builder->append("totalPreparedDurationMicros",
+                    durationCount<Microseconds>(
+                        txnParticipant.getSingleTransactionStatsForTest().getPreparedDuration(
+                            tickSource, curTick)));
+}
+
+/*
+ * Builds the entire expected transaction info BSON and returns it.
+ *
+ * Must be kept in sync with TransactionParticipant::Participant::_transactionInfoForLog.
+ */
+BSONObj buildTransactionInfoBSON(OperationContext* opCtx,
+                                 TransactionParticipant::Participant txnParticipant,
+                                 std::string terminationCause,
+                                 const LogicalSessionId sessionId,
+                                 const TxnNumber txnNum,
+                                 const int metricValue,
+                                 const bool wasPrepared,
+                                 bool autocommitVal = false,
+                                 boost::optional<repl::OpTime> prepareOpTime = boost::none) {
+    // Calling transactionInfoForLog to get the actual transaction info string.
+    const auto lockerInfo =
+        opCtx->lockState()->getLockerInfo(CurOp::get(*opCtx)->getLockStatsBase());
+    // Building expected transaction info string.
+    StringBuilder parametersInfo;
+    // autocommit must be false for a multi statement transaction, so
+    // getTransactionInfoForLogForTest should theoretically always print false. In certain unit
+    // tests, we compare its output to the output generated in this function.
+    //
+    // Since we clear the state of a transaction on abort, if getTransactionInfoForLogForTest is
+    // called after a transaction is already aborted, it will encounter boost::none for the
+    // autocommit value. In that case, it will print out true.
+    //
+    // In cases where we call getTransactionInfoForLogForTest after aborting a transaction
+    // and check if the output matches this function's output, we must explicitly set autocommitVal
+    // to true.
+
+    BSONObjBuilder logLine;
+    {
+        BSONObjBuilder attrs = logLine.subobjStart("attr");
+
+        buildParametersInfoBSON(
+            &attrs, sessionId, txnNum, repl::ReadConcernArgs::get(opCtx), autocommitVal);
+
+
+        attrs.append(
+            "readTimestamp",
+            txnParticipant.getSingleTransactionStatsForTest().getReadTimestamp().toString());
+
+        buildSingleTransactionStatsBSON(&attrs, metricValue);
+
+        attrs.append("terminationCause", terminationCause);
+        auto tickSource = opCtx->getServiceContext()->getTickSource();
+        buildTimeActiveInactiveBSON(&attrs, txnParticipant, tickSource, tickSource->getTicks());
+
+        attrs.append("numYields", 0);
+
+        BSONObjBuilder locks;
+        if (lockerInfo) {
+            lockerInfo->stats.report(&locks);
+        }
+        attrs.append("locks", locks.obj());
+
+        attrs.append("wasPrepared", wasPrepared);
+
+        if (wasPrepared) {
+            buildPreparedDurationBSON(&attrs, txnParticipant, tickSource, tickSource->getTicks());
+            attrs.append("prepareOpTime",
+                         (prepareOpTime ? prepareOpTime->toBSON()
+                                        : txnParticipant.getPrepareOpTime().toBSON()));
+        }
+
+        attrs.append("durationMillis",
+                     duration_cast<Milliseconds>(
+                         txnParticipant.getSingleTransactionStatsForTest().getDuration(
+                             tickSource, tickSource->getTicks()))
+                         .count());
+    }
+
+    return logLine.obj();
+}
+
+
 TEST_F(TransactionsMetricsTest, TestTransactionInfoForLogAfterCommit) {
     // Initialize SingleTransactionStats AdditiveMetrics objects.
     const int metricValue = 1;
@@ -3343,10 +3490,10 @@ TEST_F(TransactionsMetricsTest, LogTransactionInfoAfterSlowCommit) {
 
     const auto lockerInfo = opCtx()->lockState()->getLockerInfo(boost::none);
     ASSERT(lockerInfo);
-    std::string expectedTransactionInfo = "transaction " +
-        txnParticipant.getTransactionInfoForLogForTest(
-            opCtx(), &lockerInfo->stats, true, readConcernArgs);
-    ASSERT_EQUALS(1, countTextFormatLogLinesContaining(expectedTransactionInfo));
+
+    BSONObj expected = txnParticipant.getTransactionInfoBSONForLogForTest(
+        opCtx(), &lockerInfo->stats, true, readConcernArgs);
+    ASSERT_EQUALS(1, countBSONFormatLogLinesIsSubset(expected));
 }
 
 TEST_F(TransactionsMetricsTest, LogPreparedTransactionInfoAfterSlowCommit) {
@@ -3391,10 +3538,10 @@ TEST_F(TransactionsMetricsTest, LogPreparedTransactionInfoAfterSlowCommit) {
 
     const auto lockerInfo = opCtx()->lockState()->getLockerInfo(boost::none);
     ASSERT(lockerInfo);
-    std::string expectedTransactionInfo = "transaction " +
-        txnParticipant.getTransactionInfoForLogForTest(
-            opCtx(), &lockerInfo->stats, true, readConcernArgs);
-    ASSERT_EQUALS(1, countTextFormatLogLinesContaining(expectedTransactionInfo));
+
+    BSONObj expected = txnParticipant.getTransactionInfoBSONForLogForTest(
+        opCtx(), &lockerInfo->stats, true, readConcernArgs);
+    ASSERT_EQUALS(1, countBSONFormatLogLinesIsSubset(expected));
 }
 
 TEST_F(TransactionsMetricsTest, LogTransactionInfoAfterSlowAbort) {
@@ -3439,16 +3586,15 @@ TEST_F(TransactionsMetricsTest, LogTransactionInfoAfterSlowAbort) {
     const auto lockerInfo = opCtx()->lockState()->getLockerInfo(boost::none);
     ASSERT(lockerInfo);
 
-    std::string expectedTransactionInfo =
-        buildTransactionInfoString(opCtx(),
-                                   txnParticipant,
-                                   "aborted",
-                                   *opCtx()->getLogicalSessionId(),
-                                   *opCtx()->getTxnNumber(),
-                                   metricValue,
-                                   false);
+    auto expectedTransactionInfo = buildTransactionInfoBSON(opCtx(),
+                                                            txnParticipant,
+                                                            "aborted",
+                                                            *opCtx()->getLogicalSessionId(),
+                                                            *opCtx()->getTxnNumber(),
+                                                            metricValue,
+                                                            false);
 
-    ASSERT_EQUALS(1, countTextFormatLogLinesContaining(expectedTransactionInfo));
+    ASSERT_EQUALS(1, countBSONFormatLogLinesIsSubset(expectedTransactionInfo));
 }
 
 TEST_F(TransactionsMetricsTest, LogPreparedTransactionInfoAfterSlowAbort) {
@@ -3496,18 +3642,16 @@ TEST_F(TransactionsMetricsTest, LogPreparedTransactionInfoAfterSlowAbort) {
     const auto lockerInfo = opCtx()->lockState()->getLockerInfo(boost::none);
     ASSERT(lockerInfo);
 
-    std::string expectedTransactionInfo =
-        buildTransactionInfoString(opCtx(),
-                                   txnParticipant,
-                                   "aborted",
-                                   *opCtx()->getLogicalSessionId(),
-                                   *opCtx()->getTxnNumber(),
-                                   metricValue,
-                                   true,
-                                   false,
-                                   prepareOpTime);
-
-    ASSERT_EQUALS(1, countTextFormatLogLinesContaining(expectedTransactionInfo));
+    auto expectedTransactionInfo = buildTransactionInfoBSON(opCtx(),
+                                                            txnParticipant,
+                                                            "aborted",
+                                                            *opCtx()->getLogicalSessionId(),
+                                                            *opCtx()->getTxnNumber(),
+                                                            metricValue,
+                                                            true,
+                                                            false,
+                                                            prepareOpTime);
+    ASSERT_EQUALS(1, countBSONFormatLogLinesIsSubset(expectedTransactionInfo));
 }
 
 TEST_F(TransactionsMetricsTest, LogTransactionInfoAfterExceptionInPrepare) {
@@ -3556,16 +3700,15 @@ TEST_F(TransactionsMetricsTest, LogTransactionInfoAfterExceptionInPrepare) {
 
     const auto lockerInfo = opCtx()->lockState()->getLockerInfo(boost::none);
     ASSERT(lockerInfo);
-    std::string expectedTransactionInfo =
-        buildTransactionInfoString(opCtx(),
-                                   txnParticipant,
-                                   "aborted",
-                                   *opCtx()->getLogicalSessionId(),
-                                   *opCtx()->getTxnNumber(),
-                                   metricValue,
-                                   false);
+    auto expectedTransactionInfo = buildTransactionInfoBSON(opCtx(),
+                                                            txnParticipant,
+                                                            "aborted",
+                                                            *opCtx()->getLogicalSessionId(),
+                                                            *opCtx()->getTxnNumber(),
+                                                            metricValue,
+                                                            false);
 
-    ASSERT_EQUALS(1, countTextFormatLogLinesContaining(expectedTransactionInfo));
+    ASSERT_EQUALS(1, countBSONFormatLogLinesIsSubset(expectedTransactionInfo));
 }
 
 TEST_F(TransactionsMetricsTest, LogTransactionInfoAfterSlowStashedAbort) {
@@ -3614,8 +3757,7 @@ TEST_F(TransactionsMetricsTest, LogTransactionInfoAfterSlowStashedAbort) {
     txnParticipant.abortTransaction(opCtx());
     stopCapturingLogMessages();
 
-    std::string expectedTransactionInfo = "transaction parameters";
-    ASSERT_EQUALS(1, countTextFormatLogLinesContaining(expectedTransactionInfo));
+    ASSERT_EQUALS(1, countTextFormatLogLinesContaining("transaction"));
 }
 
 TEST_F(TransactionsMetricsTest, LogTransactionInfoZeroSampleRate) {
@@ -3668,7 +3810,7 @@ TEST_F(TransactionsMetricsTest, LogTransactionInfoVerbosityInfo) {
     });
 
     // Set verbosity level of transaction components to info.
-    setMinimumLoggedSeverity(logger::LogComponent::kTransaction, logger::LogSeverity::Info());
+    setMinimumLoggedSeverity(logv2::LogComponent::kTransaction, logv2::LogSeverity::Info());
 
     txnParticipant.unstashTransactionResources(opCtx(), "commitTransaction");
 
@@ -3686,7 +3828,7 @@ TEST_F(TransactionsMetricsTest, LogTransactionInfoVerbosityDebug) {
     auto txnParticipant = TransactionParticipant::get(opCtx());
 
     // Set verbosity level of transaction components to debug.
-    setMinimumLoggedSeverity(logger::LogComponent::kTransaction, logger::LogSeverity::Debug(1));
+    setMinimumLoggedSeverity(logv2::LogComponent::kTransaction, logv2::LogSeverity::Debug(1));
 
     txnParticipant.unstashTransactionResources(opCtx(), "commitTransaction");
 
@@ -3708,10 +3850,10 @@ TEST_F(TransactionsMetricsTest, LogTransactionInfoVerbosityDebug) {
     stopCapturingLogMessages();
 
     // Reset verbosity level of transaction components.
-    setMinimumLoggedSeverity(logger::LogComponent::kTransaction, logger::LogSeverity::Info());
+    setMinimumLoggedSeverity(logv2::LogComponent::kTransaction, logv2::LogSeverity::Info());
 
     // Test that the transaction is still logged.
-    ASSERT_EQUALS(1, countTextFormatLogLinesContaining("transaction parameters"));
+    ASSERT_EQUALS(1, countTextFormatLogLinesContaining("transaction"));
 }
 
 TEST_F(TxnParticipantTest, RollbackResetsInMemoryStateOfPreparedTransaction) {

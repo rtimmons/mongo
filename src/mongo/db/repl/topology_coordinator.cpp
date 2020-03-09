@@ -28,10 +28,13 @@
  */
 
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kReplication
-#define LOG_FOR_ELECTION(level) \
-    MONGO_LOG_COMPONENT(level, ::mongo::logger::LogComponent::kReplicationElection)
-#define LOG_FOR_HEARTBEATS(level) \
-    MONGO_LOG_COMPONENT(level, ::mongo::logger::LogComponent::kReplicationHeartbeats)
+
+#define LOGV2_FOR_ELECTION(ID, DLEVEL, MESSAGE, ...) \
+    LOGV2_DEBUG_OPTIONS(                             \
+        ID, DLEVEL, {logv2::LogComponent::kReplicationElection}, MESSAGE, ##__VA_ARGS__)
+#define LOGV2_FOR_HEARTBEATS(ID, DLEVEL, MESSAGE, ...) \
+    LOGV2_DEBUG_OPTIONS(                               \
+        ID, DLEVEL, {logv2::LogComponent::kReplicationHeartbeats}, MESSAGE, ##__VA_ARGS__)
 
 #include "mongo/platform/basic.h"
 
@@ -59,7 +62,6 @@
 #include "mongo/util/assert_util.h"
 #include "mongo/util/fail_point.h"
 #include "mongo/util/hex.h"
-#include "mongo/util/log.h"
 #include "mongo/util/scopeguard.h"
 #include "mongo/util/str.h"
 
@@ -680,8 +682,16 @@ Status TopologyCoordinator::prepareHeartbeatResponseV1(Date_t now,
         response->setElectionTime(_electionTime);
     }
 
-    const OpTimeAndWallTime lastOpApplied = getMyLastAppliedOpTimeAndWallTime();
-    const OpTimeAndWallTime lastOpDurable = getMyLastDurableOpTimeAndWallTime();
+    OpTimeAndWallTime lastOpApplied;
+    OpTimeAndWallTime lastOpDurable;
+
+    // We include null times for lastApplied and lastDurable if we are in STARTUP_2, as we do not
+    // want to report replication progress and be part of write majorities while in initial sync.
+    if (!myState.startup2()) {
+        lastOpApplied = getMyLastAppliedOpTimeAndWallTime();
+        lastOpDurable = getMyLastDurableOpTimeAndWallTime();
+    }
+
     response->setAppliedOpTimeAndWallTime(lastOpApplied);
     response->setDurableOpTimeAndWallTime(lastOpDurable);
 
@@ -820,9 +830,14 @@ HeartbeatResponseAction TopologyCoordinator::processHeartbeatResponse(
     }
 
     if (hbStats.failed()) {
-        LOG_FOR_HEARTBEATS(0) << "Heartbeat to " << target << " failed after "
-                              << kMaxHeartbeatRetries
-                              << " retries, response status: " << hbResponse.getStatus();
+        LOGV2_FOR_HEARTBEATS(
+            23974,
+            0,
+            "Heartbeat to {target} failed after {kMaxHeartbeatRetries} retries, response "
+            "status: {hbResponse_getStatus}",
+            "target"_attr = target,
+            "kMaxHeartbeatRetries"_attr = kMaxHeartbeatRetries,
+            "hbResponse_getStatus"_attr = hbResponse.getStatus());
     }
 
     if (hbResponse.isOK() && hbResponse.getValue().hasConfig()) {
@@ -930,29 +945,6 @@ HeartbeatResponseAction TopologyCoordinator::processHeartbeatResponse(
     return nextAction;
 }
 
-bool TopologyCoordinator::haveMajorityReplicatedConfig() {
-    auto configWriteMaj = _rsConfig.getWriteMajority();
-    auto numNodesWithReplicatedConfig = 0;
-    for (auto&& memberData : _memberData) {
-        // If this member is not in our new config, do not count it in the majority
-        if (_rsConfig.findMemberByID(memberData.getMemberId().getData()) == NULL) {
-            continue;
-        }
-
-        if (memberData.getConfigVersionAndTerm() == _rsConfig.getConfigVersionAndTerm()) {
-            // configVersionAndTerm comparison will compare config versions alone and ignore terms
-            // if the config term is -1, which makes this compatible with 4.2 heartbeat responses.
-            numNodesWithReplicatedConfig++;
-        }
-
-        // Once we know a majority of the nodes have replicated the config return.
-        if (numNodesWithReplicatedConfig >= configWriteMaj)
-            return true;
-    }
-
-    return false;
-}
-
 bool TopologyCoordinator::haveNumNodesReachedOpTime(const OpTime& targetOpTime,
                                                     int numNodes,
                                                     bool durablyWritten) {
@@ -1001,16 +993,20 @@ bool TopologyCoordinator::haveNumNodesReachedOpTime(const OpTime& targetOpTime,
 bool TopologyCoordinator::haveTaggedNodesReachedOpTime(const OpTime& opTime,
                                                        const ReplSetTagPattern& tagPattern,
                                                        bool durablyWritten) {
-    ReplSetTagMatch matcher(tagPattern);
+    auto pred = makeOpTimePredicate(opTime, durablyWritten);
+    return haveTaggedNodesSatisfiedCondition(pred, tagPattern);
+}
 
+TopologyCoordinator::MemberPredicate TopologyCoordinator::makeOpTimePredicate(const OpTime& opTime,
+                                                                              bool durablyWritten) {
     // Invariants that we only wait for an OpTime in the term that this node is currently writing
     // to. In other words, we do not support waiting for an OpTime written by a previous primary
     // because comparing members' lastApplied/lastDurable alone is not sufficient to tell if the
     // OpTime has been replicated.
     invariant(opTime.getTerm() == getMyLastAppliedOpTime().getTerm());
 
-    for (auto&& memberData : _memberData) {
-        const OpTime& memberOpTime =
+    return [=](const MemberData& memberData) {
+        auto memberOpTime =
             durablyWritten ? memberData.getLastDurableOpTime() : memberData.getLastAppliedOpTime();
 
         // In addition to checking if a member has a greater/equal timestamp field we also need to
@@ -1019,16 +1015,29 @@ bool TopologyCoordinator::haveTaggedNodesReachedOpTime(const OpTime& opTime,
         // thus we do not know if the target OpTime in our previous term has been replicated to the
         // member because the memberOpTime in a higher term could correspond to an operation in a
         // divergent branch of history regardless of its timestamp.
-        if (memberOpTime.getTerm() == opTime.getTerm() &&
-            memberOpTime.getTimestamp() >= opTime.getTimestamp()) {
-            // This node has reached the desired optime, now we need to check if it is a part
+        return memberOpTime.getTerm() == opTime.getTerm() &&
+            memberOpTime.getTimestamp() >= opTime.getTimestamp();
+    };
+}
+
+TopologyCoordinator::MemberPredicate TopologyCoordinator::makeConfigPredicate() {
+    return [&](const MemberData& memberData) {
+        return memberData.getConfigVersionAndTerm() == _rsConfig.getConfigVersionAndTerm();
+    };
+}
+
+bool TopologyCoordinator::haveTaggedNodesSatisfiedCondition(
+    std::function<bool(const MemberData&)> pred, const ReplSetTagPattern& tagPattern) {
+    ReplSetTagMatch matcher(tagPattern);
+
+    for (auto&& memberData : _memberData) {
+        if (pred(memberData)) {
+            // This node has satisfied the predicate, now we need to check if it is a part
             // of the tagPattern.
             int memberIndex = memberData.getConfigIndex();
             invariant(memberIndex >= 0);
             const MemberConfig& memberConfig = _rsConfig.getMemberAt(memberIndex);
-            for (MemberConfig::TagIterator it = memberConfig.tagsBegin();
-                 it != memberConfig.tagsEnd();
-                 ++it) {
+            for (auto&& it = memberConfig.tagsBegin(); it != memberConfig.tagsEnd(); ++it) {
                 if (matcher.update(*it)) {
                     return true;
                 }
@@ -1334,24 +1343,38 @@ HeartbeatResponseAction TopologyCoordinator::_updatePrimaryFromHBDataV1(
         if (!catchupTakeoverDisabled &&
             (_memberData.at(primaryIndex).getLastAppliedOpTime() <
              _memberData.at(_selfIndex).getLastAppliedOpTime())) {
-            LOG_FOR_ELECTION(2) << "I can take over the primary due to fresher data."
-                                << " Current primary index: " << primaryIndex << " in term "
-                                << _memberData.at(primaryIndex).getTerm() << "."
-                                << " Current primary optime: "
-                                << _memberData.at(primaryIndex).getLastAppliedOpTime()
-                                << " My optime: "
-                                << _memberData.at(_selfIndex).getLastAppliedOpTime();
-            LOG_FOR_ELECTION(4) << _getReplSetStatusString();
+            LOGV2_FOR_ELECTION(
+                23975,
+                2,
+                "I can take over the primary due to fresher data. Current primary index: "
+                "{primaryIndex} in term {primaryTerm}. Current primary "
+                "optime: {primaryOpTime} My optime: "
+                "{myOpTime}",
+                "primaryIndex"_attr = primaryIndex,
+                "primaryTerm"_attr = _memberData.at(primaryIndex).getTerm(),
+                "primaryOpTime"_attr = _memberData.at(primaryIndex).getLastAppliedOpTime(),
+                "myOpTime"_attr = _memberData.at(_selfIndex).getLastAppliedOpTime());
+            LOGV2_FOR_ELECTION(23976,
+                               4,
+                               "{getReplSetStatusString}",
+                               "getReplSetStatusString"_attr = _getReplSetStatusString());
 
             scheduleCatchupTakeover = true;
         }
 
         if (_rsConfig.getMemberAt(primaryIndex).getPriority() <
             _rsConfig.getMemberAt(_selfIndex).getPriority()) {
-            LOG_FOR_ELECTION(2) << "I can take over the primary due to higher priority."
-                                << " Current primary index: " << primaryIndex << " in term "
-                                << _memberData.at(primaryIndex).getTerm();
-            LOG_FOR_ELECTION(4) << _getReplSetStatusString();
+            LOGV2_FOR_ELECTION(
+                23977,
+                2,
+                "I can take over the primary due to higher priority. Current primary index: "
+                "{primaryIndex} in term {primaryTerm}",
+                "primaryIndex"_attr = primaryIndex,
+                "primaryTerm"_attr = _memberData.at(primaryIndex).getTerm());
+            LOGV2_FOR_ELECTION(23978,
+                               4,
+                               "{getReplSetStatusString}",
+                               "getReplSetStatusString"_attr = _getReplSetStatusString());
 
             schedulePriorityTakeover = true;
         }
@@ -1365,11 +1388,14 @@ HeartbeatResponseAction TopologyCoordinator::_updatePrimaryFromHBDataV1(
         // Otherwise, prefer to schedule a catchup takeover over a priority takeover
         if (scheduleCatchupTakeover && schedulePriorityTakeover &&
             _rsConfig.calculatePriorityRank(currentNodePriority) == 0) {
-            LOG_FOR_ELECTION(2)
-                << "I can take over the primary because I have a higher priority, the highest "
-                << "priority in the replica set, and fresher data."
-                << " Current primary index: " << primaryIndex << " in term "
-                << _memberData.at(primaryIndex).getTerm();
+            LOGV2_FOR_ELECTION(
+                23979,
+                2,
+                "I can take over the primary because I have a higher priority, the highest "
+                "priority in the replica set, and fresher data. Current primary index: "
+                "{primaryIndex} in term {primaryTerm}",
+                "primaryIndex"_attr = primaryIndex,
+                "primaryTerm"_attr = _memberData.at(primaryIndex).getTerm());
             return HeartbeatResponseAction::makePriorityTakeoverAction();
         }
         if (scheduleCatchupTakeover) {
@@ -1759,6 +1785,7 @@ void TopologyCoordinator::prepareStatusResponse(const ReplSetStatusArgs& rsStatu
                     Date_t::fromDurationSinceEpoch(Seconds(it->getElectionTime().getSecs())));
             }
             bb.appendIntOrLL("configVersion", it->getConfigVersion());
+            bb.appendIntOrLL("configTerm", it->getConfigTerm());
             membersOut.push_back(bb.obj());
         }
     }
@@ -3024,9 +3051,13 @@ void TopologyCoordinator::processReplSetRequestVotes(const ReplSetRequestVotesAr
         }
     }
 
-    LOG_FOR_ELECTION(0) << "Received vote request: " << args.toString();
-    LOG_FOR_ELECTION(0) << "Sending vote response: " << response->toString();
-    LOG_FOR_ELECTION(4) << _getReplSetStatusString();
+    LOGV2_FOR_ELECTION(23980, 0, "Received vote request: {args}", "args"_attr = args.toString());
+    LOGV2_FOR_ELECTION(
+        23981, 0, "Sending vote response: {response}", "response"_attr = response->toString());
+    LOGV2_FOR_ELECTION(23982,
+                       4,
+                       "{getReplSetStatusString}",
+                       "getReplSetStatusString"_attr = _getReplSetStatusString());
 }
 
 void TopologyCoordinator::loadLastVote(const LastVote& lastVote) {

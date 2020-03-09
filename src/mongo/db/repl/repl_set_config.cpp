@@ -55,7 +55,6 @@ const Milliseconds ReplSetConfig::kCatchUpTakeoverDisabled(-1);
 const std::string ReplSetConfig::kConfigServerFieldName = "configsvr";
 const std::string ReplSetConfig::kVersionFieldName = "version";
 const std::string ReplSetConfig::kTermFieldName = "term";
-const std::string ReplSetConfig::kMajorityWriteConcernModeName = "$majority";
 const Milliseconds ReplSetConfig::kDefaultHeartbeatInterval(2000);
 const Seconds ReplSetConfig::kDefaultHeartbeatTimeoutPeriod(10);
 const Milliseconds ReplSetConfig::kDefaultElectionTimeoutPeriod(10000);
@@ -102,7 +101,7 @@ Status ReplSetConfig::initialize(const BSONObj& cfg,
 }
 
 Status ReplSetConfig::initializeForInitiate(const BSONObj& cfg) {
-    return _initialize(cfg, true, OpTime::kInitialTerm, OID());
+    return _initialize(cfg, true, OpTime::kUninitializedTerm, OID());
 }
 
 Status ReplSetConfig::_initialize(const BSONObj& cfg,
@@ -191,8 +190,8 @@ Status ReplSetConfig::_initialize(const BSONObj& cfg,
     // Parse protocol version
     //
     status = bsonExtractIntegerField(cfg, kProtocolVersionFieldName, &_protocolVersion);
-    // If 'protocolVersion' field is missing for initiate, then _protocolVersion defaults to 1.
-    if (!(status.isOK() || (status == ErrorCodes::NoSuchKey && forInitiate))) {
+    // If 'protocolVersion' field is missing, then _protocolVersion defaults to 1.
+    if (!status.isOK() && status != ErrorCodes::NoSuchKey) {
         return status;
     }
 
@@ -686,8 +685,7 @@ Status ReplSetConfig::validate() const {
 
 Status ReplSetConfig::checkIfWriteConcernCanBeSatisfied(
     const WriteConcernOptions& writeConcern) const {
-    if (!writeConcern.wMode.empty() && writeConcern.wMode != WriteConcernOptions::kMajority &&
-        writeConcern.wMode != WriteConcernOptions::kConfigMajority) {
+    if (!writeConcern.wMode.empty() && writeConcern.wMode != WriteConcernOptions::kMajority) {
         StatusWith<ReplSetTagPattern> tagPatternStatus = findCustomWriteMode(writeConcern.wMode);
         if (!tagPatternStatus.isOK()) {
             return tagPatternStatus.getStatus();
@@ -841,6 +839,30 @@ void ReplSetConfig::_addInternalWriteConcernModes() {
         // other errors are unexpected
         fassert(28694, status);
     }
+
+    // $majorityConfig: the majority of all voting members including arbiters.
+    pattern = _tagConfig.makePattern();
+    status = _tagConfig.addTagCountConstraintToPattern(
+        &pattern, MemberConfig::kConfigVoterTagName, _majorityVoteCount / 2 + 1);
+    if (status.isOK()) {
+        _customWriteConcernModes[kConfigMajorityWriteConcernModeName] = pattern;
+    } else if (status != ErrorCodes::NoSuchKey) {
+        // NoSuchKey means we have no $configAll-tagged nodes in this config;
+        // other errors are unexpected
+        fassert(31472, status);
+    }
+
+    // $configAll: all members including arbiters.
+    pattern = _tagConfig.makePattern();
+    status = _tagConfig.addTagCountConstraintToPattern(
+        &pattern, MemberConfig::kConfigAllTagName, _members.size());
+    if (status.isOK()) {
+        _customWriteConcernModes[kConfigAllWriteConcernName] = pattern;
+    } else if (status != ErrorCodes::NoSuchKey) {
+        // NoSuchKey means we have no $all-tagged nodes in this config;
+        // other errors are unexpected
+        fassert(31473, status);
+    }
 }
 
 void ReplSetConfig::_initializeConnectionString() {
@@ -960,6 +982,10 @@ bool ReplSetConfig::containsArbiter() const {
         }
     }
     return false;
+}
+
+void ReplSetConfig::setNewlyAddedFieldForMemberAtIndex(int memberIndex, bool newlyAdded) {
+    _members[memberIndex].setNewlyAdded(newlyAdded);
 }
 
 }  // namespace repl

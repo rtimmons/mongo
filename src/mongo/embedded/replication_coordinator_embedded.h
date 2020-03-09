@@ -171,7 +171,7 @@ public:
 
     repl::ReplSetConfig getConfig() const override;
 
-    void processReplSetGetConfig(BSONObjBuilder*) override;
+    void processReplSetGetConfig(BSONObjBuilder*, bool commitmentStatus = false) override;
 
     void processReplSetMetadata(const rpc::ReplSetMetadata&) override;
 
@@ -190,6 +190,10 @@ public:
                                   const ReplSetReconfigArgs&,
                                   BSONObjBuilder*) override;
 
+    Status doReplSetReconfig(OperationContext* opCtx,
+                             GetNewConfigFn getNewConfig,
+                             bool force) override;
+
     Status processReplSetInitiate(OperationContext*, const BSONObj&, BSONObjBuilder*) override;
 
     Status processReplSetUpdatePosition(const repl::UpdatePositionArgs&, long long*) override;
@@ -199,7 +203,6 @@ public:
     std::vector<HostAndPort> getOtherNodesInReplSet() const override;
 
     Status checkReplEnabledForCommand(BSONObjBuilder*) override;
-
 
     HostAndPort chooseNewSyncSource(const repl::OpTime&) override;
 
@@ -282,6 +285,14 @@ public:
     repl::OpTime getLatestWriteOpTime(OperationContext* opCtx) const override;
 
     HostAndPort getCurrentPrimaryHostAndPort() const override;
+
+    void cancelCbkHandle(executor::TaskExecutor::CallbackHandle activeHandle) override;
+
+    BSONObj runCmdOnPrimaryAndAwaitResponse(OperationContext* opCtx,
+                                            const std::string& dbName,
+                                            const BSONObj& cmdObj,
+                                            OnRemoteCmdScheduledFn onRemoteCmdScheduled,
+                                            OnRemoteCmdCompleteFn onRemoteCmdComplete) final;
 
 private:
     // Back pointer to the ServiceContext that has started the instance.

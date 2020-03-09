@@ -54,7 +54,7 @@ using TaskExecutor = executor::TaskExecutor;
 using CallbackArgs = TaskExecutor::CallbackArgs;
 }  // namespace
 
-class RangePreserver : public ScopedCollectionMetadata::Impl {
+class RangePreserver : public ScopedCollectionDescription::Impl {
 public:
     // Must be called locked with the MetadataManager's _managerLock
     RangePreserver(WithLock,
@@ -74,7 +74,7 @@ public:
             // that are older than the oldest metadata still in use by queries (some start out at
             // zero, some go to zero but can't be expired yet).
             //
-            // Note that new instances of ScopedCollectionMetadata may get attached to
+            // Note that new instances of ScopedCollectionDescription may get attached to
             // _metadata.back(), so its usage count can increase from zero, unlike other reference
             // counts.
             _metadataManager->_retireExpiredMetadata(managerLock);
@@ -105,7 +105,7 @@ MetadataManager::MetadataManager(ServiceContext* serviceContext,
     _metadata.emplace_back(std::make_shared<CollectionMetadataTracker>(std::move(initialMetadata)));
 }
 
-ScopedCollectionMetadata MetadataManager::getActiveMetadata(
+ScopedCollectionDescription MetadataManager::getActiveMetadata(
     const boost::optional<LogicalTime>& atClusterTime) {
     stdx::lock_guard<Latch> lg(_managerLock);
 
@@ -115,7 +115,7 @@ ScopedCollectionMetadata MetadataManager::getActiveMetadata(
     // We don't keep routing history for unsharded collections, so if the collection is unsharded
     // just return the active metadata
     if (!atClusterTime || !activeMetadata->isSharded()) {
-        return ScopedCollectionMetadata(std::make_shared<RangePreserver>(
+        return ScopedCollectionDescription(std::make_shared<RangePreserver>(
             lg, shared_from_this(), std::move(activeMetadataTracker)));
     }
 
@@ -123,7 +123,7 @@ ScopedCollectionMetadata MetadataManager::getActiveMetadata(
     auto chunkManagerAtClusterTime = std::make_shared<ChunkManager>(
         chunkManager->getRoutingHistory(), atClusterTime->asTimestamp());
 
-    class MetadataAtTimestamp : public ScopedCollectionMetadata::Impl {
+    class MetadataAtTimestamp : public ScopedCollectionDescription::Impl {
     public:
         MetadataAtTimestamp(CollectionMetadata metadata) : _metadata(std::move(metadata)) {}
 
@@ -135,7 +135,7 @@ ScopedCollectionMetadata MetadataManager::getActiveMetadata(
         CollectionMetadata _metadata;
     };
 
-    return ScopedCollectionMetadata(std::make_shared<MetadataAtTimestamp>(
+    return ScopedCollectionDescription(std::make_shared<MetadataAtTimestamp>(
         CollectionMetadata(chunkManagerAtClusterTime, activeMetadata->shardId())));
 }
 
@@ -279,6 +279,19 @@ void MetadataManager::append(BSONObjBuilder* builder) const {
     amrArr.done();
 }
 
+void MetadataManager::appendForServerStatus(BSONArrayBuilder* builder) const {
+    auto numRangeDeletes = ([this] {
+        stdx::lock_guard<Latch> lg(_managerLock);
+        return _rangesScheduledForDeletion.size();
+    })();
+
+    if (numRangeDeletes > 0) {
+        BSONObjBuilder statBuilder;
+        statBuilder.appendNumber(_nss.ns(), numRangeDeletes);
+        builder->append(statBuilder.obj());
+    }
+}
+
 SharedSemiFuture<void> MetadataManager::beginReceive(ChunkRange const& range) {
     stdx::lock_guard<Latch> lg(_managerLock);
     invariant(!_metadata.empty());
@@ -290,11 +303,12 @@ SharedSemiFuture<void> MetadataManager::beginReceive(ChunkRange const& range) {
 
     _receivingChunks.emplace(range.getMin().getOwned(), range.getMax().getOwned());
 
-    LOGV2(21987,
-          "Scheduling deletion of any documents in {nss_ns} range {range} before migrating in a "
-          "chunk covering the range",
-          "nss_ns"_attr = _nss.ns(),
-          "range"_attr = redact(range.toString()));
+    LOGV2_OPTIONS(21987,
+                  {logv2::LogComponent::kShardingMigration},
+                  "Scheduling deletion of any documents in {nss_ns} range {range} before migrating "
+                  "in a chunk covering the range",
+                  "nss_ns"_attr = _nss.ns(),
+                  "range"_attr = redact(range.toString()));
 
     return _submitRangeForDeletion(
         lg, SemiFuture<void>::makeReady(), range, Seconds(orphanCleanupDelaySecs.load()));
@@ -306,11 +320,12 @@ void MetadataManager::forgetReceive(ChunkRange const& range) {
 
     // This is potentially a partially received chunk, which needs to be cleaned up. We know none
     // of these documents are in use, so they can go straight to the deletion queue.
-    LOGV2(21988,
-          "Abandoning in-migration of {nss_ns} range {range}; scheduling deletion of any documents "
-          "already copied",
-          "nss_ns"_attr = _nss.ns(),
-          "range"_attr = range);
+    LOGV2_OPTIONS(21988,
+                  {logv2::LogComponent::kShardingMigration},
+                  "Abandoning in-migration of {nss_ns} range {range}; scheduling deletion of any "
+                  "documents already copied",
+                  "nss_ns"_attr = _nss.ns(),
+                  "range"_attr = range);
 
     invariant(!_overlapsInUseChunk(lg, range));
 
@@ -344,11 +359,12 @@ SharedSemiFuture<void> MetadataManager::cleanUpRange(ChunkRange const& range,
         shouldDelayBeforeDeletion ? Seconds(orphanCleanupDelaySecs.load()) : Seconds(0);
 
     if (overlapMetadata) {
-        LOGV2(21989,
-              "Deletion of {nss_ns} range {range} will be scheduled after all possibly dependent "
-              "queries finish",
-              "nss_ns"_attr = _nss.ns(),
-              "range"_attr = redact(range.toString()));
+        LOGV2_OPTIONS(21989,
+                      {logv2::LogComponent::kShardingMigration},
+                      "Deletion of {nss_ns} range {range} will be scheduled after all possibly "
+                      "dependent queries finish",
+                      "nss_ns"_attr = _nss.ns(),
+                      "range"_attr = redact(range.toString()));
         ++overlapMetadata->numContingentRangeDeletionTasks;
         // Schedule the range for deletion once the overlapping metadata object is destroyed
         // (meaning no more queries can be using the range) and obtain a future which will be
@@ -359,10 +375,11 @@ SharedSemiFuture<void> MetadataManager::cleanUpRange(ChunkRange const& range,
                                        delayForActiveQueriesOnSecondariesToComplete);
     } else {
         // No running queries can depend on this range, so queue it for deletion immediately.
-        LOGV2(21990,
-              "Scheduling deletion of {nss_ns} range {range}",
-              "nss_ns"_attr = _nss.ns(),
-              "range"_attr = redact(range.toString()));
+        LOGV2_OPTIONS(21990,
+                      {logv2::LogComponent::kShardingMigration},
+                      "Scheduling deletion of {nss_ns} range {range}",
+                      "nss_ns"_attr = _nss.ns(),
+                      "range"_attr = redact(range.toString()));
 
         return _submitRangeForDeletion(
             lg, SemiFuture<void>::makeReady(), range, delayForActiveQueriesOnSecondariesToComplete);

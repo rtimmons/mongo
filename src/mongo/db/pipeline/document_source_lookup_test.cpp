@@ -494,11 +494,9 @@ public:
     }
 
     std::unique_ptr<Pipeline, PipelineDeleter> attachCursorSourceToPipeline(
-        const boost::intrusive_ptr<ExpressionContext>& expCtx,
-        Pipeline* ownedPipeline,
-        bool allowTargetingShards = true) final {
-        std::unique_ptr<Pipeline, PipelineDeleter> pipeline(ownedPipeline,
-                                                            PipelineDeleter(expCtx->opCtx));
+        Pipeline* ownedPipeline, bool allowTargetingShards = true) final {
+        std::unique_ptr<Pipeline, PipelineDeleter> pipeline(
+            ownedPipeline, PipelineDeleter(ownedPipeline->getContext()->opCtx));
 
         while (_removeLeadingQueryStages && !pipeline->getSources().empty()) {
             if (pipeline->popFrontWithName("$match") || pipeline->popFrontWithName("$sort") ||
@@ -508,7 +506,8 @@ public:
             break;
         }
 
-        pipeline->addInitialSource(DocumentSourceMock::createForTest(_mockResults));
+        pipeline->addInitialSource(
+            DocumentSourceMock::createForTest(_mockResults, pipeline->getContext()));
         return pipeline;
     }
 
@@ -528,7 +527,8 @@ TEST_F(DocumentSourceLookUpTest, ShouldPropagatePauses) {
         DocumentSourceMock::createForTest({Document{{"foreignId", 0}},
                                            DocumentSource::GetNextResult::makePauseExecution(),
                                            Document{{"foreignId", 1}},
-                                           DocumentSource::GetNextResult::makePauseExecution()});
+                                           DocumentSource::GetNextResult::makePauseExecution()},
+                                          expCtx);
 
     // Mock out the foreign collection.
     deque<DocumentSource::GetNextResult> mockForeignContents{Document{{"_id", 0}},
@@ -601,7 +601,8 @@ TEST_F(DocumentSourceLookUpTest, ShouldPropagatePausesWhileUnwinding) {
         DocumentSourceMock::createForTest({Document{{"foreignId", 0}},
                                            DocumentSource::GetNextResult::makePauseExecution(),
                                            Document{{"foreignId", 1}},
-                                           DocumentSource::GetNextResult::makePauseExecution()});
+                                           DocumentSource::GetNextResult::makePauseExecution()},
+                                          expCtx);
     lookup->setSource(mockLocalSource.get());
 
     auto next = lookup->getNext();
@@ -948,7 +949,7 @@ TEST_F(DocumentSourceLookUpTest,
 
     // Prepare the mocked local source.
     auto mockLocalSource = DocumentSourceMock::createForTest(
-        {Document{{"_id", 0}}, Document{{"_id", 1}}, Document{{"_id", 2}}});
+        {Document{{"_id", 0}}, Document{{"_id", 1}}, Document{{"_id", 2}}}, expCtx);
 
     lookupStage->setSource(mockLocalSource.get());
 
@@ -1025,7 +1026,7 @@ TEST_F(DocumentSourceLookUpTest,
 
     // Prepare the mocked local and foreign sources.
     auto mockLocalSource =
-        DocumentSourceMock::createForTest({Document{{"_id", 0}}, Document{{"_id", 1}}});
+        DocumentSourceMock::createForTest({Document{{"_id", 0}}, Document{{"_id", 1}}}, expCtx);
 
     lookupStage->setSource(mockLocalSource.get());
 

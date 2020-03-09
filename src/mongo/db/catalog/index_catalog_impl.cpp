@@ -667,6 +667,11 @@ Status IndexCatalogImpl::_isSpecOk(OperationContext* opCtx, const BSONObj& spec)
         }
     }
 
+    // Create an ExpressionContext, used to parse the match expression and to house the collator for
+    // the remaining checks.
+    boost::intrusive_ptr<ExpressionContext> expCtx(
+        new ExpressionContext(opCtx, std::move(collator), nss));
+
     // Ensure if there is a filter, its valid.
     BSONElement filterElement = spec.getField("partialFilterExpression");
     if (filterElement) {
@@ -679,10 +684,6 @@ Status IndexCatalogImpl::_isSpecOk(OperationContext* opCtx, const BSONObj& spec)
             return Status(ErrorCodes::CannotCreateIndex,
                           "\"partialFilterExpression\" for an index must be a document");
         }
-
-        // The collator must outlive the constructed MatchExpression.
-        boost::intrusive_ptr<ExpressionContext> expCtx(
-            new ExpressionContext(opCtx, collator.get(), nss));
 
         // Parsing the partial filter expression is not expected to fail here since the
         // expression would have been successfully parsed upstream during index creation.
@@ -717,7 +718,8 @@ Status IndexCatalogImpl::_isSpecOk(OperationContext* opCtx, const BSONObj& spec)
         }
 
         if (collationElement &&
-            !CollatorInterface::collatorsMatch(collator.get(), _collection->getDefaultCollator())) {
+            !CollatorInterface::collatorsMatch(expCtx->getCollator(),
+                                               _collection->getDefaultCollator())) {
             return Status(ErrorCodes::CannotCreateIndex,
                           "_id index must have the collection default collation");
         }
@@ -907,7 +909,7 @@ void IndexCatalogImpl::dropAllIndexes(OperationContext* opCtx,
         string indexName = indexNamesToDrop[i];
         const IndexDescriptor* desc = findIndexByName(opCtx, indexName, true);
         invariant(desc);
-        LOGV2_DEBUG(20355, 1, "\t dropAllIndexes dropping: {desc}", "desc"_attr = desc->toString());
+        LOGV2_DEBUG(20355, 1, "\t dropAllIndexes dropping: {desc}", "desc"_attr = *desc);
         IndexCatalogEntry* entry = _readyIndexes.find(desc);
         invariant(entry);
 
@@ -1134,7 +1136,7 @@ int IndexCatalogImpl::numIndexesReady(OperationContext* opCtx) const {
         if (itIndexes.size() != completedIndexes.size()) {
             LOGV2(20357, "index catalog reports: ");
             for (const IndexDescriptor* i : itIndexes) {
-                LOGV2(20358, "  index: {i}", "i"_attr = i->toString());
+                LOGV2(20358, "  index: {i}", "i"_attr = *i);
             }
 
             LOGV2(20359, "collection catalog reports: ");
@@ -1658,12 +1660,12 @@ Status IndexCatalogImpl::compactIndexes(OperationContext* opCtx) {
         LOGV2_DEBUG(20363,
                     1,
                     "compacting index: {entry_descriptor}",
-                    "entry_descriptor"_attr = entry->descriptor()->toString());
+                    "entry_descriptor"_attr = *(entry->descriptor()));
         Status status = entry->accessMethod()->compact(opCtx);
         if (!status.isOK()) {
             LOGV2_ERROR(20377,
                         "failed to compact index: {entry_descriptor}",
-                        "entry_descriptor"_attr = entry->descriptor()->toString());
+                        "entry_descriptor"_attr = *(entry->descriptor()));
             return status;
         }
     }

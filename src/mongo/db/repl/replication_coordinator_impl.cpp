@@ -28,8 +28,10 @@
  */
 
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kReplication
-#define LOG_FOR_ELECTION(level) \
-    MONGO_LOG_COMPONENT(level, ::mongo::logger::LogComponent::kReplicationElection)
+
+#define LOGV2_FOR_ELECTION(ID, DLEVEL, MESSAGE, ...) \
+    LOGV2_DEBUG_OPTIONS(                             \
+        ID, DLEVEL, {logv2::LogComponent::kReplicationElection}, MESSAGE, ##__VA_ARGS__)
 
 #include "mongo/platform/basic.h"
 
@@ -52,6 +54,7 @@
 #include "mongo/db/concurrency/d_concurrency.h"
 #include "mongo/db/concurrency/replication_state_transition_lock_guard.h"
 #include "mongo/db/curop_failpoint_helpers.h"
+#include "mongo/db/dbdirectclient.h"
 #include "mongo/db/index/index_descriptor.h"
 #include "mongo/db/index_builds_coordinator.h"
 #include "mongo/db/kill_sessions_local.h"
@@ -69,6 +72,7 @@
 #include "mongo/db/repl/local_oplog_info.h"
 #include "mongo/db/repl/read_concern_args.h"
 #include "mongo/db/repl/repl_client_info.h"
+#include "mongo/db/repl/repl_server_parameters_gen.h"
 #include "mongo/db/repl/repl_set_config_checks.h"
 #include "mongo/db/repl/repl_set_heartbeat_args_v1.h"
 #include "mongo/db/repl/repl_set_heartbeat_response.h"
@@ -115,6 +119,10 @@ MONGO_FAIL_POINT_DEFINE(waitForIsMasterResponse);
 // Will cause an isMaster request to hang as it starts waiting.
 MONGO_FAIL_POINT_DEFINE(hangWhileWaitingForIsMasterResponse);
 MONGO_FAIL_POINT_DEFINE(skipDurableTimestampUpdates);
+// Will cause a reconfig to hang after completing the config quorum check.
+MONGO_FAIL_POINT_DEFINE(omitConfigQuorumCheck);
+// Will cause signal drain complete to hang after reconfig
+MONGO_FAIL_POINT_DEFINE(hangAfterReconfigOnDrainComplete);
 
 // Number of times we tried to go live as a secondary.
 Counter64 attemptsToBecomeSecondary;
@@ -180,26 +188,6 @@ void lockAndCall(stdx::unique_lock<Latch>* lk, const std::function<void()>& fn) 
         lk->lock();
     }
     fn();
-}
-
-/**
- * Implements the force-reconfig behavior of incrementing config version by a large random
- * number.
- */
-BSONObj incrementConfigVersionByRandom(BSONObj config) {
-    BSONObjBuilder builder;
-    SecureRandom generator;
-    for (BSONObjIterator iter(config); iter.more(); iter.next()) {
-        BSONElement elem = *iter;
-        if (elem.fieldNameStringData() == ReplSetConfig::kVersionFieldName && elem.isNumber()) {
-            const int random = generator.nextInt32(100'000);
-            builder.appendIntOrLL(ReplSetConfig::kVersionFieldName,
-                                  elem.numberLong() + 10'000 + random);
-        } else {
-            builder.append(elem);
-        }
-    }
-    return builder.obj();
 }
 
 template <typename T>
@@ -1111,7 +1099,46 @@ void ReplicationCoordinatorImpl::signalDrainComplete(OperationContext* opCtx,
     invariant(!_readWriteAbility->canAcceptNonLocalWrites(opCtx));
 
     {
+        // If the config doesn't have a term, don't change it.
+        auto needBumpConfigTerm = _rsConfig.getConfigTerm() != OpTime::kUninitializedTerm;
         lk.unlock();
+
+        if (needBumpConfigTerm) {
+            // We re-write the term but keep version the same. This conceptually a no-op
+            // in the config consensus group, analogous to writing a new oplog entry
+            // in Raft log state machine on step up.
+            auto getNewConfig = [&](const ReplSetConfig& oldConfig, long long primaryTerm) {
+                auto config = oldConfig;
+                config.setConfigTerm(primaryTerm);
+                return config;
+            };
+            LOGV2(4508103, "Increment the config term via reconfig.");
+            auto reconfigStatus = doReplSetReconfig(opCtx, getNewConfig, true /* force */);
+            if (!reconfigStatus.isOK()) {
+                LOGV2(4508100,
+                      "Automatic reconfig to increment the config term on stepup failed",
+                      "status"_attr = reconfigStatus);
+                // If the node stepped down after we released the lock, we can just return.
+                if (ErrorCodes::isNotMasterError(reconfigStatus.code())) {
+                    return;
+                }
+                // Writing this new config with a new term is somewhat "best effort", and if we get
+                // preempted by a concurrent reconfig, that is fine since that new config will have
+                // occurred after the node became primary and so the concurrent reconfig has updated
+                // the term appropriately.
+                if (reconfigStatus != ErrorCodes::ConfigurationInProgress) {
+                    LOGV2_FATAL(4508101,
+                                "Reconfig on stepup failed for unknown reasons.",
+                                "status"_attr = reconfigStatus);
+                    fassertFailedWithStatus(31477, reconfigStatus);
+                }
+            }
+        }
+        if (MONGO_unlikely(hangAfterReconfigOnDrainComplete.shouldFail())) {
+            LOGV2(4508102, "Hanging due to hangAfterReconfigOnDrainComplete failpoint.");
+            hangAfterReconfigOnDrainComplete.pauseWhileSet(opCtx);
+        }
+
         AllowNonLocalWritesBlock writesAllowed(opCtx);
         OpTime firstOpTime = _externalState->onTransitionToPrimary(opCtx);
         lk.lock();
@@ -1691,22 +1718,11 @@ bool ReplicationCoordinatorImpl::_doneWaitingForReplication_inlock(
     // The syncMode cannot be unset.
     invariant(writeConcern.syncMode != WriteConcernOptions::SyncMode::UNSET);
 
-    // When waiting for the config to be replicated to a majority, we do not wait on a specific
-    // OpTime. We specifically populate waiters with a null OpTime.
-    invariant(writeConcern.wMode != WriteConcernOptions::kConfigMajority || opTime.isNull());
-
     const bool useDurableOpTime = writeConcern.syncMode == WriteConcernOptions::SyncMode::JOURNAL;
-
     if (writeConcern.wMode.empty()) {
         return _topCoord->haveNumNodesReachedOpTime(
             opTime, writeConcern.wNumNodes, useDurableOpTime);
     }
-
-    // Check that the nodes in the new config have replicated the config.
-    if (writeConcern.wMode == WriteConcernOptions::kConfigMajority) {
-        return _topCoord->haveMajorityReplicatedConfig();
-    }
-
     StringData patternName;
     if (writeConcern.wMode == WriteConcernOptions::kMajority) {
         if (_externalState->snapshotsEnabled() && !gTestingSnapshotBehaviorInIsolation) {
@@ -1755,9 +1771,14 @@ bool ReplicationCoordinatorImpl::_doneWaitingForReplication_inlock(
     } else {
         patternName = writeConcern.wMode;
     }
-
     auto tagPattern = uassertStatusOK(_rsConfig.findCustomWriteMode(patternName));
-    return _topCoord->haveTaggedNodesReachedOpTime(opTime, tagPattern, useDurableOpTime);
+    if (writeConcern.checkCondition == WriteConcernOptions::CheckCondition::OpTime) {
+        return _topCoord->haveTaggedNodesReachedOpTime(opTime, tagPattern, useDurableOpTime);
+    } else {
+        invariant(writeConcern.checkCondition == WriteConcernOptions::CheckCondition::Config);
+        auto pred = _topCoord->makeConfigPredicate();
+        return _topCoord->haveTaggedNodesSatisfiedCondition(pred, tagPattern);
+    }
 }
 
 ReplicationCoordinator::StatusAndDuration ReplicationCoordinatorImpl::awaitReplication(
@@ -1835,22 +1856,16 @@ BSONObj ReplicationCoordinatorImpl::_getReplicationProgress(WithLock wl) const {
 
 SharedSemiFuture<void> ReplicationCoordinatorImpl::_startWaitingForReplication(
     WithLock wl, const OpTime& opTime, const WriteConcernOptions& writeConcern) {
-    // When waiting for the config to be replicated to a majority, we do not wait on a specific
-    // OpTime. We specifically populate waiters with a null OpTime.
-    invariant(writeConcern.wMode != WriteConcernOptions::kConfigMajority || opTime.isNull());
 
     const Mode replMode = getReplicationMode();
     if (replMode == modeNone) {
         // no replication check needed (validated above)
         return Future<void>::makeReady();
     }
-
-    if (opTime.isNull() && writeConcern.wMode != WriteConcernOptions::kConfigMajority) {
-        // If waiting for the empty optime, always say it's been replicated unless we're trying to
-        // replicate a new config.
+    if (opTime.isNull()) {
+        // If waiting for the empty optime, always say it's been replicated.
         return Future<void>::makeReady();
     }
-
     if (_inShutdown) {
         return Future<void>::makeReady(
             Status{ErrorCodes::ShutdownInProgress, "Replication is being shut down"});
@@ -1862,11 +1877,7 @@ SharedSemiFuture<void> ReplicationCoordinatorImpl::_startWaitingForReplication(
                     "Primary stepped down while waiting for replication"};
         }
 
-        // Checking for a config majority does not rely on waiting for a specific OpTime. So, we
-        // pass a null OpTime to awaitReplication, which means the term here will always be -1.
-        // Make sure we don't unnecessarily step down in this case.
-        if (writeConcern.wMode != WriteConcernOptions::kConfigMajority &&
-            opTime.getTerm() != _topCoord->getTerm()) {
+        if (opTime.getTerm() != _topCoord->getTerm()) {
             return {
                 ErrorCodes::PrimarySteppedDown,
                 str::stream() << "Term changed from " << opTime.getTerm() << " to "
@@ -2135,6 +2146,85 @@ HostAndPort ReplicationCoordinatorImpl::getCurrentPrimaryHostAndPort() const {
     stdx::lock_guard<Latch> lock(_mutex);
     auto primary = _topCoord->getCurrentPrimaryMember();
     return primary ? primary->getHostAndPort() : HostAndPort();
+}
+
+void ReplicationCoordinatorImpl::cancelCbkHandle(CallbackHandle activeHandle) {
+    _replExecutor->cancel(activeHandle);
+}
+
+BSONObj ReplicationCoordinatorImpl::_runCmdOnSelfOnAlternativeClient(OperationContext* opCtx,
+                                                                     const std::string& dbName,
+                                                                     const BSONObj& cmdObj) {
+
+    auto client = opCtx->getServiceContext()->makeClient("DBDirectClientCmd");
+    // We want the command's opCtx that gets executed via DBDirectClient to be interruptible
+    // so that we don't block state transitions. Callers of this function might run opCtx
+    // in an uninterruptible mode. To be on safer side, run the command in AlternativeClientRegion,
+    // to make sure that the command's opCtx is interruptible.
+    AlternativeClientRegion acr(client);
+    auto uniqueNewOpCtx = cc().makeOperationContext();
+    {
+        stdx::lock_guard<Client> lk(cc());
+        cc().setSystemOperationKillable(lk);
+    }
+
+    DBDirectClient dbClient(uniqueNewOpCtx.get());
+    const auto commandResponse = dbClient.runCommand(OpMsgRequest::fromDBAndBody(dbName, cmdObj));
+
+    return commandResponse->getCommandReply();
+}
+
+BSONObj ReplicationCoordinatorImpl::runCmdOnPrimaryAndAwaitResponse(
+    OperationContext* opCtx,
+    const std::string& dbName,
+    const BSONObj& cmdObj,
+    OnRemoteCmdScheduledFn onRemoteCmdScheduled,
+    OnRemoteCmdCompleteFn onRemoteCmdComplete) {
+    // About to make network and DBDirectClient (recursive) calls, so we should not hold any locks.
+    invariant(!opCtx->lockState()->isLocked());
+
+    const auto myHostAndPort = getMyHostAndPort();
+    const auto primaryHostAndPort = getCurrentPrimaryHostAndPort();
+
+    if (myHostAndPort.empty()) {
+        // Possibly because either rsconfig is uninitialized or the node got removed from config.
+        uassertStatusOK(Status{ErrorCodes::NodeNotFound, "Address unknown."});
+    }
+
+    if (primaryHostAndPort.empty()) {
+        uassertStatusOK(Status{ErrorCodes::NoConfigMaster, "Primary is unknown/down."});
+    }
+
+    auto iAmPrimary = (myHostAndPort == primaryHostAndPort) ? true : false;
+
+    if (iAmPrimary) {
+        // Run command using DBDirectClient to avoid tcp connection.
+        return _runCmdOnSelfOnAlternativeClient(opCtx, dbName, cmdObj);
+    }
+
+    // Node is not primary, so we will run the remote command via AsyncDBClient. To use
+    // AsyncDBClient, we will be using repl task executor.
+    executor::RemoteCommandRequest request(primaryHostAndPort, dbName, cmdObj, nullptr);
+    executor::RemoteCommandResponse cbkResponse(
+        Status{ErrorCodes::InternalError, "Uninitialized value"});
+
+    // Schedule the remote command.
+    auto&& scheduleResult = _replExecutor->scheduleRemoteCommand(
+        request, [&cbkResponse](const executor::TaskExecutor::RemoteCommandCallbackArgs& cbk) {
+            cbkResponse = cbk.response;
+        });
+
+    uassertStatusOK(scheduleResult.getStatus());
+    CallbackHandle cbkHandle = scheduleResult.getValue();
+
+    onRemoteCmdScheduled(cbkHandle);
+
+    // Wait for the response in an interruptible mode.
+    _replExecutor->wait(cbkHandle, opCtx);
+
+    onRemoteCmdComplete(cbkHandle);
+    uassertStatusOK(cbkResponse.status);
+    return cbkResponse.data;
 }
 
 void ReplicationCoordinatorImpl::_killConflictingOpsOnStepUpAndStepDown(
@@ -2676,7 +2766,11 @@ int ReplicationCoordinatorImpl::getMyId() const {
 }
 
 HostAndPort ReplicationCoordinatorImpl::getMyHostAndPort() const {
-    stdx::lock_guard<Latch> lock(_mutex);
+    stdx::unique_lock<Latch> lk(_mutex);
+
+    if (_selfIndex == -1) {
+        return HostAndPort();
+    }
     return _rsConfig.getMemberAt(_selfIndex).getHostAndPort();
 }
 
@@ -2761,9 +2855,42 @@ ReplSetConfig ReplicationCoordinatorImpl::getConfig() const {
     return _rsConfig;
 }
 
-void ReplicationCoordinatorImpl::processReplSetGetConfig(BSONObjBuilder* result) {
+WriteConcernOptions ReplicationCoordinatorImpl::_getOplogCommitmentWriteConcern(WithLock lk) {
+    auto syncMode = getWriteConcernMajorityShouldJournal_inlock()
+        ? WriteConcernOptions::SyncMode::JOURNAL
+        : WriteConcernOptions::SyncMode::NONE;
+    WriteConcernOptions oplogWriteConcern(
+        ReplSetConfig::kMajorityWriteConcernModeName, syncMode, WriteConcernOptions::kNoTimeout);
+    return oplogWriteConcern;
+}
+
+WriteConcernOptions ReplicationCoordinatorImpl::_getConfigReplicationWriteConcern() {
+    WriteConcernOptions configWriteConcern(ReplSetConfig::kConfigMajorityWriteConcernModeName,
+                                           WriteConcernOptions::SyncMode::NONE,
+                                           WriteConcernOptions::kNoTimeout);
+    configWriteConcern.checkCondition = WriteConcernOptions::CheckCondition::Config;
+    return configWriteConcern;
+}
+
+void ReplicationCoordinatorImpl::processReplSetGetConfig(BSONObjBuilder* result,
+                                                         bool commitmentStatus) {
     stdx::lock_guard<Latch> lock(_mutex);
     result->append("config", _rsConfig.toBSON());
+
+    if (commitmentStatus) {
+        uassert(ErrorCodes::NotMaster,
+                "commitmentStatus is only supported on primary.",
+                _readWriteAbility->canAcceptNonLocalWrites(lock));
+        auto configWriteConcern = _getConfigReplicationWriteConcern();
+        auto configOplogCommitmentOpTime = _topCoord->getConfigOplogCommitmentOpTime();
+        auto oplogWriteConcern = _getOplogCommitmentWriteConcern(lock);
+
+        // OpTime isn't used when checking for config replication.
+        OpTime ignored;
+        auto committed = _doneWaitingForReplication_inlock(ignored, configWriteConcern) &&
+            _doneWaitingForReplication_inlock(configOplogCommitmentOpTime, oplogWriteConcern);
+        result->append("commitmentStatus", committed);
+    }
 }
 
 void ReplicationCoordinatorImpl::processReplSetMetadata(const rpc::ReplSetMetadata& replMetadata) {
@@ -2788,7 +2915,8 @@ EventHandle ReplicationCoordinatorImpl::_processReplSetMetadata_inlock(
     const rpc::ReplSetMetadata& replMetadata) {
     // If we're in FCV 4.4, allow metadata updates between config versions.
     if (!serverGlobalParams.featureCompatibility.isVersion(
-            ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo44)) {
+            ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo44) ||
+        !enableSafeReplicaSetReconfig) {
         if (replMetadata.getConfigVersion() != _rsConfig.getConfigVersion()) {
             return EventHandle();
         }
@@ -2893,6 +3021,80 @@ Status ReplicationCoordinatorImpl::processReplSetReconfig(OperationContext* opCt
           "replSetReconfig admin command received from client; new config: {newConfig}",
           "newConfig"_attr = args.newConfigObj);
 
+    auto getNewConfig = [&](const ReplSetConfig& oldConfig,
+                            long long currentTerm) -> StatusWith<ReplSetConfig> {
+        ReplSetConfig newConfig;
+
+        // Only explicitly set configTerm for reconfig to this node's term if we're in FCV 4.4.
+        // Otherwise, use -1.
+        auto useSafeReconfig = serverGlobalParams.featureCompatibility.isVersion(
+            ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo44);
+        useSafeReconfig = useSafeReconfig && enableSafeReplicaSetReconfig;
+        auto term = (!args.force && useSafeReconfig) ? currentTerm : OpTime::kUninitializedTerm;
+
+        // When initializing a new config through the replSetReconfig command, ignore the term
+        // field passed in through its args. Instead, use this node's term.
+        const Status status =
+            newConfig.initialize(args.newConfigObj, term, oldConfig.getReplicaSetId());
+
+        if (!status.isOK()) {
+            LOGV2_ERROR(21418,
+                        "replSetReconfig got {status} while parsing {newConfigObj}",
+                        "status"_attr = status,
+                        "newConfigObj"_attr = args.newConfigObj);
+            return Status(ErrorCodes::InvalidReplicaSetConfig, status.reason());
+        }
+
+        if (newConfig.getReplSetName() != _settings.ourSetName()) {
+            str::stream errmsg;
+            errmsg << "Attempting to reconfigure a replica set with name "
+                   << newConfig.getReplSetName() << ", but command line reports "
+                   << _settings.ourSetName() << "; rejecting";
+            LOGV2_ERROR(
+                21419, "{std_string_errmsg}", "std_string_errmsg"_attr = std::string(errmsg));
+            return Status(ErrorCodes::InvalidReplicaSetConfig, errmsg);
+        }
+
+        if (enableAutomaticReconfig) {
+            bool addedNewlyAddedField = false;
+
+            // Set the `newlyAdded` field to true for all new voting nodes.
+            for (int i = 0; i < newConfig.getNumMembers(); i++) {
+                const auto newMem = newConfig.getMemberAt(i);
+                const int newMemId = newMem.getId().getData();
+                const bool newMemberIdNotInOldConfig =
+                    (oldConfig.findMemberByID(newMemId) == nullptr);
+
+                if (newMemberIdNotInOldConfig && newMem.isVoter()) {
+                    newConfig.setNewlyAddedFieldForMemberAtIndex(i, true);
+                    addedNewlyAddedField = true;
+                }
+            }
+
+            if (addedNewlyAddedField) {
+                LOGV2(4634400,
+                      "Rewrote the config to add `newlyAdded` field. Nodes with the `newlyAdded` "
+                      "field will be considered to have `votes:0`. Upon transition to SECONDARY, "
+                      "this field will be automatically removed.",
+                      "newConfigObj"_attr = newConfig.toBSON());
+            }
+        }
+
+        // Increase the config version for force reconfig.
+        if (args.force) {
+            auto version = std::max(oldConfig.getConfigVersion(), newConfig.getConfigVersion());
+            version += 10'000 + SecureRandom().nextInt32(100'000);
+            newConfig.setConfigVersion(version);
+        }
+        return newConfig;
+    };
+
+    return doReplSetReconfig(opCtx, getNewConfig, args.force);
+}
+
+Status ReplicationCoordinatorImpl::doReplSetReconfig(OperationContext* opCtx,
+                                                     GetNewConfigFn getNewConfig,
+                                                     bool force) {
     stdx::unique_lock<Latch> lk(_mutex);
 
     while (_rsConfigState == kConfigPreStart || _rsConfigState == kConfigStartingUp) {
@@ -2923,27 +3125,28 @@ Status ReplicationCoordinatorImpl::processReplSetReconfig(OperationContext* opCt
 
     invariant(_rsConfig.isInitialized());
 
-    if (!args.force && !_getMemberState_inlock().primary()) {
+    if (!force && !_getMemberState_inlock().primary()) {
         return Status(ErrorCodes::NotMaster,
                       str::stream()
                           << "replSetReconfig should only be run on PRIMARY, but my state is "
                           << _getMemberState_inlock().toString()
                           << "; use the \"force\" argument to override");
     }
+    auto topCoordTerm = _topCoord->getTerm();
+
+    auto configWriteConcern = _getConfigReplicationWriteConcern();
+    // Construct a fake OpTime that can be accepted but isn't used.
+    OpTime fakeOpTime(Timestamp(1, 1), topCoordTerm);
 
     if (serverGlobalParams.featureCompatibility.isVersion(
             ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo44) &&
-        !args.force) {
-        WriteConcernOptions writeConcern(
-            WriteConcernOptions::kConfigMajority,
-            WriteConcernOptions::SyncMode::NONE,
-            // The timeout isn't used by _doneWaitingForReplication_inlock.
-            WriteConcernOptions::kNoTimeout);
-
-        if (!_doneWaitingForReplication_inlock(OpTime(), writeConcern)) {
-            return Status(
-                ErrorCodes::ConfigurationInProgress,
-                "Cannot run replSetReconfig because the current config is not majority committed");
+        !force && enableSafeReplicaSetReconfig) {
+        if (!_doneWaitingForReplication_inlock(fakeOpTime, configWriteConcern)) {
+            return Status(ErrorCodes::ConfigurationInProgress,
+                          str::stream()
+                              << "Cannot run replSetReconfig because the current config: "
+                              << _rsConfig.getConfigVersionAndTerm().toString() << " is not "
+                              << "majority committed.");
         }
 
         // Make sure that the latest committed optime from the previous config is committed in the
@@ -2955,14 +3158,10 @@ Status ReplicationCoordinatorImpl::processReplSetReconfig(OperationContext* opCt
         // If our config was installed via a "force" reconfig, we bypass the oplog commitment check.
         auto leavingForceConfig = (_rsConfig.getConfigTerm() == OpTime::kUninitializedTerm);
         auto configOplogCommitmentOpTime = _topCoord->getConfigOplogCommitmentOpTime();
-        auto wcOpts = _populateUnsetWriteConcernOptionsSyncMode(
-            lk,
-            WriteConcernOptions(_rsConfig.getWriteMajority(),
-                                WriteConcernOptions::SyncMode::NONE,
-                                WriteConcernOptions::kNoWaiting));
+        auto oplogWriteConcern = _getOplogCommitmentWriteConcern(lk);
 
         if (!leavingForceConfig && !isInitialReconfig &&
-            !_doneWaitingForReplication_inlock(configOplogCommitmentOpTime, wcOpts)) {
+            !_doneWaitingForReplication_inlock(configOplogCommitmentOpTime, oplogWriteConcern)) {
             LOGV2(51816,
                   "Oplog config commitment condition failed to be satisfied. The last committed "
                   "optime in the previous config ({configOplogCommitmentOpTime}) is not committed "
@@ -2980,46 +3179,21 @@ Status ReplicationCoordinatorImpl::processReplSetReconfig(OperationContext* opCt
         makeGuard([&] { lockAndCall(&lk, [=] { _setConfigState_inlock(kConfigSteady); }); });
 
     ReplSetConfig oldConfig = _rsConfig;
-    // Only explicitly set configTerm for reconfig to this node's term if we're in FCV 4.4.
-    // Otherwise, use -1.
-    // Make sure we get the term from the topCoord under the replCoord mutex.
-    auto topCoordTerm = serverGlobalParams.featureCompatibility.isVersion(
-                            ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo44)
-        ? _topCoord->getTerm()
-        : OpTime::kUninitializedTerm;
     lk.unlock();
 
-    ReplSetConfig newConfig;
-    BSONObj newConfigObj = args.newConfigObj;
-    if (args.force) {
-        newConfigObj = incrementConfigVersionByRandom(newConfigObj);
-    }
+    // Call the callback to get the new config given the old one.
+    auto newConfigStatus = getNewConfig(oldConfig, topCoordTerm);
+    Status status = newConfigStatus.getStatus();
+    if (!status.isOK())
+        return status;
+    ReplSetConfig newConfig = newConfigStatus.getValue();
 
     BSONObj oldConfigObj = oldConfig.toBSON();
+    BSONObj newConfigObj = newConfig.toBSON();
     audit::logReplSetReconfig(opCtx->getClient(), &oldConfigObj, &newConfigObj);
 
-    // When initializing a new config through the replSetReconfig command, ignore the term
-    // field passed in through its args. Instead, use this node's term.
-    // If it is a force reconfig, explicitly set the term to -1.
-    auto term = !args.force ? topCoordTerm : OpTime::kUninitializedTerm;
-    Status status = newConfig.initialize(newConfigObj, term, oldConfig.getReplicaSetId());
-    if (!status.isOK()) {
-        LOGV2_ERROR(21418,
-                    "replSetReconfig got {status} while parsing {newConfigObj}",
-                    "status"_attr = status,
-                    "newConfigObj"_attr = newConfigObj);
-        return Status(ErrorCodes::InvalidReplicaSetConfig, status.reason());
-    }
-    if (newConfig.getReplSetName() != _settings.ourSetName()) {
-        str::stream errmsg;
-        errmsg << "Attempting to reconfigure a replica set with name " << newConfig.getReplSetName()
-               << ", but command line reports " << _settings.ourSetName() << "; rejecting";
-        LOGV2_ERROR(21419, "{errmsg}", "errmsg"_attr = std::string(errmsg));
-        return Status(ErrorCodes::InvalidReplicaSetConfig, errmsg);
-    }
-
     StatusWith<int> myIndex = validateConfigForReconfig(
-        _externalState.get(), oldConfig, newConfig, opCtx->getServiceContext(), args.force);
+        _externalState.get(), oldConfig, newConfig, opCtx->getServiceContext(), force);
     if (!myIndex.isOK()) {
         LOGV2_ERROR(21420,
                     "replSetReconfig got {status} while validating {newConfigObj}",
@@ -3033,9 +3207,7 @@ Status ReplicationCoordinatorImpl::processReplSetReconfig(OperationContext* opCt
           "replSetReconfig config object with {numMembers} members parses ok",
           "numMembers"_attr = newConfig.getNumMembers());
 
-    if (!args.force &&
-        !serverGlobalParams.featureCompatibility.isVersion(
-            ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo44)) {
+    if (!force && !MONGO_unlikely(omitConfigQuorumCheck.shouldFail())) {
         status = checkQuorumForReconfig(
             _replExecutor.get(), newConfig, myIndex.getValue(), _topCoord->getTerm());
         if (!status.isOK()) {
@@ -3054,17 +3226,16 @@ Status ReplicationCoordinatorImpl::processReplSetReconfig(OperationContext* opCt
     }
 
     configStateGuard.dismiss();
-    _finishReplSetReconfig(opCtx, newConfig, args.force, myIndex.getValue());
+    _finishReplSetReconfig(opCtx, newConfig, force, myIndex.getValue());
 
-    if (!args.force &&
+    if (!force &&
         serverGlobalParams.featureCompatibility.isVersion(
-            ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo44)) {
+            ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo44) &&
+        enableSafeReplicaSetReconfig) {
         // Wait for the config document to be replicated to a majority of nodes in the new
         // config.
-        WriteConcernOptions writeConcern(WriteConcernOptions::kConfigMajority,
-                                         WriteConcernOptions::SyncMode::NONE,
-                                         WriteConcernOptions::kNoTimeout);
-        StatusAndDuration configAwaitStatus = awaitReplication(opCtx, OpTime(), writeConcern);
+        StatusAndDuration configAwaitStatus =
+            awaitReplication(opCtx, fakeOpTime, configWriteConcern);
         uassertStatusOK(configAwaitStatus.status);
 
         // Now that the new config has been persisted and installed in memory, wait for the latest
@@ -3074,10 +3245,11 @@ Status ReplicationCoordinatorImpl::processReplSetReconfig(OperationContext* opCt
         // if we have just left a force config via a non-force reconfig, we still want to wait for
         // this oplog commitment check, since a subsequent safe reconfig will check it as a
         // precondition.
+        lk.lock();
         auto configOplogCommitmentOpTime = _topCoord->getConfigOplogCommitmentOpTime();
-        auto oplogWriteConcern = WriteConcernOptions(newConfig.getWriteMajority(),
-                                                     WriteConcernOptions::SyncMode::NONE,
-                                                     WriteConcernOptions::kNoTimeout);
+        auto oplogWriteConcern = _getOplogCommitmentWriteConcern(lk);
+        lk.unlock();
+
         LOGV2(51815,
               "Waiting for the last committed optime in the previous config "
               "({configOplogCommitmentOpTime}) to be committed in the current config.",
@@ -3090,11 +3262,9 @@ Status ReplicationCoordinatorImpl::processReplSetReconfig(OperationContext* opCt
                                     << configOplogCommitmentOpTime.toString()
                                     << ") did not become committed in the current config.");
         }
-        LOGV2(4508700,
-              "Committed new config with version {newConfigVersion} and term {newConfigTerm}. "
-              "Waited {configWaitDuration} for the config to become committed and waited "
-              "{oplogWaitDuration} for the last committed optime in the previous config "
-              "({configOplogCommitmentOpTime}) to become committed in the config.",
+
+        LOGV2(4508701,
+              "Committed new replica set config",
               "newConfigVersion"_attr = newConfig.getConfigVersion(),
               "newConfigTerm"_attr = newConfig.getConfigTerm(),
               "configWaitDuration"_attr = configAwaitStatus.duration,
@@ -3177,7 +3347,15 @@ void ReplicationCoordinatorImpl::_finishReplSetReconfig(OperationContext* opCtx,
 
     // On a reconfig we drop all snapshots so we don't mistakenly read from the wrong one.
     // For example, if we change the meaning of the "committed" snapshot from applied -> durable.
-    _dropAllSnapshots_inlock();
+    //
+    // If the new config has the same content but different version and term, skip it, since
+    // the quorum condition is still the same.
+    auto newConfigCopy = newConfig;
+    newConfigCopy.setConfigTerm(oldConfig.getConfigTerm());
+    newConfigCopy.setConfigVersion(oldConfig.getConfigVersion());
+    if (SimpleBSONObjComparator::kInstance.evaluate(oldConfig.toBSON() != newConfigCopy.toBSON())) {
+        _dropAllSnapshots_inlock();
+    }
 
     lk.unlock();
     _performPostMemberStateUpdateAction(action);
@@ -4853,8 +5031,9 @@ void ReplicationCoordinatorImpl::ReadWriteAbility::setCanAcceptNonLocalWrites(
 
     // We must be holding the RSTL in mode X to change _canAcceptNonLocalWrites.
     invariant(opCtx);
-    invariant(opCtx->lockState()->isRSTLExclusive());
-    _canAcceptNonLocalWrites.store(canAcceptWrites);
+    if (opCtx->lockState()->isRSTLExclusive()) {
+        _canAcceptNonLocalWrites.store(canAcceptWrites);
+    }
 }
 
 bool ReplicationCoordinatorImpl::ReadWriteAbility::canAcceptNonLocalWrites(WithLock) const {

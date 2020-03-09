@@ -35,15 +35,14 @@
 #include "mongo/db/pipeline/document_source_queue.h"
 #include "mongo/db/pipeline/document_source_union_with.h"
 #include "mongo/db/pipeline/process_interface/shardsvr_process_interface.h"
+#include "mongo/db/repl/read_concern_args.h"
+#include "mongo/db/views/resolved_view.h"
 #include "mongo/s/query/sharded_agg_test_fixture.h"
 #include "mongo/s/stale_exception.h"
 #include "mongo/unittest/unittest.h"
 
 namespace mongo {
 namespace {
-
-/*
- * TODO (SERVER-46428): Unblacklist
 
 // Use this new name to register these tests under their own unit test suite.
 using ShardedUnionTest = ShardedAggTestFixture;
@@ -83,6 +82,43 @@ TEST_F(ShardedUnionTest, RetriesSubPipelineOnNetworkError) {
     });
 
     future.default_timed_get();
+}
+
+TEST_F(ShardedUnionTest, ForwardsMaxTimeMSToRemotes) {
+    // Sharded by {_id: 1}, [MinKey, 0) on shard "0", [0, MaxKey) on shard "1".
+    setupNShards(2);
+    loadRoutingTableWithTwoChunksAndTwoShards(kTestAggregateNss);
+
+    auto pipeline = Pipeline::create({}, expCtx());
+    auto unionWith = DocumentSourceUnionWith(expCtx(), std::move(pipeline));
+    expCtx()->mongoProcessInterface = std::make_shared<ShardServerProcessInterface>(executor());
+    auto queue = DocumentSourceQueue::create(expCtx());
+    unionWith.setSource(queue.get());
+
+    auto expectedResult = Document{{"_id"_sd, BSONNULL}, {"count"_sd, 1}};
+
+    expCtx()->opCtx->setDeadlineAfterNowBy(Milliseconds(15), ErrorCodes::MaxTimeMSExpired);
+
+    auto future = launchAsync([&] {
+        auto next = unionWith.getNext();
+        ASSERT_TRUE(next.isAdvanced());
+        auto result = next.releaseDocument();
+        ASSERT_DOCUMENT_EQ(result, expectedResult);
+        ASSERT(unionWith.getNext().isEOF());
+        ASSERT(unionWith.getNext().isEOF());
+        ASSERT(unionWith.getNext().isEOF());
+    });
+
+    const auto assertHasExpectedMaxTimeMSAndReturnResult =
+        [&](const executor::RemoteCommandRequest& request) {
+            ASSERT(request.cmdObj.hasField("maxTimeMS")) << request;
+            ASSERT(request.cmdObj["maxTimeMS"].isNumber());
+            return CursorResponse(kTestAggregateNss, CursorId{0}, {expectedResult.toBson()})
+                .toBSON(CursorResponse::ResponseType::InitialResponse);
+        };
+
+    onCommand(assertHasExpectedMaxTimeMSAndReturnResult);
+    onCommand(assertHasExpectedMaxTimeMSAndReturnResult);
 }
 
 TEST_F(ShardedUnionTest, RetriesSubPipelineOnStaleConfigError) {
@@ -242,9 +278,9 @@ TEST_F(ShardedUnionTest, AvoidsSplittingSubPipelineIfRefreshedDistributionDoesNo
 
     auto&& parser = AccumulationStatement::getParser("$sum");
     auto accumulatorArg = BSON("" << 1);
-    auto sumExpression =
+    auto sumStatement =
         parser(expCtx(), accumulatorArg.firstElement(), expCtx()->variablesParseState);
-    AccumulationStatement countStatement{"count", sumExpression};
+    AccumulationStatement countStatement{"count", sumStatement};
     auto pipeline = Pipeline::create(
         {DocumentSourceGroup::create(
             expCtx(), ExpressionConstant::create(expCtx(), Value(BSONNULL)), {countStatement})},
@@ -296,7 +332,7 @@ TEST_F(ShardedUnionTest, AvoidsSplittingSubPipelineIfRefreshedDistributionDoesNo
 
     // That error should be retried, this time targetting only one shard.
     onCommand([&](const executor::RemoteCommandRequest& request) {
-        ASSERT_EQ(request.target, HostAndPort(shards[0].getHost()));
+        ASSERT_EQ(request.target, HostAndPort(shards[0].getHost())) << request;
         return CursorResponse(kTestAggregateNss, CursorId{0}, {expectedResult.toBson()})
             .toBSON(CursorResponse::ResponseType::InitialResponse);
     });
@@ -304,7 +340,117 @@ TEST_F(ShardedUnionTest, AvoidsSplittingSubPipelineIfRefreshedDistributionDoesNo
     future.default_timed_get();
 }
 
-*/
+TEST_F(ShardedUnionTest, IncorporatesViewDefinitionAndRetriesWhenViewErrorReceived) {
+    // Sharded by {_id: 1}, [MinKey, 0) on shard "0", [0, MaxKey) on shard "1".
+    auto shards = setupNShards(2);
+    loadRoutingTableWithTwoChunksAndTwoShards(kTestAggregateNss);
 
+    NamespaceString nsToUnionWith(expCtx()->ns.db(), "view");
+    // Mock out the view namespace as emtpy for now - this is what it would be when parsing in a
+    // sharded cluster - only later would we learn the actual view definition.
+    expCtx()->setResolvedNamespaces(StringMap<ExpressionContext::ResolvedNamespace>{
+        {nsToUnionWith.coll().toString(), {nsToUnionWith, std::vector<BSONObj>{}}}});
+    auto bson = BSON("$unionWith" << nsToUnionWith.coll());
+    auto unionWith = DocumentSourceUnionWith::createFromBson(bson.firstElement(), expCtx());
+    expCtx()->mongoProcessInterface = std::make_shared<ShardServerProcessInterface>(executor());
+    auto queue = DocumentSourceQueue::create(expCtx());
+    unionWith->setSource(queue.get());
+
+    NamespaceString expectedBackingNs(kTestAggregateNss);
+    auto expectedResult = Document{{"_id"_sd, "unionResult"_sd}};
+    auto expectToBeFiltered = Document{{"_id"_sd, "notTheUnionResult"_sd}};
+
+    auto future = launchAsync([&] {
+        auto next = unionWith->getNext();
+        ASSERT_TRUE(next.isAdvanced());
+        auto result = next.releaseDocument();
+        ASSERT_DOCUMENT_EQ(result, expectedResult);
+        ASSERT(unionWith->getNext().isEOF());
+        ASSERT(unionWith->getNext().isEOF());
+        ASSERT(unionWith->getNext().isEOF());
+    });
+
+    // Mock out one error response, then expect a refresh of the sharding catalog for that
+    // namespace, then mock out a successful response.
+    onCommand([&](const executor::RemoteCommandRequest& request) {
+        return Status{ResolvedView{expectedBackingNs,
+                                   {fromjson("{$group: {_id: '$groupKey'}}"),
+                                    // Prevent the $match from being pushed into the shards where it
+                                    // would not execute in this mocked environment.
+                                    fromjson("{$_internalInhibitOptimization: {}}"),
+                                    fromjson("{$match: {_id: 'unionResult'}}")},
+                                   BSONObj()},
+                      "It was a view!"_sd};
+    });
+
+    // That error should be incorporated, then we should target both shards. The results should be
+    // de-duplicated in the merging part of the pipeline which performs the second half of the
+    // $group, then the document which doesn't match the final $match should be filtered out.
+    onCommand([&](const executor::RemoteCommandRequest& request) {
+        return CursorResponse(expectedBackingNs,
+                              CursorId{0},
+                              {expectedResult.toBson(), expectToBeFiltered.toBson()})
+            .toBSON(CursorResponse::ResponseType::InitialResponse);
+    });
+    onCommand([&](const executor::RemoteCommandRequest& request) {
+        return CursorResponse(expectedBackingNs,
+                              CursorId{0},
+                              {expectedResult.toBson(), expectToBeFiltered.toBson()})
+            .toBSON(CursorResponse::ResponseType::InitialResponse);
+    });
+
+    future.default_timed_get();
+}
+
+TEST_F(ShardedUnionTest, ForwardsReadConcernToRemotes) {
+    // Sharded by {_id: 1}, [MinKey, 0) on shard "0", [0, MaxKey) on shard "1".
+    setupNShards(2);
+    loadRoutingTableWithTwoChunksAndTwoShards(kTestAggregateNss);
+
+    auto&& parser = AccumulationStatement::getParser("$sum");
+    auto accumulatorArg = BSON("" << 1);
+    auto sumExpression =
+        parser(expCtx(), accumulatorArg.firstElement(), expCtx()->variablesParseState);
+    AccumulationStatement countStatement{"count", sumExpression};
+    auto pipeline = Pipeline::create(
+        {DocumentSourceGroup::create(
+            expCtx(), ExpressionConstant::create(expCtx(), Value(BSONNULL)), {countStatement})},
+        expCtx());
+    auto unionWith = DocumentSourceUnionWith(expCtx(), std::move(pipeline));
+    expCtx()->mongoProcessInterface = std::make_shared<ShardServerProcessInterface>(executor());
+    auto queue = DocumentSourceQueue::create(expCtx());
+    unionWith.setSource(queue.get());
+
+    auto expectedResult = Document{{"_id"_sd, BSONNULL}, {"count"_sd, 2}};
+
+    auto readConcernArgs = repl::ReadConcernArgs{repl::ReadConcernLevel::kMajorityReadConcern};
+    {
+        stdx::lock_guard<Client> lk(*expCtx()->opCtx->getClient());
+        repl::ReadConcernArgs::get(expCtx()->opCtx) = readConcernArgs;
+    }
+    auto future = launchAsync([&] {
+        auto next = unionWith.getNext();
+        ASSERT_TRUE(next.isAdvanced());
+        auto result = next.releaseDocument();
+        ASSERT_DOCUMENT_EQ(result, expectedResult);
+        ASSERT(unionWith.getNext().isEOF());
+        ASSERT(unionWith.getNext().isEOF());
+        ASSERT(unionWith.getNext().isEOF());
+    });
+
+    const auto assertHasExpectedReadConcernAndReturnResult =
+        [&](const executor::RemoteCommandRequest& request) {
+            ASSERT(request.cmdObj.hasField("readConcern")) << request;
+            ASSERT_BSONOBJ_EQ(request.cmdObj["readConcern"].Obj(), readConcernArgs.toBSONInner());
+            return CursorResponse(
+                       kTestAggregateNss, CursorId{0}, {BSON("_id" << BSONNULL << "count" << 1)})
+                .toBSON(CursorResponse::ResponseType::InitialResponse);
+        };
+
+    onCommand(assertHasExpectedReadConcernAndReturnResult);
+    onCommand(assertHasExpectedReadConcernAndReturnResult);
+
+    future.default_timed_get();
+}
 }  // namespace
 }  // namespace mongo
