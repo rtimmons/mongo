@@ -102,7 +102,8 @@ void checkShardKeyRestrictions(OperationContext* opCtx,
  * bypass the index build registration.
  */
 bool shouldBuildIndexesOnEmptyCollectionSinglePhased(OperationContext* opCtx,
-                                                     Collection* collection) {
+                                                     Collection* collection,
+                                                     IndexBuildProtocol protocol) {
     const auto& nss = collection->ns();
     invariant(opCtx->lockState()->isCollectionLockedForMode(nss, MODE_X), str::stream() << nss);
 
@@ -111,6 +112,14 @@ bool shouldBuildIndexesOnEmptyCollectionSinglePhased(OperationContext* opCtx,
     // Check whether the replica set member's config has {buildIndexes:false} set, which means
     // we are not allowed to build non-_id indexes on this server.
     if (!replCoord->buildsIndexes()) {
+        return false;
+    }
+
+    // Secondaries should not bypass index build registration (and _runIndexBuild()) for two phase
+    // index builds because they need to report index build progress to the primary per commit
+    // quorum.
+    if (IndexBuildProtocol::kTwoPhase == protocol && replCoord->getSettings().usingReplSets() &&
+        !replCoord->canAcceptWritesFor(opCtx, nss)) {
         return false;
     }
 
@@ -232,7 +241,8 @@ void abortIndexBuild(WithLock lk,
     stdx::unique_lock<Latch> replStateLock(replIndexBuildState->mutex);
     if (replIndexBuildState->waitForNextAction->getFuture().isReady()) {
         const auto nextAction = replIndexBuildState->waitForNextAction->getFuture().get();
-        invariant(nextAction == IndexBuildAction::kCommitQuorumSatisfied ||
+        invariant(nextAction == IndexBuildAction::kSinglePhaseCommit ||
+                  nextAction == IndexBuildAction::kCommitQuorumSatisfied ||
                   nextAction == IndexBuildAction::kPrimaryAbort);
         // Index build coordinator already received a signal to commit or abort. So, it's ok
         // to return and wait for the index build to complete. The index build coordinator
@@ -519,8 +529,8 @@ std::string IndexBuildsCoordinator::_indexBuildActionToString(IndexBuildAction a
         return "Rollback abort";
     } else if (action == IndexBuildAction::kPrimaryAbort) {
         return "Primary abort";
-    } else if (action == IndexBuildAction::kSinglePhaseSecondaryCommit) {
-        return "Single-phase secondary commit";
+    } else if (action == IndexBuildAction::kSinglePhaseCommit) {
+        return "Single-phase commit";
     } else if (action == IndexBuildAction::kCommitQuorumSatisfied) {
         return "Commit quorum Satisfied";
     }
@@ -908,7 +918,8 @@ bool IndexBuildsCoordinator::abortIndexBuildByBuildUUIDNoWait(
         stdx::unique_lock<Latch> lk(replState->mutex);
         if (replState->waitForNextAction->getFuture().isReady()) {
             const auto nextAction = replState->waitForNextAction->getFuture().get(opCtx);
-            invariant(nextAction == IndexBuildAction::kCommitQuorumSatisfied ||
+            invariant(nextAction == IndexBuildAction::kSinglePhaseCommit ||
+                      nextAction == IndexBuildAction::kCommitQuorumSatisfied ||
                       nextAction == IndexBuildAction::kPrimaryAbort);
 
             // Index build coordinator already received a signal to commit or abort. So, it's ok
@@ -1485,7 +1496,7 @@ IndexBuildsCoordinator::_filterSpecsAndRegisterBuild(
     }
 
     // Bypass the thread pool if we are building indexes on an empty collection.
-    if (shouldBuildIndexesOnEmptyCollectionSinglePhased(opCtx, collection)) {
+    if (shouldBuildIndexesOnEmptyCollectionSinglePhased(opCtx, collection, protocol)) {
         ReplIndexBuildState::IndexCatalogStats indexCatalogStats;
         indexCatalogStats.numIndexesBefore = getNumIndexesTotal(opCtx, collection);
         try {

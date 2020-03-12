@@ -584,7 +584,7 @@ Status MigrationSourceManager::commitChunkMetadataOnConfig() {
             UninterruptibleLockGuard noInterrupt(_opCtx->lockState());
             AutoGetCollection autoColl(_opCtx, getNss(), MODE_IS);
             return CollectionShardingRuntime::get(_opCtx, getNss())
-                ->cleanUpRange(range, whenToClean);
+                ->cleanUpRange(range, boost::none, whenToClean);
         }();
 
         if (_args.getWaitForDelete()) {
@@ -664,9 +664,9 @@ ScopedCollectionDescription MigrationSourceManager::_getCurrentMetadataAndCheckE
     }();
 
     uassert(ErrorCodes::ConflictingOperationInProgress,
-            str::stream() << "The collection was dropped or recreated since the migration began. "
-                          << "Expected collection epoch: " << _collectionEpoch.toString()
-                          << ", but found: "
+            str::stream() << "The collection's epoch has changed since the migration began. "
+                             "Expected collection epoch: "
+                          << _collectionEpoch.toString() << ", but found: "
                           << (metadata->isSharded() ? metadata->getCollVersion().epoch().toString()
                                                     : "unsharded collection."),
             metadata->isSharded() && metadata->getCollVersion().epoch() == _collectionEpoch);

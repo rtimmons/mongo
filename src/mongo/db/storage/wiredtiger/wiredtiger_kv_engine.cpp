@@ -142,7 +142,8 @@ bool WiredTigerFileVersion::shouldDowngrade(bool readOnly,
 
     if (serverGlobalParams.featureCompatibility.getVersion() !=
         ServerGlobalParams::FeatureCompatibility::Version::kFullyDowngradedTo42) {
-        // Only consider downgrading when FCV is set to 4.2
+        // Only consider downgrading when FCV is set to kFullyDowngraded.
+        // (This FCV gate must remain across binary version releases.)
         return false;
     }
 
@@ -1025,23 +1026,6 @@ void WiredTigerKVEngine::_openWiredTiger(const std::string& path, const std::str
     int ret = wiredtiger_open(path.c_str(), wtEventHandler, configStr.c_str(), &_conn);
     if (!ret) {
         _fileVersion = {WiredTigerFileVersion::StartupVersion::IS_42};
-        return;
-    }
-
-    // Arbiters do not replicate the FCV document. Due to arbiter FCV semantics on 4.0, shutting
-    // down a 4.0 arbiter may either downgrade the data files to WT compatibility 2.9 or 3.0. Thus,
-    // 4.2 binaries must allow starting up on 2.9 and 3.0 files.
-    configStr = wtOpenConfig + ",compatibility=(require_min=\"3.0.0\")";
-    ret = wiredtiger_open(path.c_str(), wtEventHandler, configStr.c_str(), &_conn);
-    if (!ret) {
-        _fileVersion = {WiredTigerFileVersion::StartupVersion::IS_36};
-        return;
-    }
-
-    configStr = wtOpenConfig + ",compatibility=(require_min=\"2.9.0\")";
-    ret = wiredtiger_open(path.c_str(), wtEventHandler, configStr.c_str(), &_conn);
-    if (!ret) {
-        _fileVersion = {WiredTigerFileVersion::StartupVersion::IS_34};
         return;
     }
 
