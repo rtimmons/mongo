@@ -1713,6 +1713,66 @@ Status ReplicationCoordinatorImpl::_setLastOptime(WithLock lk,
     return Status::OK();
 }
 
+bool ReplicationCoordinatorImpl::isCommitQuorumSatisfied(
+    const CommitQuorumOptions& commitQuorum, const std::vector<mongo::HostAndPort>& members) const {
+    stdx::lock_guard<Latch> lock(_mutex);
+
+    if (commitQuorum.mode.empty()) {
+        return _haveNumNodesSatisfiedCommitQuorum(lock, commitQuorum.numNodes, members);
+    }
+
+    StringData patternName;
+    if (commitQuorum.mode == CommitQuorumOptions::kMajority) {
+        patternName = ReplSetConfig::kMajorityWriteConcernModeName;
+    } else if (commitQuorum.mode == CommitQuorumOptions::kAll) {
+        patternName = ReplSetConfig::kAllWriteConcernModeName;
+    } else {
+        patternName = commitQuorum.mode;
+    }
+
+    auto tagPattern = uassertStatusOK(_rsConfig.findCustomWriteMode(patternName));
+    return _haveTaggedNodesSatisfiedCommitQuorum(lock, tagPattern, members);
+}
+
+bool ReplicationCoordinatorImpl::_haveNumNodesSatisfiedCommitQuorum(
+    WithLock lk, int numNodes, const std::vector<mongo::HostAndPort>& members) const {
+    for (auto&& member : members) {
+        auto memberConfig = _rsConfig.findMemberByHostAndPort(member);
+        // We do not count arbiters and members that aren't part of replica set config,
+        // towards the commit quorum.
+        if (!memberConfig || memberConfig->isArbiter())
+            continue;
+
+        --numNodes;
+
+        if (numNodes <= 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ReplicationCoordinatorImpl::_haveTaggedNodesSatisfiedCommitQuorum(
+    WithLock lk,
+    const ReplSetTagPattern& tagPattern,
+    const std::vector<mongo::HostAndPort>& members) const {
+    ReplSetTagMatch matcher(tagPattern);
+
+    for (auto&& member : members) {
+        auto memberConfig = _rsConfig.findMemberByHostAndPort(member);
+        // We do not count arbiters and members that aren't part of replica set config,
+        // towards the commit quorum.
+        if (!memberConfig || memberConfig->isArbiter())
+            continue;
+        for (auto&& it = memberConfig->tagsBegin(); it != memberConfig->tagsEnd(); ++it) {
+            if (matcher.update(*it)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 bool ReplicationCoordinatorImpl::_doneWaitingForReplication_inlock(
     const OpTime& opTime, const WriteConcernOptions& writeConcern) {
     // The syncMode cannot be unset.
@@ -2988,10 +3048,9 @@ Status ReplicationCoordinatorImpl::processReplSetSyncFrom(OperationContext* opCt
     }
 
     // If we are in the middle of an initial sync, do a resync.
-    if (result.isOK() && initialSyncerCopy && initialSyncerCopy->isActive()) {
-        return resyncData(opCtx, false);
+    if (result.isOK() && initialSyncerCopy) {
+        initialSyncerCopy->cancelCurrentAttempt();
     }
-
     return result;
 }
 
@@ -3076,10 +3135,15 @@ Status ReplicationCoordinatorImpl::processReplSetReconfig(OperationContext* opCt
                 }
 
                 const int newMemId = newMem.getId().getData();
-                const bool newMemberIdNotInOldConfig =
-                    (oldConfig.findMemberByID(newMemId) == nullptr);
+                const auto oldMem = oldConfig.findMemberByID(newMemId);
 
-                if (newMemberIdNotInOldConfig && newMem.isVoter()) {
+                const bool isNewVotingMember = (oldMem == nullptr && newMem.isVoter());
+                const bool isCurrentlyNewlyAdded = (oldMem != nullptr && oldMem->isNewlyAdded());
+
+                // Append the 'newlyAdded' field if the node:
+                // 1) Is a new, voting node
+                // 2) Already has a 'newlyAdded' field in the old config
+                if (isNewVotingMember || isCurrentlyNewlyAdded) {
                     newConfig.setNewlyAddedFieldForMemberAtIndex(i, true);
                     addedNewlyAddedField = true;
                 }
@@ -3087,10 +3151,12 @@ Status ReplicationCoordinatorImpl::processReplSetReconfig(OperationContext* opCt
 
             if (addedNewlyAddedField) {
                 LOGV2(4634400,
-                      "Rewrote the config to add 'newlyAdded' field. Nodes with the 'newlyAdded' "
-                      "field will be considered to have 'votes:0'. Upon transition to SECONDARY, "
-                      "this field will be automatically removed.",
-                      "newConfigObj"_attr = newConfig.toBSON());
+                      "Appended the 'newlyAdded' field to a node in the new config. Nodes with the "
+                      "'newlyAdded' field will be considered to have 'votes:0'. Upon transition to "
+                      "SECONDARY, this field will be automatically removed.",
+                      "newConfigObj"_attr = newConfig.toBSON(),
+                      "userProvidedConfig"_attr = args.newConfigObj,
+                      "oldConfig"_attr = oldConfig.toBSON());
             }
         }
 
@@ -4198,12 +4264,9 @@ Status ReplicationCoordinatorImpl::_checkIfCommitQuorumCanBeSatisfied(
 
     invariant(getReplicationMode() == modeReplSet);
 
-    std::vector<MemberConfig> memberConfig(_rsConfig.membersBegin(), _rsConfig.membersEnd());
-
     // We need to ensure that the 'commitQuorum' can be satisfied by all the members of this
     // replica set.
-    bool commitQuorumCanBeSatisfied =
-        _topCoord->checkIfCommitQuorumCanBeSatisfied(commitQuorum, memberConfig);
+    bool commitQuorumCanBeSatisfied = _topCoord->checkIfCommitQuorumCanBeSatisfied(commitQuorum);
     if (!commitQuorumCanBeSatisfied) {
         return Status(ErrorCodes::UnsatisfiableCommitQuorum,
                       str::stream() << "Commit quorum cannot be satisfied with the current replica "
