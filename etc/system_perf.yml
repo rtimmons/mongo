@@ -8,30 +8,22 @@ post:
     # will not have been run if the timeout is exceeded.
     - command: shell.exec
       params:
-        working_dir: work
-        script: |
-          source ./dsienv.sh
-          if [ -e /data/infrastructure_provisioning/terraform/provisioned.${cluster} ]; then
-            mark_idle.sh
-          fi
+        working_dir: ${workdir}/run
+        script: ${workdir}/src/dsi/run-dsi mark_idle
     - command: shell.exec
       params:
-        working_dir: work
-        script: |
-          set -e
-          set -v
-          source ./dsienv.sh
-          ../src/dsi/dsi/run-dsi infrastructure_teardown.py
+        working_dir: ${workdir}/run
+        script: ${workdir}/src/dsi/run-dsi infrastructure_teardown
     - command: shell.exec
       params:
-        working_dir: work
-        script: ../src/dsi/dsi/run-dsi make-artifact
+        working_dir: ${workdir}/run
+        script: ${workdir}/src/dsi/run-dsi make_artifact
     - command: s3.put
       params:
         aws_key: ${aws_key}
         aws_secret: ${aws_secret}
-        local_file: work/dsi-artifacts.tgz
-        remote_file: ${project_dir}/${build_variant}/${revision}/${task_id}/${version_id}/logs/dsi-artifacts-${task_name}-${build_id}-${execution}.${ext|tgz}
+        local_file: ${workdir}/run/build/Artifacts/dsi-artifacts.tgz
+        remote_file: dsi/${build_variant}/${revision}/${task_id}/${version_id}/logs/dsi-artifacts-${task_name}-${build_id}-${execution}.${ext|tgz}
         bucket: mciuploads
         permissions: public-read
         content_type: ${content_type|application/x-gzip}
@@ -40,7 +32,7 @@ post:
       params:
         aws_key: ${aws_key}
         aws_secret: ${aws_secret}
-        local_file: src/workloads/workloads/jsdoc/jsdocs-redirect.html
+        local_file: ${workdir}/src/workloads/jsdoc/jsdocs-redirect.html
         remote_file: ${project_dir}/${build_variant}/${revision}/${task_id}/${version_id}/logs/workloads-${task_name}-${build_id}.html
         bucket: mciuploads
         permissions: public-read
@@ -52,25 +44,27 @@ post:
     - command: "json.send"
       params:
          name: "perf"
-         file: "work/perf.json"
+         file: "${workdir}/run/build/Reports/LegacyPerfJson/perf.json"
     - func: "upload pip requirements"
     - command: shell.exec
       params:
-        working_dir: src
+        working_dir: src/mongo
+        # removes files from the (local) scons cache when it's over a
+        # threshold, to the $prune_ratio percentage. Ideally override
+        # these default values in the distro config in evergreen.
         script: |
-          # removes files from the (local) scons cache when it's over a
-          # threshold, to the $prune_ratio percentage. Ideally override
-          # these default values in the distro config in evergreen.
-
           if [ -d "${scons_cache_path}" ]; then
-              /opt/mongodbtoolchain/v3/bin/python3 buildscripts/scons_cache_prune.py --cache-dir ${scons_cache_path} --cache-size ${scons_cache_size|200} --prune-ratio ${scons_prune_ratio|0.8}
+              /opt/mongodbtoolchain/v3/bin/python3 buildscripts/scons_cache_prune.py \
+                  --cache-dir ${scons_cache_path} \
+                  --cache-size ${scons_cache_size|200} \
+                  --prune-ratio ${scons_prune_ratio|0.8}
           fi
 
 functions:
   "git get project": &git_get_project
     command: git.get_project
     params:
-      directory: src
+      directory: src/mongo
       revisions:  # for each module include revision as <module_name> : ${<module_name>_rev}
         dsi: ${dsi_rev}
         enterprise: ${enterprise_rev}
@@ -85,25 +79,23 @@ functions:
     # installed.
     - command: shell.exec
       params:
-        working_dir: src
+        working_dir: src/mongo
         script: |
           set -o errexit
           set -o verbose
 
-          /opt/mongodbtoolchain/v3/bin/virtualenv --python /opt/mongodbtoolchain/v3/bin/python3 "${workdir}/compile_venv"
-          /opt/mongodbtoolchain/v3/bin/virtualenv --python /opt/mongodbtoolchain/v3/bin/python2 "${workdir}/venv"
-          source "${workdir}/compile_venv/bin/activate"
+          /opt/mongodbtoolchain/v3/bin/virtualenv --python /opt/mongodbtoolchain/v3/bin/python3 "${workdir}/run/venv3"
+          /opt/mongodbtoolchain/v3/bin/virtualenv --python /opt/mongodbtoolchain/v3/bin/python2 "${workdir}/run/venv2"
+          source "${workdir}/run/venv3/bin/activate"
 
-          python -m pip install -r etc/pip/compile-requirements.txt
+          python -m pip install -r ${workdir}/src/mongo/etc/pip/compile-requirements.txt
 
     - command: shell.exec
       params:
-        working_dir: src
+        working_dir: src/mongo
         script: |
           set -o errexit
           set -o verbose
-
-          mkdir -p mongodb/bin
 
           # We get the raw version string (r1.2.3-45-gabcdef) from git
           MONGO_VERSION=$(git describe --abbrev=7)
@@ -122,16 +114,19 @@ functions:
 
           # This script converts the generated version string into a sanitized version string for
           # use by scons and uploading artifacts as well as information about for the scons cache.
-          source "${workdir}/compile_venv/bin/activate"
-          MONGO_VERSION=$MONGO_VERSION USE_SCONS_CACHE=${use_scons_cache|false} python buildscripts/generate_compile_expansions.py --out compile_expansions.yml
+          source "${workdir}/run/venv3/bin/activate"
+          MONGO_VERSION=$MONGO_VERSION USE_SCONS_CACHE=${use_scons_cache|false} \
+              python \
+                  ${workdir}/src/mongo/buildscripts/generate_compile_expansions.py \
+                  --out ${workdir}/run/compile_expansions.yml
     # Then we load the generated version data into the agent so we can use it in task definitions
     - command: expansions.update
       params:
-        file: src/compile_expansions.yml
+        file: ${workdir}/run/compile_expansions.yml
 
     - command: shell.exec
       params:
-        working_dir: src/mongo-tools/src/github.com/mongodb/mongo-tools
+        working_dir: src/mongo/mongo-tools/src/github.com/mongodb/mongo-tools
         script: |
           set -o verbose
           set -o errexit
@@ -151,17 +146,17 @@ functions:
               build_tools="$build_tools mongoreplay"
           fi
           for i in $build_tools; do
-              go build -ldflags "$(print_ldflags)" ${args} -tags "$(print_tags ${tooltags})" -o "../../../../../mongodb/bin/$i${exe|}" $i/main/$i.go
-              "../../../../../mongodb/bin/$i${exe|}" --version
+              go build -ldflags "$(print_ldflags)" ${args} -tags "$(print_tags ${tooltags})" -o "${workdir}/src/mongo/mongodb/bin/$i${exe|}" $i/main/$i.go
+              "${workdir}/src/mongo/mongodb/bin/$i${exe|}" --version
           done
 
     - command: shell.exec
       params:
-        working_dir: src
+        working_dir: src/mongo
         script: |
           set -o errexit
           set -o verbose
-          source "${workdir}/compile_venv/bin/activate"
+          source "${workdir}/run/venv3/bin/activate"
           python ./buildscripts/scons.py ${compile_flags|} ${scons_cache_args|} --install-mode=hygienic install-core MONGO_VERSION=${version} DESTDIR=$(pwd)/mongodb
           mkdir -p mongodb/jstests/hooks
           if [ -d jstests/hooks ]
@@ -183,8 +178,8 @@ functions:
       params:
         aws_key: ${aws_key}
         aws_secret: ${aws_secret}
-        local_file: src/mongodb${compile-variant|}.tar.gz
-        remote_file: ${project_dir}/${version_id}/${revision}/${platform}/mongodb${compile-variant|}-${version_id}.tar.gz
+        local_file: src/mongo/mongodb${compile-variant|}.tar.gz
+        remote_file: dsi/${version_id}/${revision}/${platform}/mongodb${compile-variant|}-${version_id}.tar.gz
         bucket: mciuploads
         permissions: public-read
         content_type: ${content_type|application/x-gzip}
@@ -193,7 +188,7 @@ functions:
   "use WiredTiger develop":
     command: shell.exec
     params:
-      working_dir: src
+      working_dir: src/mongo
       script: |
         set -o errexit
         set -o verbose
@@ -211,52 +206,44 @@ functions:
         script: |
           rm -rf ./*
           mkdir src
-          mkdir work
+          mkdir run
     - command: manifest.load
-    # Calling the git.get_project command here will clone the mongodb/mongo repository, as well as
-    # the repositories defined in the build variant's "modules" section.
     - *git_get_project
     - command: expansions.write
       params:
-        file: work/expansions.yml
+        file: ${workdir}/expansions.yml
     - command: shell.exec
       params:
-        working_dir: work
-        # setup execution environment
-        # configure environment, has private information, no logging
-        script: ../src/dsi/dsi/run-dsi bootstrap
+        working_dir: ${workdir}/run
+        script: ${workdir}/dsi/run-dsi bootstrap
 
   "deploy cluster":
     - command: shell.exec
       params:
-        working_dir: work
-        script: ../src/dsi/dsi/run-dsi deploy-cluster
+        working_dir: ${workdir}/run
+        script: ${workdir}/dsi/run-dsi deploy-cluster
 
   "run test":
     - command: shell.exec
       type: test
       params:
-        working_dir: work
-        script: ../src/dsi/dsi/run-dsi run-test
-    - command: "json.send"
-      params:
-         name: "perf"
-         file: "work/perf.json"
+        working_dir: ${workdir}/run
+        script: ${workdir}/dsi/run-dsi run-test
 
   "analyze":
     - command: shell.exec
       type: test
       params:
-        working_dir: work
-        script: ../src/dsi/dsi/run-dsi analyze
+        working_dir: ${workdir}/run
+        script: ${workdir}/dsi/run-dsi analyze
 
   "upload pip requirements":
     command: s3.put
     params:
       aws_key: ${aws_key}
       aws_secret: ${aws_secret}
-      local_file: pip-requirements.txt
-      remote_file: ${project}/${build_variant}/${revision}/pip-requirements-${task_id}-${execution}.txt
+      local_file: ${workdir}/run/build/Metadata/pip-requirements.txt
+      remote_file: dsi/${build_variant}/${revision}/pip-requirements-${task_id}-${execution}.txt
       bucket: mciuploads
       permissions: public-read
       content_type: atext-plain
@@ -303,8 +290,6 @@ tasks:
     - func: "deploy cluster"
     - func: "run test"
     - func: "analyze"
-      vars:
-        script_flags: --ycsb-throughput-analysis reports
 
 - name: ycsb_60GB
   priority: 5
@@ -315,8 +300,7 @@ tasks:
     - func: "deploy cluster"
     - func: "run test"
     - func: "analyze"
-      vars:
-        script_flags: --ycsb-throughput-analysis reports
+
 - name: industry_benchmarks_secondary_reads
   priority: 5
   commands:
@@ -326,8 +310,6 @@ tasks:
     - func: "deploy cluster"
     - func: "run test"
     - func: "analyze"
-      vars:
-        script_flags: --ycsb-throughput-analysis reports
 
 - name: industry_benchmarks_wmajority
   priority: 5
@@ -338,8 +320,6 @@ tasks:
     - func: "deploy cluster"
     - func: "run test"
     - func: "analyze"
-      vars:
-        script_flags: --ycsb-throughput-analysis reports
 
 - name: crud_workloads
   priority: 5
@@ -663,55 +643,48 @@ tasks:
     - func: "git get project"
     - command: shell.exec
       params:
-        working_dir: src
-        script: |
-          genny/genny/scripts/genny_auto_tasks.sh --generate-all-tasks --output build/all_tasks.json
-          cat ../src/genny/genny/build/all_tasks.json
+        working_dir: ${workdir}/run
+        script: ${workdir}/src/genny/run-genny all-tasks
     - command: generate.tasks
       params:
         files:
-          - src/genny/genny/build/all_tasks.json
+          - ${workdir}/run/build/Tasks/Tasks.json
 
 - name: genny_auto_tasks
   priority: 5
   commands:
     - func: "git get project"
-    - command: shell.exec
-      params:
-        script: mkdir work
     - command: expansions.write
       params:
-        file: work/expansions.yml
+        file: ${workdir}/expansions.yml
     - command: shell.exec
       params:
-        working_dir: work
-        script: |
-          ../src/genny/genny/scripts/genny_auto_tasks.sh --output build/auto_tasks.json --variants "${build_variant}" --autorun
-          cat ../src/genny/genny/build/auto_tasks.json
+        working_dir: ${workdir}
+        script: ${workdir}/src/genny/run-genny auto-tasks
     - command: generate.tasks
       params:
         files:
-          - src/genny/genny/build/auto_tasks.json
+          - ${workdir}/run/build/Tasks/Tasks.json
 
 - name: genny_patch_tasks
   patch_only: true
   priority: 5
   commands:
     - func: "git get project"
+    - command: expansions.write
+      params:
+        file: ${workdir}/expansions.yml
     - command: shell.exec
       params:
-        working_dir: src
-        script: |
+        working_dir: ${workdir}
           # add --forced-workloads to run specific workloads in addition, i.e. adding the following to the end of the command below:
           # --forced-workloads scale/BigUpdate.yml execution/CreateIndex.yml
           # will run all locally added/modified workloads, plus big_update and create_index
-
-          genny/genny/scripts/genny_auto_tasks.sh --output build/patch_tasks.json --variants "${build_variant}" --modified
-          cat genny/genny/build/patch_tasks.json
+        script: ${workdir}/src/genny/scripts/run-genny patch-tasks
     - command: generate.tasks
       params:
         files:
-          - src/genny/genny/build/patch_tasks.json
+          - ${workdir}/run/build/Tasks/Tasks.json
 
 - name: sb_large_scale
   priority: 5
@@ -742,17 +715,17 @@ tasks:
 modules:
 - name: dsi
   repo: git@github.com:10gen/dsi.git
-  prefix: dsi
+  prefix: ..
   branch: master
 
 - name: genny
   repo: git@github.com:10gen/genny.git
-  prefix: genny
+  prefix: ..
   branch: master
 
 - name: workloads
   repo: git@github.com:10gen/workloads.git
-  prefix: workloads
+  prefix: ..
   branch: master
 
 - name: wtdevelop
@@ -762,7 +735,7 @@ modules:
 
 - name: linkbench
   repo: git@github.com:10gen/linkbench.git
-  prefix: linkbench
+  prefix: ..
   branch: master
 
 - name: enterprise
@@ -800,7 +773,7 @@ buildvariants:
       MONGO_DISTMOD=amazon2
       -j$(grep -c ^processor /proc/cpuinfo)
       --release
-      --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars
+      --variables-files=${workdir}/src/mongo/etc/scons/mongodbtoolchain_v3_gcc.vars
       install-mongocryptd
   run_on:
       - "amazon2-build"
@@ -835,7 +808,7 @@ buildvariants:
       MONGO_DISTMOD=rhel70
       -j$(grep -c ^processor /proc/cpuinfo)
       --release
-      --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars
+      --variables-files=${workdir}/src/mongo/etc/scons/mongodbtoolchain_v3_gcc.vars
     compile-variant: -rhel70
   run_on:
   - rhel70-small
