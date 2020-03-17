@@ -126,7 +126,7 @@ functions:
 
     - command: shell.exec
       params:
-        working_dir: src/mongo/mongo-tools/src/github.com/mongodb/mongo-tools
+        working_dir: src/mongo-tools/src/github.com/mongodb/mongo-tools
         script: |
           set -o verbose
           set -o errexit
