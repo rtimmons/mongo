@@ -50,6 +50,12 @@ post:
          name: perf
          file: ${workdir}/run/build/Reports/LegacyPerf/LegacyPerf.json
 
+    # Schedule any followup tasks
+    - command: generate.tasks
+      params:
+        files:
+          - ${workdir}/run/build/Tasks/Tasks.json
+
     # Scons prune
     - command: shell.exec
       params:
@@ -512,14 +518,13 @@ tasks:
   priority: 5
   commands:
   - func: f_git_get_project
+  - command: expansions.write
+    params:
+      file: ${workdir}/expansions.yml
   - command: shell.exec
     params:
       working_dir: ${workdir}/run
       script: ${workdir}/src/genny/run-genny all-tasks
-  - command: generate.tasks
-    params:
-      files:
-        - ${workdir}/run/build/Tasks/Tasks.json
 
 - name: genny_auto_tasks
   priority: 5
@@ -532,10 +537,6 @@ tasks:
     params:
       working_dir: ${workdir}
       script: ${workdir}/src/genny/run-genny auto-tasks
-  - command: generate.tasks
-    params:
-      files:
-        - ${workdir}/run/build/Tasks/Tasks.json
 
 - name: genny_patch_tasks
   patch_only: true
@@ -552,10 +553,6 @@ tasks:
       # --forced-workloads scale/BigUpdate.yml execution/CreateIndex.yml
       # will run all locally added/modified workloads, plus big_update and create_index
       script: ${workdir}/src/genny/scripts/run-genny patch-tasks
-  - command: generate.tasks
-    params:
-      files:
-        - ${workdir}/run/build/Tasks/Tasks.json
 
 #######################################
 #               Modules               #
