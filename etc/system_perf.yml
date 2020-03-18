@@ -18,7 +18,7 @@ post:
       params:
         aws_key: ${aws_key}
         aws_secret: ${aws_secret}
-        local_files_include_filter_prefix: ${workdir}/run/build
+        local_files_include_filter_prefix: run/build
         local_files_include_filter:
         - Artifacts/*.tar.gz
         remote_file: ${task_id}/${execution}/${build_variant}
@@ -30,7 +30,7 @@ post:
       params:
         aws_key: ${aws_key}
         aws_secret: ${aws_secret}
-        local_files_include_filter_prefix: ${workdir}/run/build
+        local_files_include_filter_prefix: run/build
         local_files_include_filter:
         - Reports/LegacyPerf/*.json
         - Reports/EvergreenTestResults/*.json
