@@ -211,8 +211,6 @@ public:
 
     virtual void signalUpstreamUpdater() override;
 
-    virtual Status resyncData(OperationContext* opCtx, bool waitUntilCompleted) override;
-
     virtual StatusWith<BSONObj> prepareReplSetUpdatePositionCommand() const override;
 
     virtual Status processReplSetGetStatus(BSONObjBuilder* result,
@@ -249,6 +247,8 @@ public:
     virtual Status doReplSetReconfig(OperationContext* opCtx,
                                      GetNewConfigFn getNewConfig,
                                      bool force) override;
+
+    virtual Status awaitConfigCommitment(OperationContext* opCtx) override;
 
     virtual Status processReplSetInitiate(OperationContext* opCtx,
                                           const BSONObj& configObj,
@@ -439,6 +439,7 @@ public:
     void cleanupStableOpTimeCandidates_forTest(std::set<OpTimeAndWallTime>* candidates,
                                                OpTimeAndWallTime stableOpTime);
     std::set<OpTimeAndWallTime> getStableOpTimeCandidates_forTest();
+    void handleHeartbeatResponse_forTest(BSONObj response, int targetIndex);
 
     /**
      * Non-blocking version of updateTerm.

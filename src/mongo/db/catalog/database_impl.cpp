@@ -584,6 +584,11 @@ void DatabaseImpl::_checkCanCreateCollection(OperationContext* opCtx,
             str::stream() << "cannot create a collection with an empty name on db: " << nss.db(),
             !nss.coll().empty());
 
+    uassert(17361,
+            str::stream() << "Fully qualified namespace is too long. Namespace: " << nss.ns()
+                          << " Max: " << NamespaceString::MaxNsCollectionLen,
+            !nss.isNormalCollection() || nss.size() <= NamespaceString::MaxNsCollectionLen);
+
     uassert(28838, "cannot create a non-capped oplog collection", options.capped || !nss.isOplog());
     uassert(ErrorCodes::DatabaseDropPending,
             str::stream() << "Cannot create collection " << nss
@@ -664,13 +669,9 @@ Collection* DatabaseImpl::createCollection(OperationContext* opCtx,
     // reserve oplog slots here if it is run outside of a multi-document transaction. Multi-
     // document transactions reserve the appropriate oplog slots at commit time.
     OplogSlot createOplogSlot;
-    Timestamp createTime;
     if (canAcceptWrites && supportsDocLocking() && !coordinator->isOplogDisabledFor(opCtx, nss) &&
         !opCtx->inMultiDocumentTransaction()) {
         createOplogSlot = repl::getNextOpTime(opCtx);
-        createTime = createOplogSlot.getTimestamp();
-    } else {
-        createTime = opCtx->recoveryUnit()->getCommitTimestamp();
     }
 
     if (MONGO_unlikely(hangAndFailAfterCreateCollectionReservesOpTime.shouldFail())) {
@@ -704,7 +705,7 @@ Collection* DatabaseImpl::createCollection(OperationContext* opCtx,
     auto collection = ownedCollection.get();
     ownedCollection->init(opCtx);
     ownedCollection->setCommitted(false);
-    UncommittedCollections::addToTxn(opCtx, std::move(ownedCollection), createTime);
+    UncommittedCollections::addToTxn(opCtx, std::move(ownedCollection));
     openCreateCollectionWindowFp.executeIf([&](const BSONObj& data) { sleepsecs(3); },
                                            [&](const BSONObj& data) {
                                                const auto collElem = data["collectionNS"];

@@ -177,8 +177,6 @@ public:
 
     virtual void signalUpstreamUpdater();
 
-    virtual Status resyncData(OperationContext* opCtx, bool waitUntilCompleted) override;
-
     virtual StatusWith<BSONObj> prepareReplSetUpdatePositionCommand() const override;
 
     virtual Status processReplSetGetStatus(BSONObjBuilder*, ReplSetGetStatusResponseStyle);
@@ -215,6 +213,8 @@ public:
     virtual Status doReplSetReconfig(OperationContext* opCtx,
                                      GetNewConfigFn getNewConfig,
                                      bool force);
+
+    Status awaitConfigCommitment(OperationContext* opCtx);
 
     virtual Status processReplSetInitiate(OperationContext* opCtx,
                                           const BSONObj& configObj,

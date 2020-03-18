@@ -314,10 +314,6 @@ Status ReplicationCoordinatorMock::waitForDrainFinish(Milliseconds timeout) {
 
 void ReplicationCoordinatorMock::signalUpstreamUpdater() {}
 
-Status ReplicationCoordinatorMock::resyncData(OperationContext* opCtx, bool waitUntilCompleted) {
-    return Status::OK();
-}
-
 StatusWith<BSONObj> ReplicationCoordinatorMock::prepareReplSetUpdatePositionCommand() const {
     BSONObjBuilder cmdBuilder;
     cmdBuilder.append("replSetUpdatePosition", 1);
@@ -383,6 +379,10 @@ Status ReplicationCoordinatorMock::processReplSetReconfig(OperationContext* opCt
 Status ReplicationCoordinatorMock::doReplSetReconfig(OperationContext* opCtx,
                                                      GetNewConfigFn getNewConfig,
                                                      bool force) {
+    return Status::OK();
+}
+
+Status ReplicationCoordinatorMock::awaitConfigCommitment(OperationContext* opCtx) {
     return Status::OK();
 }
 

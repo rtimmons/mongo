@@ -268,10 +268,6 @@ HostAndPort ReplicationCoordinatorNoOp::getMyHostAndPort() const {
     MONGO_UNREACHABLE;
 }
 
-Status ReplicationCoordinatorNoOp::resyncData(OperationContext*, bool) {
-    MONGO_UNREACHABLE;
-}
-
 StatusWith<BSONObj> ReplicationCoordinatorNoOp::prepareReplSetUpdatePositionCommand() const {
     MONGO_UNREACHABLE;
 }
@@ -325,6 +321,10 @@ Status ReplicationCoordinatorNoOp::processReplSetReconfig(OperationContext*,
 Status ReplicationCoordinatorNoOp::doReplSetReconfig(OperationContext* opCtx,
                                                      GetNewConfigFn getNewConfig,
                                                      bool force) {
+    MONGO_UNREACHABLE;
+}
+
+Status ReplicationCoordinatorNoOp::awaitConfigCommitment(OperationContext* opCtx) {
     MONGO_UNREACHABLE;
 }
 

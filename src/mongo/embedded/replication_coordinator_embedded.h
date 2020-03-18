@@ -164,8 +164,6 @@ public:
 
     void signalUpstreamUpdater() override;
 
-    Status resyncData(OperationContext*, bool) override;
-
     StatusWith<BSONObj> prepareReplSetUpdatePositionCommand() const override;
 
     Status processReplSetGetStatus(BSONObjBuilder*, ReplSetGetStatusResponseStyle) override;
@@ -196,6 +194,8 @@ public:
     Status doReplSetReconfig(OperationContext* opCtx,
                              GetNewConfigFn getNewConfig,
                              bool force) override;
+
+    Status awaitConfigCommitment(OperationContext* opCtx) override;
 
     Status processReplSetInitiate(OperationContext*, const BSONObj&, BSONObjBuilder*) override;
 

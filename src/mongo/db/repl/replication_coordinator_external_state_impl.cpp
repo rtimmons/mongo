@@ -89,6 +89,7 @@
 #include "mongo/db/server_options.h"
 #include "mongo/db/service_context.h"
 #include "mongo/db/session_catalog_mongod.h"
+#include "mongo/db/storage/control/storage_control.h"
 #include "mongo/db/storage/flow_control.h"
 #include "mongo/db/storage/storage_engine.h"
 #include "mongo/db/system_index.h"
@@ -324,7 +325,7 @@ void ReplicationCoordinatorExternalStateImpl::startThreads(const ReplSettings& s
     }
     if (_inShutdown) {
         LOGV2(21305,
-              "Not starting replication storage threads because replication is shutting down.");
+              "Not starting replication storage threads because replication is shutting down");
         return;
     }
 
@@ -787,13 +788,13 @@ void ReplicationCoordinatorExternalStateImpl::clearOplogVisibilityStateForStepDo
     //
     // This makes sure the JournalFlusher is not stuck waiting for a lock that stepdown might hold
     // before doing an update write to the truncate point.
-    _service->getStorageEngine()->interruptJournalFlusherForReplStateChange();
+    StorageControl::interruptJournalFlusherForReplStateChange(_service);
 
     // Wait for another round of journal flushing. This will ensure that we wait for the current
     // round to completely finish and have no chance of racing with unsetting the truncate point
     // below. It is possible that the JournalFlusher will not check for the interrupt signaled
     // above, if writing is imminent, so we must make sure that the code completes fully.
-    _service->getStorageEngine()->waitForJournalFlush(opCtx);
+    StorageControl::waitForJournalFlush(opCtx);
 
     // We can clear the oplogTruncateAfterPoint because we know there are no user writes during
     // stepdown and therefore presently no oplog holes.
@@ -933,7 +934,11 @@ void ReplicationCoordinatorExternalStateImpl::_dropAllTempCollections(OperationC
         // replica set members.
         if (*it == "local")
             continue;
-        LOGV2_DEBUG(21309, 2, "Removing temporary collections from {db}", "db"_attr = *it);
+        LOGV2_DEBUG(21309,
+                    2,
+                    "Removing temporary collections from {db}",
+                    "Removing temporary collections",
+                    "db"_attr = *it);
         AutoGetDb autoDb(opCtx, *it, MODE_IX);
         invariant(autoDb.getDb(), str::stream() << "Unable to get reference to database " << *it);
         autoDb.getDb()->clearTmpCollections(opCtx);
@@ -982,6 +987,8 @@ void ReplicationCoordinatorExternalStateImpl::notifyOplogMetadataWaiters(
                               "fail point dropPendingCollectionReaperHang enabled. "
                               "Blocking until fail point is disabled. "
                               "committedOpTime: {committedOpTime}",
+                              "fail point dropPendingCollectionReaperHang enabled. "
+                              "Blocking until fail point is disabled",
                               "committedOpTime"_attr = committedOpTime);
                         dropPendingCollectionReaperHang.pauseWhileSet();
                     }
