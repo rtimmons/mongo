@@ -133,7 +133,6 @@ functions:
       params:
         working_dir: ${workdir}/src/mongo/mongo-tools/src/github.com/mongodb/mongo-tools
         script: |
-          set -o verbose
           set -o errexit
           # make sure newlines in the scripts are handled correctly by windows
           if [ "Windows_NT" = "$OS" ]; then
@@ -157,7 +156,6 @@ functions:
         working_dir: src/mongo
         script: |
           set -o errexit
-          set -o verbose
           source "${workdir}/run/venv3/bin/activate"
           python ./buildscripts/scons.py ${compile_flags|} ${scons_cache_args|} --install-mode=hygienic install-core MONGO_VERSION=${version} DESTDIR=$(pwd)/mongodb
           mkdir -p mongodb/jstests/hooks
@@ -185,7 +183,6 @@ functions:
       working_dir: src/mongo
       script: |
         set -o errexit
-        set -o verbose
         if [ "${compile-variant|}" = "-wtdevelop" ]; then
           cd src/third_party
           for wtdir in dist examples ext lang src test tools ; do
@@ -195,28 +192,25 @@ functions:
         fi
 
   f_run_dsi_workload:
-    # Prepare Environment
-    - command: shell.exec
-      params:
-        script: |
-          rm -rf ./*
-          mkdir src
-          mkdir run
-    - command: manifest.load
-    - *git_get_project
-    - command: expansions.write
-      params:
-        file: ${workdir}/expansions.yml
-    - command: shell.exec
-      params:
-        working_dir: ${workdir}/run
-        script: ${workdir}/dsi/run-dsi setup
-    # Run Test
-    - command: shell.exec
-      type: test
-      params:
-        working_dir: ${workdir}/run
-        script: ${workdir}/dsi/run-dsi test
+  # Prepare Environment
+  - command: shell.exec
+    params:
+      script: mkdir -p src run
+  - command: manifest.load
+  - *git_get_project
+  - command: expansions.write
+    params:
+      file: ${workdir}/expansions.yml
+  - command: shell.exec
+    params:
+      working_dir: ${workdir}/run
+      script: ${workdir}/dsi/run-dsi setup
+  # Run Test
+  - command: shell.exec
+    type: test
+    params:
+      working_dir: ${workdir}/run
+      script: ${workdir}/dsi/run-dsi test
 
 #######################################
 #               Tasks                 #
@@ -512,47 +506,57 @@ tasks:
     vars:
      test_control: sb_timeseries
 
-# Genny
-
-- name: genny_generate_all_tasks
+- name: schedule_global_tasks
   priority: 5
   commands:
-  - func: f_git_get_project
+  - command: shell.exec
+    params:
+      script: mkdir -p src run
+  - command: manifest.load
+  - *git_get_project
   - command: expansions.write
     params:
       file: ${workdir}/expansions.yml
   - command: shell.exec
     params:
       working_dir: ${workdir}/run
-      script: ${workdir}/src/genny/run-genny all-tasks
+      script: ${workdir}/dsi/run-dsi schedule_global_tasks
 
-- name: genny_auto_tasks
+- name: schedule_variant_auto_tasks
   priority: 5
   commands:
-  - func: f_git_get_project
+  - command: shell.exec
+    params:
+      script: mkdir -p src run
+  - command: manifest.load
+  - *git_get_project
   - command: expansions.write
     params:
       file: ${workdir}/expansions.yml
   - command: shell.exec
     params:
-      working_dir: ${workdir}
-      script: ${workdir}/src/genny/run-genny auto-tasks
+      working_dir: ${workdir}/run
+      script: ${workdir}/dsi/run-dsi schedule_auto_tasks
 
-- name: genny_patch_tasks
-  patch_only: true
+- name: schedule_variant_patch_tasks
   priority: 5
   commands:
-  - func: f_git_get_project
+  - command: shell.exec
+    params:
+      script: mkdir -p src run
+  - command: manifest.load
+  - *git_get_project
   - command: expansions.write
     params:
       file: ${workdir}/expansions.yml
   - command: shell.exec
     params:
-      working_dir: ${workdir}
+      working_dir: ${workdir}/run
       # add --forced-workloads to run specific workloads in addition, i.e. adding the following to the end of the command below:
       # --forced-workloads scale/BigUpdate.yml execution/CreateIndex.yml
       # will run all locally added/modified workloads, plus big_update and create_index
-      script: ${workdir}/src/genny/scripts/run-genny patch-tasks
+      script: ${workdir}/dsi/run-dsi schedule_variant_patch_tasks
+
 
 #######################################
 #               Modules               #
@@ -600,6 +604,23 @@ modules:
 #######################################
 buildvariants:
 
+- name: auto_tasks
+  display_name: Auto Tasks
+  modules:
+    - dsi
+    - genny
+    - workloads
+    - wtdevelop
+    - linkbench
+    - enterprise
+    - mongo-tools
+  batchtime: 1440 # 24 hours
+  expansions: {}
+  run_on:
+      - "ubuntu1604-test"
+  tasks:
+    - name: schedule_global_tasks
+
 # We are explicitly tracking the Amazon Linux 2 variant compile options from etc/evergreen.yml.  If we can get
 # proper artifacts directly from that project, we should do that and remove these tasks.
 - &compile-amazon2
@@ -608,7 +629,6 @@ buildvariants:
   modules:
     - mongo-tools
     - enterprise
-    - genny
   batchtime: 1440 # 24 hours
   expansions: &compile-expansions
     tooltags: ""
@@ -624,7 +644,6 @@ buildvariants:
       - "amazon2-build"
   tasks:
     - name: compile
-    - name: genny_generate_all_tasks
 
 - <<: *compile-amazon2
   name: wtdevelop-compile-amazon2
@@ -633,7 +652,11 @@ buildvariants:
   - mongo-tools
   - wtdevelop
   - enterprise
-  - genny # needed for genny_generate_all_tasks
+  - dsi
+  - genny
+  - workloads
+  - wtdevelop
+  - linkbench
   expansions:
     <<: *compile-expansions
     compile-variant: -wtdevelop
@@ -681,8 +704,8 @@ buildvariants:
   depends_on:
       - name: compile
         variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+      - name: schedule_global_tasks
+        variant: auto_tasks
   tasks: &1nodetasks
     - name: industry_benchmarks
     - name: ycsb_60GB
@@ -703,11 +726,11 @@ buildvariants:
     - name: snapshot_reads
     - name: linkbench
     - name: tpcc
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
     - name: industry_benchmarks_wmajority
     - name: sb_large_scale
     - name: sb_timeseries
+    - name: schedule_variant_auto_tasks
+    - name: schedule_variant_patch_tasks
 
 - name: linux-standalone
   display_name: Linux Standalone
@@ -723,8 +746,8 @@ buildvariants:
   depends_on:
       - name: compile
         variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+      - name: schedule_global_tasks
+        variant: auto_tasks
   tasks: &standalonetasks
     - name: industry_benchmarks
     - name: ycsb_60GB
@@ -741,8 +764,8 @@ buildvariants:
     - name: bestbuy_agg_merge_same_db
     - name: bestbuy_agg_merge_wordcount
     - name: bestbuy_query
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
+    - name: schedule_variant_auto_tasks
+    - name: schedule_variant_patch_tasks
 
 - name: linux-standalone-audit
   display_name: Linux Standalone Audit
@@ -758,14 +781,14 @@ buildvariants:
   depends_on:
       - name: compile
         variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+      - name: schedule_global_tasks
+        variant: auto_tasks
   tasks:
     - name: industry_benchmarks
     - name: crud_workloads
     - name: smoke_test
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
+    - name: schedule_variant_auto_tasks
+    - name: schedule_variant_patch_tasks
 
 - name: linux-1-node-replSet-fle
   display_name: Linux 1-Node ReplSet FLE
@@ -782,13 +805,13 @@ buildvariants:
   depends_on:
       - name: compile
         variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+      - name: schedule_global_tasks
+        variant: auto_tasks
   tasks:
     - name: industry_benchmarks
     - name: linkbench
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
+    - name: schedule_variant_auto_tasks
+    - name: schedule_variant_patch_tasks
 
 - name: linux-1-node-replSet-cwrwc
   display_name: Linux 1-Node ReplSet CWRWC
@@ -804,13 +827,13 @@ buildvariants:
   depends_on:
       - name: compile
         variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+      - name: schedule_global_tasks
+        variant: auto_tasks
   tasks:
     - name: industry_benchmarks
     - name: linkbench
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
+    - name: schedule_variant_auto_tasks
+    - name: schedule_variant_patch_tasks
 
 - name: linux-1-node-replSet-ese-cbc
   display_name: Linux 1-Node ReplSet ESE CBC
@@ -826,14 +849,14 @@ buildvariants:
   depends_on:
       - name: compile
         variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+      - name: schedule_global_tasks
+        variant: auto_tasks
   tasks:
     - name: industry_benchmarks
     - name: smoke_test
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
     - name: ycsb_60GB
+    - name: schedule_variant_auto_tasks
+    - name: schedule_variant_patch_tasks
 
 - name: linux-1-node-replSet-ese-gcm
   display_name: Linux 1-Node ReplSet ESE GCM
@@ -849,14 +872,14 @@ buildvariants:
   depends_on:
       - name: compile
         variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+      - name: schedule_global_tasks
+        variant: auto_tasks
   tasks:
     - name: industry_benchmarks
     - name: smoke_test
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
     - name: ycsb_60GB
+    - name: schedule_variant_auto_tasks
+    - name: schedule_variant_patch_tasks
 
 - name: linux-1-node-15gbwtcache
   display_name: Linux 1-Node ReplSet 15 GB WiredTiger Cache
@@ -872,13 +895,13 @@ buildvariants:
   depends_on:
       - name: compile
         variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+      - name: schedule_global_tasks
+        variant: auto_tasks
   tasks:
     - name: industry_benchmarks
     - name: smoke_test
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
+    - name: schedule_variant_auto_tasks
+    - name: schedule_variant_patch_tasks
 
 - name: linux-3-shard
   display_name: Linux 3-Shard Cluster
@@ -894,8 +917,8 @@ buildvariants:
   depends_on:
       - name: compile
         variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+      - name: schedule_global_tasks
+        variant: auto_tasks
   tasks:
     - name: industry_benchmarks
     - name: crud_workloads
@@ -909,8 +932,8 @@ buildvariants:
     - name: change_streams_throughput
     - name: change_streams_latency
     - name: change_streams_multi_mongos
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
+    - name: schedule_variant_auto_tasks
+    - name: schedule_variant_patch_tasks
 
 - name: linux-shard-lite
   display_name: Linux Shard Lite Cluster
@@ -926,8 +949,8 @@ buildvariants:
   depends_on:
       - name: compile
         variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+      - name: schedule_global_tasks
+        variant: auto_tasks
   tasks: &shardlitetasks
     - name: bestbuy_agg
     - name: bestbuy_agg_merge_different_db
@@ -947,8 +970,8 @@ buildvariants:
     - name: move_chunk_waiting_workloads
     - name: retryable_writes_workloads
     - name: smoke_test
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
+    - name: schedule_variant_auto_tasks
+    - name: schedule_variant_patch_tasks
 
 - name: linux-shard-lite-cwrwc
   display_name: Linux Shard Lite Cluster CWRWC
@@ -964,14 +987,13 @@ buildvariants:
   depends_on:
       - name: compile
         variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+      - name: schedule_global_tasks
+        variant: auto_tasks
   tasks:
     - name: industry_benchmarks
     - name: linkbench
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
-
+    - name: schedule_variant_auto_tasks
+    - name: schedule_variant_patch_tasks
 
 - name: linux-3-node-replSet
   display_name: Linux 3-Node ReplSet
@@ -987,8 +1009,8 @@ buildvariants:
   depends_on:
       - name: compile
         variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+      - name: schedule_global_tasks
+        variant: auto_tasks
   tasks: &3nodetasks
     - name: industry_benchmarks
     - name: ycsb_60GB
@@ -1015,10 +1037,10 @@ buildvariants:
     - name: secondary_reads
     - name: tpcc
     - name: linkbench
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
     - name: sb_large_scale
     - name: sb_timeseries
+    - name: schedule_variant_auto_tasks
+    - name: schedule_variant_patch_tasks
 
 - name: linux-3-node-replSet-noflowcontrol
   display_name: Linux 3-Node ReplSet (Flow Control off)
@@ -1034,8 +1056,8 @@ buildvariants:
   depends_on:
       - name: compile
         variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+      - name: schedule_global_tasks
+        variant: auto_tasks
   tasks:
     - name: industry_benchmarks
     - name: industry_benchmarks_secondary_reads
@@ -1048,8 +1070,8 @@ buildvariants:
     - name: change_streams_latency
     - name: tpcc
     - name: linkbench
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
+    - name: schedule_variant_auto_tasks
+    - name: schedule_variant_patch_tasks
 
 - name: linux-3-node-replSet-ssl
   display_name: Linux 3-Node ReplSet (SSL)
@@ -1065,13 +1087,13 @@ buildvariants:
   depends_on:
       - name: compile
         variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+      - name: schedule_global_tasks
+        variant: auto_tasks
   tasks:
     - name: industry_benchmarks
     - name: mixed_workloads
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
+    - name: schedule_variant_auto_tasks
+    - name: schedule_variant_patch_tasks
 
 - name: linux-3-node-replSet-initialsync
   display_name: Linux 3-Node ReplSet Initial Sync
@@ -1085,16 +1107,16 @@ buildvariants:
   depends_on:
       - name: compile
         variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+      - name: schedule_global_tasks
+        variant: auto_tasks
   run_on:
       - "rhel70-perf-replset"
   tasks:
     - name: initialsync
     - name: initialsync-logkeeper-short
     - name: initialsync-large
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
+    - name: schedule_variant_auto_tasks
+    - name: schedule_variant_patch_tasks
 
 - name: linux-replSet-initialsync-logkeeper
   display_name: Linux ReplSet Initial Sync LogKeeper
@@ -1112,12 +1134,12 @@ buildvariants:
   depends_on:
       - name: compile
         variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+      - name: schedule_global_tasks
+        variant: auto_tasks
   tasks:
     - name: initialsync-logkeeper
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
+    - name: schedule_variant_auto_tasks
+    - name: schedule_variant_patch_tasks
 
 #######################################
 #  Atlas Like Buildvariants           #
@@ -1137,8 +1159,8 @@ buildvariants:
   depends_on:
       - name: compile
         variant: compile-rhel70
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+      - name: schedule_global_tasks
+        variant: auto_tasks
   tasks:  # Cannot use *3nodetasks because secondary_performance uses a special mongodb setup.
     - name: industry_benchmarks
     - name: ycsb_60GB
@@ -1162,9 +1184,8 @@ buildvariants:
     - name: snapshot_reads
     - name: secondary_reads
     - name: linkbench
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
-
+    - name: schedule_variant_auto_tasks
+    - name: schedule_variant_patch_tasks
 
 #######################################
 #  WT Develop Linux Buildvariants     #
@@ -1184,8 +1205,8 @@ buildvariants:
   depends_on:
       - name: compile
         variant: wtdevelop-compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+      - name: schedule_global_tasks
+        variant: auto_tasks
   tasks: *1nodetasks
 
 - name: wtdevelop-standalone
@@ -1203,8 +1224,8 @@ buildvariants:
   depends_on:
       - name: compile
         variant: wtdevelop-compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+      - name: schedule_global_tasks
+        variant: auto_tasks
   tasks: *standalonetasks
 
 - name: wtdevelop-3-node-replSet
@@ -1222,6 +1243,6 @@ buildvariants:
   depends_on:
       - name: compile
         variant: wtdevelop-compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+      - name: schedule_global_tasks
+        variant: auto_tasks
   tasks: *3nodetasks
