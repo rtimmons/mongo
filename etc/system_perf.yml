@@ -108,7 +108,7 @@ functions:
     # Then we load the generated version data into the agent so we can use it in task definitions
     - command: expansions.update
       params:
-        file: ${workdir}/src/mongo/compile_expansions.yml
+        file: src/mongo/compile_expansions.yml
 
     - command: shell.exec
       params:
