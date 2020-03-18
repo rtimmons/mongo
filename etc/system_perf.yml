@@ -622,7 +622,7 @@ buildvariants:
       MONGO_DISTMOD=amazon2
       -j$(grep -c ^processor /proc/cpuinfo)
       --release
-      --variables-files=${workdir}/src/mongo/etc/scons/mongodbtoolchain_v3_gcc.vars
+      --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars
       install-mongocryptd
   run_on:
       - "amazon2-build"
@@ -657,7 +657,7 @@ buildvariants:
       MONGO_DISTMOD=rhel70
       -j$(grep -c ^processor /proc/cpuinfo)
       --release
-      --variables-files=${workdir}/src/mongo/etc/scons/mongodbtoolchain_v3_gcc.vars
+      --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars
     compile-variant: -rhel70
   run_on:
   - rhel70-small
