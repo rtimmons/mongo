@@ -169,8 +169,9 @@ functions:
             load('jstests/hooks/run_validate_collections.actual.js');
           EOF
           fi
-          mkdir -p "${workdir}/build/Artifacts"
-          tar czf ${workdir}/build/Artifacts/mongo.tar.gz mongodb
+          mkdir -p "${workdir}/run/build/Artifacts"
+          ls mongodb
+          tar czf ${workdir}/run/build/Artifacts/mongo.tar.gz mongodb
 
   f_use_WiredTiger_develop:
     command: shell.exec
