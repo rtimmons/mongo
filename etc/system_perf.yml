@@ -74,7 +74,7 @@ functions:
         genny: ${genny_rev}
         workloads: ${workloads_rev}
         wtdevelop: ${wtdevelop_rev}
-        mongo-tools: ${mongodbtoolchain-tools_rev}
+        mongo-tools: ${mongo-tools_rev}
 
   f_compile_mongodb:
     # We create a virtual environment with the Python dependencies for compiling the server
