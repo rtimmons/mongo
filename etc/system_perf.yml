@@ -10,7 +10,7 @@ post:
     # will not have been run if the timeout is exceeded.
     - command: shell.exec
       params:
-        working_dir: ${workdir}/run
+        working_dir: run
         script: ${workdir}/src/dsi/run-dsi post-run
 
     # Upload Artifacts
@@ -44,17 +44,17 @@ post:
     # Attach test (workload) results
     - command: attach.results
       params:
-        file_location: ${workdir}/run/build/Reports/EvergreenTestResults/EvergreenTestResults.json
+        file_location: run/build/Reports/EvergreenTestResults/EvergreenTestResults.json
     - command: json.send
       params:
          name: perf
-         file: ${workdir}/run/build/Reports/LegacyPerf/LegacyPerf.json
+         file: run/build/Reports/LegacyPerf/LegacyPerf.json
 
     # Schedule any followup tasks
     - command: generate.tasks
       params:
         files:
-          - ${workdir}/run/build/Tasks/Tasks.json
+          - run/build/Tasks/Tasks.json
 
     # Scons prune
     - command: shell.exec
@@ -131,7 +131,7 @@ functions:
 
     - command: shell.exec
       params:
-        working_dir: ${workdir}/src/mongo/mongo-tools/src/github.com/mongodb/mongo-tools
+        working_dir: src/mongo/mongo-tools/src/github.com/mongodb/mongo-tools
         script: |
           set -o errexit
           # make sure newlines in the scripts are handled correctly by windows
@@ -200,16 +200,16 @@ functions:
   - *git_get_project
   - command: expansions.write
     params:
-      file: ${workdir}/expansions.yml
+      file: expansions.yml
   - command: shell.exec
     params:
-      working_dir: ${workdir}/run
+      working_dir: run
       script: ${workdir}/dsi/run-dsi setup
   # Run Test
   - command: shell.exec
     type: test
     params:
-      working_dir: ${workdir}/run
+      working_dir: run
       script: ${workdir}/dsi/run-dsi test
 
 #######################################
@@ -516,10 +516,10 @@ tasks:
   - *git_get_project
   - command: expansions.write
     params:
-      file: ${workdir}/expansions.yml
+      file: expansions.yml
   - command: shell.exec
     params:
-      working_dir: ${workdir}/run
+      working_dir: run
       script: ${workdir}/dsi/run-dsi schedule_global_tasks
 
 - name: schedule_variant_auto_tasks
@@ -532,11 +532,11 @@ tasks:
   - *git_get_project
   - command: expansions.write
     params:
-      file: ${workdir}/expansions.yml
+      file: expansions.yml
   - command: shell.exec
     params:
-      working_dir: ${workdir}/run
-      script: ${workdir}/dsi/run-dsi schedule_auto_tasks
+      working_dir: run
+      script: ${workdir}/dsi/run-dsi schedule_variant_auto_tasks
 
 - name: schedule_variant_patch_tasks
   priority: 5
@@ -548,10 +548,10 @@ tasks:
   - *git_get_project
   - command: expansions.write
     params:
-      file: ${workdir}/expansions.yml
+      file: expansions.yml
   - command: shell.exec
     params:
-      working_dir: ${workdir}/run
+      working_dir: run
       # add --forced-workloads to run specific workloads in addition, i.e. adding the following to the end of the command below:
       # --forced-workloads scale/BigUpdate.yml execution/CreateIndex.yml
       # will run all locally added/modified workloads, plus big_update and create_index
