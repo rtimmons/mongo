@@ -54,10 +54,7 @@ post:
         # these default values in the distro config in evergreen.
         script: |
           if [ -d "${scons_cache_path}" ]; then
-              /opt/mongodbtoolchain/v3/bin/python3 buildscripts/scons_cache_prune.py \
-                  --cache-dir ${scons_cache_path} \
-                  --cache-size ${scons_cache_size|200} \
-                  --prune-ratio ${scons_prune_ratio|0.8}
+              /opt/mongodbtoolchain/v3/bin/python3 buildscripts/scons_cache_prune.py --cache-dir ${scons_cache_path} --cache-size ${scons_cache_size|200} --prune-ratio ${scons_prune_ratio|0.8}
           fi
 
 functions:
@@ -97,6 +94,8 @@ functions:
           set -o errexit
           set -o verbose
 
+          mkdir -p mongodb/bin
+
           # We get the raw version string (r1.2.3-45-gabcdef) from git
           MONGO_VERSION=$(git describe --abbrev=7)
 
@@ -114,15 +113,12 @@ functions:
 
           # This script converts the generated version string into a sanitized version string for
           # use by scons and uploading artifacts as well as information about for the scons cache.
-          source "${workdir}/run/venv3/bin/activate"
-          MONGO_VERSION=$MONGO_VERSION USE_SCONS_CACHE=${use_scons_cache|false} \
-              python \
-                  ${workdir}/src/mongo/buildscripts/generate_compile_expansions.py \
-                  --out ${workdir}/run/compile_expansions.yml
+          source "${workdir}/venv3/bin/activate"
+          MONGO_VERSION=$MONGO_VERSION USE_SCONS_CACHE=${use_scons_cache|false} python buildscripts/generate_compile_expansions.py --out compile_expansions.yml
     # Then we load the generated version data into the agent so we can use it in task definitions
     - command: expansions.update
       params:
-        file: ${workdir}/run/compile_expansions.yml
+        file: ${workdir}/src/mongo/compile_expansions.yml
 
     - command: shell.exec
       params:
@@ -146,8 +142,8 @@ functions:
               build_tools="$build_tools mongoreplay"
           fi
           for i in $build_tools; do
-              go build -ldflags "$(print_ldflags)" ${args} -tags "$(print_tags ${tooltags})" -o "${workdir}/src/mongo/mongodb/bin/$i${exe|}" $i/main/$i.go
-              "${workdir}/src/mongo/mongodb/bin/$i${exe|}" --version
+              go build -ldflags "$(print_ldflags)" ${args} -tags "$(print_tags ${tooltags})" -o "../../../../../mongodb/bin/$i${exe|}" $i/main/$i.go
+              "../../../../../mongodb/bin/$i${exe|}" --version
           done
 
     - command: shell.exec
@@ -693,6 +689,7 @@ tasks:
     - func: "prepare environment"
       vars:
         test: "sb_large_scale"
+        additional_tfvars: "tags: {expire-on-delta: 12}"
     - func: "deploy cluster"
     - func: "run test"
     - func: "analyze"
