@@ -32,7 +32,7 @@ post:
       params:
         aws_key: ${aws_key}
         aws_secret: ${aws_secret}
-        local_file: ${workdir}/run/build/Metadata/pip-requirements.txt
+        local_file: ${workdir}/run/build/Artifacts/pip-requirements.txt
         remote_file: dsi/${build_variant}/${revision}/pip-requirements-${task_id}-${execution}.txt
         bucket: mciuploads
         permissions: public-read
