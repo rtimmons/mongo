@@ -18,13 +18,28 @@ post:
       params:
         aws_key: ${aws_key}
         aws_secret: ${aws_secret}
+        local_files_include_filter_prefix: ${workdir}/run/build
         local_files_include_filter:
-        - ${workdir}/run/build/Artifacts/*
-        remote_file: dsi/${build_variant}/${revision}/${task_id}/${execution}
+        - Artifacts/*.tar.gz
+        remote_file: ${task_id}/${execution}/${build_variant}
         bucket: mciuploads
         permissions: public-read
-        content_type: ${content_type|application/x-gzip}
-        display_name: SDSI Artifacts -
+        content_type: application/x-gzip
+        display_name: DSI Artifacts -
+    - command: s3.put
+      params:
+        aws_key: ${aws_key}
+        aws_secret: ${aws_secret}
+        local_files_include_filter_prefix: ${workdir}/run/build
+        local_files_include_filter:
+        - Reports/LegacyPerf/*.json
+        - Reports/EvergreenTestResults/*.json
+        remote_file: ${task_id}/${execution}/${build_variant}
+        bucket: mciuploads
+        permissions: public-read
+        content_type: text/plain
+        display_name: DSI Reports -
+
 
     # Attach test (workload) results
     - command: attach.results
@@ -59,7 +74,7 @@ functions:
         genny: ${genny_rev}
         workloads: ${workloads_rev}
         wtdevelop: ${wtdevelop_rev}
-        mongo-tools: ${mongo-tools_rev}
+        mongo-tools: ${mongodbtoolchain-tools_rev}
 
   f_compile_mongodb:
     # We create a virtual environment with the Python dependencies for compiling the server
@@ -105,6 +120,7 @@ functions:
           # use by scons and uploading artifacts as well as information about for the scons cache.
           source "${workdir}/run/venv3/bin/activate"
           MONGO_VERSION=$MONGO_VERSION USE_SCONS_CACHE=${use_scons_cache|false} python buildscripts/generate_compile_expansions.py --out ${workdir}/src/mongo/compile_expansions.yml
+          cat ${workdir}/src/mongo/compile_expansions.yml
     # Then we load the generated version data into the agent so we can use it in task definitions
     - command: expansions.update
       params:
@@ -116,17 +132,14 @@ functions:
         script: |
           set -o verbose
           set -o errexit
-
           # make sure newlines in the scripts are handled correctly by windows
           if [ "Windows_NT" = "$OS" ]; then
             set -o igncr
           fi;
-
           # set_goenv provides set_goenv(), print_ldflags() and print_tags() used below
           . ./set_goenv.sh
           GOROOT="" set_goenv || exit
           go version
-
           build_tools="bsondump mongostat mongofiles mongoexport mongoimport mongorestore mongodump mongotop"
           if [ "${build_mongoreplay}" = "true" ]; then
               build_tools="$build_tools mongoreplay"
@@ -159,17 +172,7 @@ functions:
             load('jstests/hooks/run_validate_collections.actual.js');
           EOF
           fi
-          tar czf mongodb${compile-variant|}.tar.gz mongodb
-    - command: s3.put
-      params:
-        aws_key: ${aws_key}
-        aws_secret: ${aws_secret}
-        local_file: src/mongo/mongodb${compile-variant|}.tar.gz
-        remote_file: dsi/${version_id}/${revision}/linux/mongodb${compile-variant|}-${version_id}.tar.gz
-        bucket: mciuploads
-        permissions: public-read
-        content_type: ${content_type|application/x-gzip}
-        display_name: mongodb${compile-variant|}.tar.gz
+          tar czf ${workdir}/build/Artifacts/mongo.tar.gz mongodb
 
   f_use_WiredTiger_develop:
     command: shell.exec
