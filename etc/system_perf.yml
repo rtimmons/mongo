@@ -84,7 +84,6 @@ functions:
         working_dir: src/mongo
         script: |
           set -o errexit
-          set -o verbose
 
           /opt/mongodbtoolchain/v3/bin/virtualenv --python /opt/mongodbtoolchain/v3/bin/python3 "${workdir}/run/venv3"
           /opt/mongodbtoolchain/v3/bin/virtualenv --python /opt/mongodbtoolchain/v3/bin/python2 "${workdir}/run/venv2"
@@ -97,7 +96,6 @@ functions:
         working_dir: src/mongo
         script: |
           set -o errexit
-          set -o verbose
 
           mkdir -p mongodb/bin
 
@@ -120,7 +118,6 @@ functions:
           # use by scons and uploading artifacts as well as information about for the scons cache.
           source "${workdir}/run/venv3/bin/activate"
           MONGO_VERSION=$MONGO_VERSION USE_SCONS_CACHE=${use_scons_cache|false} python buildscripts/generate_compile_expansions.py --out ${workdir}/src/mongo/compile_expansions.yml
-          cat ${workdir}/src/mongo/compile_expansions.yml
     # Then we load the generated version data into the agent so we can use it in task definitions
     - command: expansions.update
       params:
@@ -172,6 +169,7 @@ functions:
             load('jstests/hooks/run_validate_collections.actual.js');
           EOF
           fi
+          mkdir -p "${workdir}/build/Artifacts"
           tar czf ${workdir}/build/Artifacts/mongo.tar.gz mongodb
 
   f_use_WiredTiger_develop:
