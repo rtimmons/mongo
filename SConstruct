@@ -3884,7 +3884,6 @@ if get_option('ninja') != 'disabled':
     else:
         ninja_builder = Tool("ninja_next")
         ninja_builder.generate(env)
-        env.Default(env.Alias("install-all-meta"))
 
     # idlc.py has the ability to print it's implicit dependencies
     # while generating, Ninja can consume these prints using the
@@ -3930,7 +3929,7 @@ if get_option('ninja') != 'disabled':
         test_files = [test_file.path for test_file in env["MONGO_TEST_REGISTRY"][node.path]]
         files = "\\n".join(test_files)
         return {
-            "outputs": node.get_path(),
+            "outputs": [node.get_path()],
             "rule": "TEST_LIST",
             "implicit": test_files,
             "variables": {
@@ -3953,6 +3952,13 @@ if get_option('ninja') != 'disabled':
 if get_option('install-mode') == 'hygienic':
 
     if get_option('separate-debug') == "on" or env.TargetOSIs("windows"):
+
+        # The current ninja builder can't handle --separate-debug on non-Windows platforms
+        # like linux or macOS, because they depend on adding extra actions to the link step,
+        # which cannot be translated into the ninja bulider.
+        if not env.TargetOSIs("windows") and get_option('ninja') != 'disabled':
+            env.FatalError("Cannot use --separate-debug with Ninja on non-Windows platforms.")
+
         separate_debug = Tool('separate_debug')
         if not separate_debug.exists(env):
             env.FatalError('Cannot honor --separate-debug because the separate_debug.py Tool reported as nonexistent')
@@ -4154,6 +4160,9 @@ if get_option('install-mode') == 'hygienic':
                 "-Wl,-install_name,@rpath/${TARGET.file}",
             ],
         )
+
+        env.Default(env.Alias("install-default"))
+
 elif get_option('separate-debug') == "on":
     env.FatalError('Cannot use --separate-debug without --install-mode=hygienic')
 
@@ -4497,7 +4506,10 @@ if has_option("cache"):
         addNoCacheEmitter(env['BUILDERS']['LoadableModule'])
 
 
-resmoke_install_dir = env.subst("$PREFIX_BINDIR") if get_option("install-mode") == "hygienic" else env.Dir("#").abspath
+# We need to be explicit about including $DESTDIR here, unlike most
+# other places. Normally, auto_install_binaries will take care of
+# injecting DESTDIR for us, but we aren't using that now.
+resmoke_install_dir = env.subst("$DESTDIR/$PREFIX_BINDIR") if get_option("install-mode") == "hygienic" else env.Dir("#").abspath
 resmoke_install_dir = os.path.normpath(resmoke_install_dir).replace("\\", r"\\")
 
 # Much blood sweat and tears were shed getting to this point. Any version of

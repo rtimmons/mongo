@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
 
 #include "mongo/platform/basic.h"
 
@@ -177,9 +177,10 @@ void initializeStorageEngine(ServiceContext* service, const StorageEngineInitFla
 }
 
 void shutdownGlobalStorageEngineCleanly(ServiceContext* service) {
-    invariant(service->getStorageEngine());
+    auto storageEngine = service->getStorageEngine();
+    invariant(storageEngine);
     StorageControl::stopStorageControls(service);
-    service->getStorageEngine()->cleanShutdown();
+    storageEngine->cleanShutdown();
     auto& lockFile = StorageEngineLockFile::get(service);
     if (lockFile) {
         lockFile->clearPidAndUnlock();

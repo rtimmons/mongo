@@ -26,7 +26,7 @@
  *    exception statement from all source files in the program, then also delete
  *    it in the license file.
  */
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kQuery
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kQuery
 
 #include "mongo/platform/basic.h"
 
@@ -183,7 +183,7 @@ DocumentSource::GetNextResult DocumentSourceUnionWith::doGetNext() {
     if (_executionState == ExecutionProgress::kStartingSubPipeline) {
         auto serializedPipe = _pipeline->serializeToBson();
         LOGV2_DEBUG(23869,
-                    3,
+                    1,
                     "$unionWith attaching cursor to pipeline {pipeline}",
                     "pipeline"_attr = serializedPipe);
         try {
@@ -196,7 +196,7 @@ DocumentSource::GetNextResult DocumentSourceUnionWith::doGetNext() {
                 ExpressionContext::ResolvedNamespace{e->getNamespace(), e->getPipeline()},
                 serializedPipe);
             LOGV2_DEBUG(4556300,
-                        0,
+                        3,
                         "$unionWith found view definition. ns: {ns}, pipeline: {pipeline}. New "
                         "$unionWith sub-pipeline: {new_pipe}",
                         "ns"_attr = e->getNamespace(),

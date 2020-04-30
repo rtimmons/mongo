@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kIndex
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kIndex
 
 #include "mongo/platform/basic.h"
 
@@ -69,7 +69,6 @@ MONGO_FAIL_POINT_DEFINE(hangAfterStartingIndexBuild);
 MONGO_FAIL_POINT_DEFINE(hangAfterStartingIndexBuildUnlocked);
 MONGO_FAIL_POINT_DEFINE(hangBeforeIndexBuildOf);
 MONGO_FAIL_POINT_DEFINE(hangAfterIndexBuildOf);
-MONGO_FAIL_POINT_DEFINE(hangAndThenFailIndexBuild);
 MONGO_FAIL_POINT_DEFINE(leaveIndexBuildUnfinishedForShutdown);
 
 MultiIndexBlock::~MultiIndexBlock() {
@@ -258,18 +257,9 @@ StatusWith<std::vector<BSONObj>> MultiIndexBlock::init(OperationContext* opCtx,
             collection->getIndexCatalog()->prepareInsertDeleteOptions(
                 opCtx, descriptor, &index.options);
 
-            // Allow duplicates when explicitly allowed or when using hybrid builds, which will
-            // perform duplicate checking itself.
-            index.options.dupsAllowed =
-                index.options.dupsAllowed || index.block->getEntry()->isHybridBuilding();
-
-            // Two-phase index builds (with a build UUID) always relax constraints and check for
-            // violations at commit-time.
-            if (_buildUUID) {
-                index.options.getKeysMode = IndexAccessMethod::GetKeysMode::kRelaxConstraints;
-                index.options.dupsAllowed = true;
-            }
-
+            // Index builds always relax constraints and check for violations at commit-time.
+            index.options.getKeysMode = IndexAccessMethod::GetKeysMode::kRelaxConstraints;
+            index.options.dupsAllowed = true;
             index.options.fromIndexBuilder = true;
 
             LOGV2(20384,
@@ -383,15 +373,6 @@ Status MultiIndexBlock::insertAllDocumentsInCollection(OperationContext* opCtx,
         opCtx->recoveryUnit()->abandonSnapshot();
     }
 
-
-    if (MONGO_unlikely(hangAndThenFailIndexBuild.shouldFail())) {
-        // Hang the build after the BackgroundOperation and curOP info is set up.
-        LOGV2(20388, "Hanging index build due to failpoint 'hangAndThenFailIndexBuild'");
-        hangAndThenFailIndexBuild.pauseWhileSet();
-        return {ErrorCodes::InternalError,
-                "Failed index build because of failpoint 'hangAndThenFailIndexBuild'"};
-    }
-
     Timer t;
 
     unsigned long long n = 0;
@@ -475,8 +456,9 @@ Status MultiIndexBlock::insertAllDocumentsInCollection(OperationContext* opCtx,
 
     LOGV2(20391,
           "index build: collection scan done. scanned {n} total records in {t_seconds} seconds",
-          "n"_attr = n,
-          "t_seconds"_attr = t.seconds());
+          "Index build: collection scan done",
+          "totalRecords"_attr = n,
+          "duration"_attr = duration_cast<Milliseconds>(Seconds(t.seconds())));
 
     Status ret = dumpInsertsFromBulk(opCtx);
     if (!ret.isOK())
@@ -586,15 +568,10 @@ Status MultiIndexBlock::drainBackgroundWrites(
         if (!interceptor)
             continue;
 
-        // Track duplicates for later constraint checking for two-phase builds (with a buildUUID),
-        // whenever key constraints are being enforced (i.e. single-phase builds on primaries), and
-        // never when _ignoreUnique is set explicitly.
-        auto trackDups = !_ignoreUnique &&
-                (_buildUUID ||
-                 IndexAccessMethod::GetKeysMode::kEnforceConstraints ==
-                     _indexes[i].options.getKeysMode)
-            ? IndexBuildInterceptor::TrackDuplicates::kTrack
-            : IndexBuildInterceptor::TrackDuplicates::kNoTrack;
+        // Track duplicates for later constraint checking for all index builds, except when
+        // _ignoreUnique is set explicitly.
+        auto trackDups = !_ignoreUnique ? IndexBuildInterceptor::TrackDuplicates::kTrack
+                                        : IndexBuildInterceptor::TrackDuplicates::kNoTrack;
         auto status = interceptor->drainWritesIntoIndex(
             opCtx, _indexes[i].options, trackDups, readSource, drainYieldPolicy);
         if (!status.isOK()) {

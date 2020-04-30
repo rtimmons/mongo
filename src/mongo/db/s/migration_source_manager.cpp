@@ -94,16 +94,9 @@ const WriteConcernOptions kMajorityWriteConcern(WriteConcernOptions::kMajority,
  */
 void refreshRecipientRoutingTable(OperationContext* opCtx,
                                   const NamespaceString& nss,
-                                  ShardId toShard,
                                   const HostAndPort& toShardHost,
                                   const ChunkVersion& newCollVersion) {
-    SetShardVersionRequest ssv = SetShardVersionRequest::makeForVersioningNoPersist(
-        Grid::get(opCtx)->shardRegistry()->getConfigServerConnectionString(),
-        toShard,
-        ConnectionString(toShardHost),
-        nss,
-        newCollVersion,
-        false);
+    SetShardVersionRequest ssv(nss, newCollVersion, false);
 
     const executor::RemoteCommandRequest request(
         toShardHost,
@@ -286,7 +279,10 @@ Status MigrationSourceManager::startClone() {
         auto const readConcernArgs = repl::ReadConcernArgs(
             replCoord->getMyLastAppliedOpTime(), repl::ReadConcernLevel::kLocalReadConcern);
 
-        uassertStatusOK(waitForReadConcern(_opCtx, readConcernArgs, false));
+        auto waitForReadConcernStatus = waitForReadConcern(_opCtx, readConcernArgs, false);
+        if (!waitForReadConcernStatus.isOK()) {
+            return waitForReadConcernStatus;
+        }
         setPrepareConflictBehaviorForReadConcern(
             _opCtx, readConcernArgs, PrepareConflictBehavior::kEnforce);
     }
@@ -517,11 +513,8 @@ Status MigrationSourceManager::commitChunkMetadataOnConfig() {
     if (!MONGO_unlikely(doNotRefreshRecipientAfterCommit.shouldFail())) {
         // Best-effort make the recipient refresh its routing table to the new collection
         // version.
-        refreshRecipientRoutingTable(_opCtx,
-                                     getNss(),
-                                     _args.getToShardId(),
-                                     _recipientHost,
-                                     refreshedMetadata.getCollVersion());
+        refreshRecipientRoutingTable(
+            _opCtx, getNss(), _recipientHost, refreshedMetadata.getCollVersion());
     }
 
     std::string orphanedRangeCleanUpErrMsg = str::stream()

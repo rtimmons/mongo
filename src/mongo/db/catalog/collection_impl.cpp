@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
 
 #include "mongo/platform/basic.h"
 
@@ -54,6 +54,7 @@
 #include "mongo/db/index/index_access_method.h"
 #include "mongo/db/index/index_descriptor.h"
 #include "mongo/db/keypattern.h"
+#include "mongo/db/matcher/expression_always_boolean.h"
 #include "mongo/db/matcher/expression_parser.h"
 #include "mongo/db/op_observer.h"
 #include "mongo/db/operation_context.h"
@@ -145,7 +146,8 @@ std::unique_ptr<CollatorInterface> parseCollation(OperationContext* opCtx,
         LOGV2(20288,
               "Collection {nss} has a default collation which is incompatible with this version: "
               "{collationSpec}",
-              "nss"_attr = nss,
+              "Collection has a default collation incompatible with this version",
+              "namespace"_attr = nss,
               "collationSpec"_attr = collationSpec);
         fassertFailedNoTrace(40144);
     }
@@ -283,6 +285,16 @@ void CollectionImpl::init(OperationContext* opCtx) {
 
     // Enforce that the validator can be used on this namespace.
     uassertStatusOK(checkValidatorCanBeUsedOnNs(validatorDoc, ns(), _uuid));
+
+    // Make sure to parse the action and level before the MatchExpression, since certain features
+    // are not supported with certain combinations of action and level.
+    _validationAction = uassertStatusOK(_parseValidationAction(collectionOptions.validationAction));
+    _validationLevel = uassertStatusOK(_parseValidationLevel(collectionOptions.validationLevel));
+    if (collectionOptions.recordPreImages) {
+        uassertStatusOK(validatePreImageRecording(opCtx, _ns));
+        _recordPreImages = true;
+    }
+
     // Store the result (OK / error) of parsing the validator, but do not enforce that the result is
     // OK. This is intentional, as users may have validators on disk which were considered well
     // formed in older versions but not in newer versions.
@@ -294,14 +306,8 @@ void CollectionImpl::init(OperationContext* opCtx) {
                               {logv2::LogTag::kStartupWarnings},
                               "Collection {ns} has malformed validator: {validatorStatus}",
                               "Collection has malformed validator",
-                              "ns"_attr = _ns,
+                              "namespace"_attr = _ns,
                               "validatorStatus"_attr = _validator.getStatus());
-    }
-    _validationAction = uassertStatusOK(_parseValidationAction(collectionOptions.validationAction));
-    _validationLevel = uassertStatusOK(_parseValidationLevel(collectionOptions.validationLevel));
-    if (collectionOptions.recordPreImages) {
-        uassertStatusOK(validatePreImageRecording(opCtx, _ns));
-        _recordPreImages = true;
     }
 
     getIndexCatalog()->init(opCtx).transitional_ignore();
@@ -378,7 +384,8 @@ Status CollectionImpl::checkValidation(OperationContext* opCtx, const BSONObj& d
     if (_validationAction == ValidationAction::WARN) {
         LOGV2_WARNING(20294,
                       "Document would fail validation collection: {ns} doc: {document}",
-                      "ns"_attr = ns(),
+                      "Document would fail validation",
+                      "namespace"_attr = ns(),
                       "document"_attr = redact(document));
         return Status::OK();
     }
@@ -417,6 +424,12 @@ Collection::Validator CollectionImpl::parseValidator(
     // The match expression parser needs to know that we're parsing an expression for a
     // validator to apply some additional checks.
     expCtx->isParsingCollectionValidator = true;
+
+    // If the validation action is "warn" or the level is "moderate", then disallow any encryption
+    // keywords. This is to prevent any plaintext data from showing up in the logs.
+    if (_validationAction == CollectionImpl::ValidationAction::WARN ||
+        _validationLevel == CollectionImpl::ValidationLevel::MODERATE)
+        allowedFeatures &= ~MatchExpressionParser::AllowedFeatures::kEncryptKeywords;
 
     auto statusWithMatcher =
         MatchExpressionParser::parse(validator, expCtx, ExtensionsCallbackNoop(), allowedFeatures);
@@ -503,7 +516,7 @@ Status CollectionImpl::insertDocuments(OperationContext* opCtx,
                 whenFirst += firstIdElem.str();
             }
             LOGV2(20289,
-                  "hangAfterCollectionInserts fail point enabled for {ns}{whenFirst}. Blocking "
+                  "hangAfterCollectionInserts fail point enabled. Blocking "
                   "until fail point is disabled.",
                   "ns"_attr = _ns,
                   "whenFirst"_attr = whenFirst);
@@ -559,7 +572,7 @@ Status CollectionImpl::insertDocumentForBulkLoader(OperationContext* opCtx,
 
     if (MONGO_unlikely(failAfterBulkLoadDocInsert.shouldFail())) {
         LOGV2(20290,
-              "Failpoint failAfterBulkLoadDocInsert enabled for {ns_ns}. Throwing "
+              "Failpoint failAfterBulkLoadDocInsert enabled. Throwing "
               "WriteConflictException.",
               "ns_ns"_attr = _ns.ns());
         throw WriteConflictException();
@@ -685,7 +698,10 @@ void CollectionImpl::deleteDocument(OperationContext* opCtx,
                                     bool noWarn,
                                     Collection::StoreDeletedDoc storeDeletedDoc) {
     if (isCapped()) {
-        LOGV2(20291, "failing remove on a capped ns {ns}", "ns"_attr = _ns);
+        LOGV2(20291,
+              "failing remove on a capped ns {ns}",
+              "failing remove on a capped ns",
+              "namespace"_attr = _ns);
         uasserted(10089, "cannot remove from a capped collection");
         return;
     }
@@ -972,28 +988,19 @@ void CollectionImpl::cappedTruncateAfter(OperationContext* opCtx, RecordId end, 
     _recordStore->cappedTruncateAfter(opCtx, end, inclusive);
 }
 
-Status CollectionImpl::setValidator(OperationContext* opCtx, BSONObj validatorDoc) {
+void CollectionImpl::setValidator(OperationContext* opCtx, Validator validator) {
     invariant(opCtx->lockState()->isCollectionLockedForMode(ns(), MODE_X));
 
-    // Make owned early so that the parsed match expression refers to the owned object.
-    if (!validatorDoc.isOwned())
-        validatorDoc = validatorDoc.getOwned();
-
-    // Note that, by the time we reach this, we should have already done a pre-parse that checks for
-    // banned features, so we don't need to include that check again.
-    auto newValidator =
-        parseValidator(opCtx, validatorDoc, MatchExpressionParser::kAllowAllSpecialFeatures);
-    if (!newValidator.isOK())
-        return newValidator.getStatus();
-
-    DurableCatalog::get(opCtx)->updateValidator(
-        opCtx, getCatalogId(), validatorDoc, getValidationLevel(), getValidationAction());
+    DurableCatalog::get(opCtx)->updateValidator(opCtx,
+                                                getCatalogId(),
+                                                validator.validatorDoc.getOwned(),
+                                                getValidationLevel(),
+                                                getValidationAction());
 
     opCtx->recoveryUnit()->onRollback([this, oldValidator = std::move(_validator)]() mutable {
         this->_validator = std::move(oldValidator);
     });
-    _validator = std::move(newValidator);
-    return Status::OK();
+    _validator = std::move(validator);
 }
 
 StringData CollectionImpl::getValidationLevel() const {
@@ -1029,6 +1036,17 @@ Status CollectionImpl::setValidationLevel(OperationContext* opCtx, StringData ne
     auto oldValidationLevel = _validationLevel;
     _validationLevel = levelSW.getValue();
 
+    // Reparse the validator as there are some features which are only supported with certain
+    // validation levels.
+    auto allowedFeatures = MatchExpressionParser::kAllowAllSpecialFeatures;
+    if (_validationLevel == CollectionImpl::ValidationLevel::MODERATE)
+        allowedFeatures &= ~MatchExpressionParser::AllowedFeatures::kEncryptKeywords;
+
+    _validator = parseValidator(opCtx, _validator.validatorDoc, allowedFeatures);
+    if (!_validator.isOK()) {
+        return _validator.getStatus();
+    }
+
     DurableCatalog::get(opCtx)->updateValidator(opCtx,
                                                 getCatalogId(),
                                                 _validator.validatorDoc,
@@ -1051,6 +1069,16 @@ Status CollectionImpl::setValidationAction(OperationContext* opCtx, StringData n
     auto oldValidationAction = _validationAction;
     _validationAction = actionSW.getValue();
 
+    // Reparse the validator as there are some features which are only supported with certain
+    // validation actions.
+    auto allowedFeatures = MatchExpressionParser::kAllowAllSpecialFeatures;
+    if (_validationAction == CollectionImpl::ValidationAction::WARN)
+        allowedFeatures &= ~MatchExpressionParser::AllowedFeatures::kEncryptKeywords;
+
+    _validator = parseValidator(opCtx, _validator.validatorDoc, allowedFeatures);
+    if (!_validator.isOK()) {
+        return _validator.getStatus();
+    }
 
     DurableCatalog::get(opCtx)->updateValidator(opCtx,
                                                 getCatalogId(),

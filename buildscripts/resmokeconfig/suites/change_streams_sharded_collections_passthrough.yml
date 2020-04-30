@@ -1,5 +1,5 @@
 test_kind: js_test
-use_in_multiversion: change_streams_sharded_collections_multiversion_passthrough
+# use_in_multiversion: change_streams_sharded_collections_multiversion_passthrough
 
 selector:
   roots:
@@ -13,8 +13,6 @@ selector:
   ##
   # "Cowardly refusing to override write concern of command: ..."
   - assumes_write_concern_unchanged
-  # Transactions not supported on sharded clusters.
-  - uses_transactions
   # Exclude any that assume sharding is disabled
   - assumes_against_mongod_not_mongos
   - assumes_unsharded_collection

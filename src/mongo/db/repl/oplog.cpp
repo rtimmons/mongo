@@ -27,7 +27,6 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kReplication
 #define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kReplication
 
 #include "mongo/platform/basic.h"
@@ -791,20 +790,14 @@ const StringMap<ApplyOpMetadata> kOpsMap = {
               return swOplogEntry.getStatus().withContext(
                   "Error parsing 'commitIndexBuild' oplog entry");
           }
-          try {
-              IndexBuildsCoordinator::get(opCtx)->applyCommitIndexBuild(opCtx,
-                                                                        swOplogEntry.getValue());
-          } catch (ExceptionFor<ErrorCodes::IndexAlreadyExists>&) {
-              // TODO(SERVER-46656): We sometimes do two-phase builds of empty collections on
-              // the primary, but treat them as one-phase on the secondary.  This will result
-              // in an IndexAlreadyExists when we commit.  When SERVER-46656 is fixed we should
-              // no longer catch and ignore this error.
-          }
+          auto* indexBuildsCoordinator = IndexBuildsCoordinator::get(opCtx);
+          indexBuildsCoordinator->applyCommitIndexBuild(opCtx, swOplogEntry.getValue());
           return Status::OK();
       },
       {ErrorCodes::IndexAlreadyExists,
        ErrorCodes::IndexBuildAlreadyInProgress,
-       ErrorCodes::NamespaceNotFound}}},
+       ErrorCodes::NamespaceNotFound,
+       ErrorCodes::NoSuchKey}}},
     {"abortIndexBuild",
      {[](OperationContext* opCtx, const OplogEntry& entry, OplogApplication::Mode mode) -> Status {
           if (OplogApplication::Mode::kApplyOpsCmd == mode) {

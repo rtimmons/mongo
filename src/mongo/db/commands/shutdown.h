@@ -40,10 +40,17 @@
 #include "mongo/util/ntservice.h"
 
 namespace mongo {
+Status stepDownForShutdown(OperationContext* opCtx,
+                           const Milliseconds& waitTime,
+                           bool forceShutdown) noexcept;
 
 namespace shutdown_detail {
-void finishShutdown(bool force, long long timeoutSecs);
-}
+/**
+ * Completes the shutdown. 'timeoutSecs' is the total time permitted for shutdown-related timeouts.
+ * 'quiesceTime' is the remaining time allowed for quiescing.
+ */
+void finishShutdown(bool force, long long timeoutSecs, Milliseconds quiesceTime);
+}  // namespace shutdown_detail
 
 template <typename Derived>
 class CmdShutdown : public TypedCommand<Derived> {
@@ -58,10 +65,17 @@ public:
         void typedRun(OperationContext* opCtx) {
             auto force = Base::request().getForce();
             auto timeoutSecs = Base::request().getTimeoutSecs();
+            auto shutdownStartTime = opCtx->getServiceContext()->getPreciseClockSource()->now();
+
             // Commands derived from CmdShutdown should define their own
             // `beginShutdown` methods.
             Derived::beginShutdown(opCtx, force, timeoutSecs);
-            shutdown_detail::finishShutdown(force, timeoutSecs);
+            Milliseconds quiesceTime =
+                std::max(Milliseconds::zero(),
+                         Milliseconds(Seconds(timeoutSecs)) -
+                             (opCtx->getServiceContext()->getPreciseClockSource()->now() -
+                              shutdownStartTime));
+            shutdown_detail::finishShutdown(force, timeoutSecs, quiesceTime);
         }
 
     private:

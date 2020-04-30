@@ -27,7 +27,6 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kCommand
 #define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kCommand
 
 #include "mongo/platform/basic.h"
@@ -73,7 +72,6 @@
 #include "mongo/db/repl/storage_interface.h"
 #include "mongo/db/run_op_kill_cursors.h"
 #include "mongo/db/s/operation_sharding_state.h"
-#include "mongo/db/s/sharded_connection_info.h"
 #include "mongo/db/s/sharding_state.h"
 #include "mongo/db/s/transaction_coordinator_factory.h"
 #include "mongo/db/service_entry_point_common.h"
@@ -128,7 +126,6 @@ ServerStatusMetricField<Counter64> displayNotMasterUnackWrites(
     "repl.network.notMasterUnacknowledgedWrites", &notMasterUnackWrites);
 
 namespace {
-using logger::LogComponent;
 
 void generateLegacyQueryErrorResponse(const AssertionException& exception,
                                       const QueryMessage& queryMessage,
@@ -154,7 +151,7 @@ void generateLegacyQueryErrorResponse(const AssertionException& exception,
 
     if (queryMessage.ntoskip || queryMessage.ntoreturn) {
         LOGV2_OPTIONS(21952,
-                      {logComponentV1toV2(LogComponent::kQuery)},
+                      {logv2::LogComponent::kQuery},
                       "Query's nToSkip = {nToSkip} and nToReturn = {nToReturn}",
                       "Assertion for query with nToSkip and/or nToReturn",
                       "nToSkip"_attr = queryMessage.ntoskip,
@@ -174,7 +171,7 @@ void generateLegacyQueryErrorResponse(const AssertionException& exception,
     const bool isStaleConfig = exception.code() == ErrorCodes::StaleConfig;
     if (isStaleConfig) {
         LOGV2_OPTIONS(21953,
-                      {logComponentV1toV2(LogComponent::kQuery)},
+                      {logv2::LogComponent::kQuery},
                       "Stale version detected during query over {namespace}: {error}",
                       "Detected stale version while querying namespace",
                       "namespace"_attr = queryMessage.ns,
@@ -618,13 +615,21 @@ void invokeWithSessionCheckedOut(OperationContext* opCtx,
     if (!opCtx->getClient()->isInDirectClient()) {
         const auto& readConcernArgs = repl::ReadConcernArgs::get(opCtx);
 
+        auto command = invocation->definition();
+        // Record readConcern usages for commands run inside transactions after unstashing the
+        // transaction resources.
+        if (command->shouldAffectReadConcernCounter() && opCtx->inMultiDocumentTransaction()) {
+            ServerReadConcernMetrics::get(opCtx)->recordReadConcern(readConcernArgs,
+                                                                    true /* isTransaction */);
+        }
+
         // For replica sets, we do not receive the readConcernArgs of our parent transaction
         // statements until we unstash the transaction resources. The below check is necessary to
         // ensure commands, including those occurring after the first statement in their respective
         // transactions, are checked for readConcern support. Presently, only `create` and
         // `createIndexes` do not support readConcern inside transactions.
         // TODO(SERVER-46971): Consider how to extend this check to other commands.
-        auto cmdName = invocation->definition()->getName();
+        auto cmdName = command->getName();
         auto readConcernSupport = invocation->supportsReadConcern(readConcernArgs.getLevel());
         if (readConcernArgs.hasLevel() &&
             (cmdName == "create"_sd || cmdName == "createIndexes"_sd)) {
@@ -716,6 +721,15 @@ bool runCommandImpl(OperationContext* opCtx,
     // only performed reads then we will not need to wait at all.
     const bool shouldWaitForWriteConcern =
         invocation->supportsWriteConcern() || command->getLogicalOp() == LogicalOp::opGetMore;
+
+    // Record readConcern usages for commands run outside of transactions, excluding DBDirectClient.
+    // For commands inside a transaction, they inherit the readConcern from the transaction. So we
+    // will record their readConcern usages after we have unstashed the transaction resources.
+    if (!opCtx->getClient()->isInDirectClient() && command->shouldAffectReadConcernCounter() &&
+        !opCtx->inMultiDocumentTransaction()) {
+        ServerReadConcernMetrics::get(opCtx)->recordReadConcern(repl::ReadConcernArgs::get(opCtx),
+                                                                false /* isTransaction */);
+    }
 
     if (shouldWaitForWriteConcern) {
         auto lastOpBeforeRun = repl::ReplClientInfo::forClient(opCtx->getClient()).getLastOp();
@@ -1268,6 +1282,12 @@ void execCommandDatabase(OperationContext* opCtx,
                     "error"_attr = redact(e.toString()));
 
         generateErrorResponse(opCtx, replyBuilder, e, metadataBob.obj(), extraFieldsBuilder.obj());
+
+        if (ErrorCodes::isA<ErrorCategory::CloseConnectionError>(e.code())) {
+            // Rethrow the exception to the top to signal that the client connection should be
+            // closed.
+            throw;
+        }
     }
 }
 
@@ -1386,6 +1406,12 @@ DbResponse receivedCommands(OperationContext* opCtx,
 
             generateErrorResponse(
                 opCtx, replyBuilder.get(), ex, metadataBob.obj(), extraFieldsBuilder.obj());
+
+            if (ErrorCodes::isA<ErrorCategory::CloseConnectionError>(ex.code())) {
+                // Rethrow the exception to the top to signal that the client connection should be
+                // closed.
+                throw;
+            }
         }
     }();
 
@@ -1427,7 +1453,11 @@ DbResponse receivedQuery(OperationContext* opCtx,
                          const ServiceEntryPointCommon::Hooks& behaviors) {
     invariant(!nss.isCommand());
     globalOpCounters.gotQuery();
-    ServerReadConcernMetrics::get(opCtx)->recordReadConcern(repl::ReadConcernArgs::get(opCtx));
+
+    if (!opCtx->getClient()->isInDirectClient()) {
+        ServerReadConcernMetrics::get(opCtx)->recordReadConcern(repl::ReadConcernArgs::get(opCtx),
+                                                                false /* isTransaction */);
+    }
 
     DbMessage d(m);
     QueryMessage q(d);
@@ -1488,7 +1518,7 @@ void receivedKillCursors(OperationContext* opCtx, const Message& m) {
 
     if (shouldLog(logv2::LogSeverity::Debug(1)) || found != n) {
         LOGV2_DEBUG(21967,
-                    logSeverityV1toV2(found == n ? 1 : 0).toInt(),
+                    found == n ? 1 : 0,
                     "killCursors: found {found} of {numCursors}",
                     "killCursors found fewer cursors to kill than requested",
                     "found"_attr = found,
@@ -1720,14 +1750,6 @@ DbResponse ServiceEntryPointCommon::handleRequest(OperationContext* opCtx,
                 currentOp.done();
                 forceLog = true;
             } else {
-                if (!opCtx->getClient()->isInDirectClient()) {
-                    uassert(18663,
-                            str::stream() << "legacy writeOps not longer supported for "
-                                          << "versioned connections, ns: " << nsString.ns()
-                                          << ", op: " << networkOpToString(op),
-                            !ShardedConnectionInfo::get(&c, false));
-                }
-
                 if (!nsString.isValid()) {
                     uassert(16257, str::stream() << "Invalid ns [" << ns << "]", false);
                 } else if (op == dbInsert) {

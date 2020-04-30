@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kQuery
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kQuery
 
 #include "mongo/platform/basic.h"
 
@@ -370,7 +370,7 @@ DocumentSourceMerge::DocumentSourceMerge(NamespaceString outputNs,
 
         for (auto&& varElem : *letVariables) {
             const auto varName = varElem.fieldNameStringData();
-            Variables::uassertValidNameForUserWrite(varName);
+            Variables::validateNameForUserWrite(varName);
 
             _letVariables->emplace(
                 varName.toString(),

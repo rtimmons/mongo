@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kReplication
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kReplication
 
 #define LOGV2_FOR_ELECTION(ID, DLEVEL, MESSAGE, ...) \
     LOGV2_DEBUG_OPTIONS(                             \
@@ -146,6 +146,13 @@ ServerStatusMetricField<Counter64> displayUserOpsKilled("repl.stateTransition.us
 Counter64 userOpsRunning;
 ServerStatusMetricField<Counter64> displayUserOpsRunning(
     "repl.stateTransition.userOperationsRunning", &userOpsRunning);
+
+// Tracks the number of times we have successfully performed automatic reconfigs to remove
+// 'newlyAdded' fields.
+Counter64 numAutoReconfigsForRemovalOfNewlyAddedFields;
+ServerStatusMetricField<Counter64> displayNumAutoReconfigs(
+    "repl.reconfig.numAutoReconfigsForRemovalOfNewlyAddedFields",
+    &numAutoReconfigsForRemovalOfNewlyAddedFields);
 
 using namespace fmt::literals;
 
@@ -908,12 +915,19 @@ void ReplicationCoordinatorImpl::enterTerminalShutdown() {
     _inTerminalShutdown = true;
 }
 
-void ReplicationCoordinatorImpl::enterQuiesceMode() {
+bool ReplicationCoordinatorImpl::enterQuiesceModeIfSecondary() {
     stdx::lock_guard lk(_mutex);
+
+    if (!_memberState.secondary()) {
+        return false;
+    }
+
     _inQuiesceMode = true;
 
     // Increment the topology version and respond to all waiting isMaster requests with an error.
     _fulfillTopologyChangePromise(lk);
+
+    return true;
 }
 
 void ReplicationCoordinatorImpl::shutdown(OperationContext* opCtx) {
@@ -1147,13 +1161,19 @@ void ReplicationCoordinatorImpl::signalDrainComplete(OperationContext* opCtx,
     {
         // If the config doesn't have a term, don't change it.
         auto needBumpConfigTerm = _rsConfig.getConfigTerm() != OpTime::kUninitializedTerm;
+        auto currConfigVersionAndTerm = _rsConfig.getConfigVersionAndTerm();
         lk.unlock();
 
         if (needBumpConfigTerm) {
             // We re-write the term but keep version the same. This conceptually a no-op
             // in the config consensus group, analogous to writing a new oplog entry
             // in Raft log state machine on step up.
-            auto getNewConfig = [&](const ReplSetConfig& oldConfig, long long primaryTerm) {
+            auto getNewConfig = [&](const ReplSetConfig& oldConfig,
+                                    long long primaryTerm) -> StatusWith<ReplSetConfig> {
+                if (oldConfig.getConfigVersionAndTerm() != currConfigVersionAndTerm) {
+                    return {ErrorCodes::ConfigurationInProgress,
+                            "reconfig on step up was preempted by another reconfig"};
+                }
                 auto config = oldConfig;
                 config.setConfigTerm(primaryTerm);
                 return config;
@@ -1664,9 +1684,13 @@ Status ReplicationCoordinatorImpl::_waitUntilClusterTimeForRead(OperationContext
     // ensures the recency guarantee for the afterClusterTime read. At the end of the command, we
     // will wait for the lastApplied optime to become majority committed, which then satisfies the
     // durability guarantee.
-    const bool isMajorityCommittedRead =
-        readConcern.getLevel() == ReadConcernLevel::kMajorityReadConcern &&
-        !readConcern.isSpeculativeMajority() && !opCtx->inMultiDocumentTransaction();
+    //
+    // Majority and snapshot reads outside of transactions should non-speculatively wait for the
+    // majority committed snapshot.
+    const bool isMajorityCommittedRead = !readConcern.isSpeculativeMajority() &&
+        !opCtx->inMultiDocumentTransaction() &&
+        (readConcern.getLevel() == ReadConcernLevel::kMajorityReadConcern ||
+         readConcern.getLevel() == ReadConcernLevel::kSnapshotReadConcern);
 
     if (isMajorityCommittedRead) {
         return _waitUntilMajorityOpTime(opCtx, targetOpTime, deadline);
@@ -3346,6 +3370,7 @@ Status ReplicationCoordinatorImpl::doReplSetReconfig(OperationContext* opCtx,
         makeGuard([&] { lockAndCall(&lk, [=] { _setConfigState_inlock(kConfigSteady); }); });
 
     ReplSetConfig oldConfig = _rsConfig;
+    int myIndex = _selfIndex;
     lk.unlock();
 
     // Call the callback to get the new config given the old one.
@@ -3359,16 +3384,33 @@ Status ReplicationCoordinatorImpl::doReplSetReconfig(OperationContext* opCtx,
     BSONObj newConfigObj = newConfig.toBSON();
     audit::logReplSetReconfig(opCtx->getClient(), &oldConfigObj, &newConfigObj);
 
-    StatusWith<int> myIndex = validateConfigForReconfig(
-        _externalState.get(), oldConfig, newConfig, opCtx->getServiceContext(), force);
-    if (!myIndex.isOK()) {
+    Status validateStatus = validateConfigForReconfig(oldConfig, newConfig, force);
+    if (!validateStatus.isOK()) {
         LOGV2_ERROR(21420,
                     "replSetReconfig got {error} while validating {newConfig}",
                     "replSetReconfig error while validating new config",
-                    "error"_attr = myIndex.getStatus(),
+                    "error"_attr = validateStatus,
                     "newConfig"_attr = newConfigObj);
-        return Status(ErrorCodes::NewReplicaSetConfigurationIncompatible,
-                      myIndex.getStatus().reason());
+        return Status(ErrorCodes::NewReplicaSetConfigurationIncompatible, validateStatus.reason());
+    }
+
+    // Make sure we can find ourselves in the config. If the config contents have not changed, then
+    // we bypass the check for finding ourselves in the config, since we know it should already be
+    // satisfied.
+    if (!sameConfigContents(oldConfig, newConfig)) {
+        StatusWith<int> myIndexSw = force
+            ? findSelfInConfig(_externalState.get(), newConfig, opCtx->getServiceContext())
+            : findSelfInConfigIfElectable(
+                  _externalState.get(), newConfig, opCtx->getServiceContext());
+        if (!myIndexSw.getStatus().isOK()) {
+            LOGV2_ERROR(4751504,
+                        "replSetReconfig error while trying to find self in config",
+                        "error"_attr = myIndexSw.getStatus(),
+                        "force"_attr = force,
+                        "newConfig"_attr = newConfigObj);
+            return myIndexSw.getStatus();
+        }
+        myIndex = myIndexSw.getValue();
     }
 
     LOGV2(21353,
@@ -3378,8 +3420,8 @@ Status ReplicationCoordinatorImpl::doReplSetReconfig(OperationContext* opCtx,
 
     if (!force && !MONGO_unlikely(omitConfigQuorumCheck.shouldFail())) {
         LOGV2(4509600, "Executing quorum check for reconfig");
-        status = checkQuorumForReconfig(
-            _replExecutor.get(), newConfig, myIndex.getValue(), _topCoord->getTerm());
+        status =
+            checkQuorumForReconfig(_replExecutor.get(), newConfig, myIndex, _topCoord->getTerm());
         if (!status.isOK()) {
             LOGV2_ERROR(21421,
                         "replSetReconfig failed; {error}",
@@ -3412,7 +3454,7 @@ Status ReplicationCoordinatorImpl::doReplSetReconfig(OperationContext* opCtx,
     opCtx->recoveryUnit()->waitUntilDurable(opCtx);
 
     configStateGuard.dismiss();
-    _finishReplSetReconfig(opCtx, newConfig, force, myIndex.getValue());
+    _finishReplSetReconfig(opCtx, newConfig, force, myIndex);
 
     return Status::OK();
 }
@@ -3645,6 +3687,8 @@ void ReplicationCoordinatorImpl::_reconfigToRemoveNewlyAddedField(
         // instead find out the reconfig already took place and is no longer necessary.
         return;
     }
+
+    numAutoReconfigsForRemovalOfNewlyAddedFields.increment(1);
 
     // We intentionally do not wait for config commitment. If the config does not get committed, we
     // will try again on the next heartbeat.
@@ -4957,6 +5001,11 @@ Status ReplicationCoordinatorImpl::processReplSetRequestVotes(
                           str::stream() << "Invalid candidateIndex: " << candidateIndex
                                         << ". Must be between 0 and "
                                         << _rsConfig.getNumMembers() - 1 << " inclusive");
+        }
+
+        if (_selfIndex == -1) {
+            return Status(ErrorCodes::InvalidReplicaSetConfig,
+                          "Invalid replica set config, or this node is not a member");
         }
 
         _topCoord->processReplSetRequestVotes(args, response);

@@ -15,7 +15,6 @@ env.Library(
         'collection_sharding_state.cpp',
         'database_sharding_state.cpp',
         'operation_sharding_state.cpp',
-        'sharded_connection_info.cpp',
         'sharding_migration_critical_section.cpp',
         'sharding_state.cpp',
         'transaction_coordinator_curop.cpp',
@@ -321,6 +320,21 @@ env.Library(
         'balancer',
         'sharding_runtime_d',
     ],
+)
+
+env.Library(
+    target='sessions_collection_config_server',
+    source=[
+        'sessions_collection_config_server.cpp',
+    ],
+    LIBDEPS_PRIVATE=[
+        '$BUILD_DIR/mongo/db/dbdirectclient',
+        '$BUILD_DIR/mongo/db/pipeline/sharded_agg_helpers',
+        '$BUILD_DIR/mongo/db/sessions_collection',
+        '$BUILD_DIR/mongo/s/client/sharding_client',
+        '$BUILD_DIR/mongo/s/coreshard',
+        '$BUILD_DIR/mongo/s/sessions_collection_sharded',
+    ]
 )
 
 env.Library(

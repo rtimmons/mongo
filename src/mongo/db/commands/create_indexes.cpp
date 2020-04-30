@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kIndex
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kIndex
 
 #include "mongo/platform/basic.h"
 
@@ -166,6 +166,8 @@ StatusWith<std::vector<BSONObj>> parseAndValidateIndexSpecs(
                     // entry with a '*' as an index name means "drop all indexes in this
                     // collection".  We disallow creation of such indexes to avoid this conflict.
                     return {ErrorCodes::BadValue, "The index name '*' is not valid."};
+                } else if (ns.isSystem() && !indexSpec[IndexDescriptor::kHiddenFieldName].eoo()) {
+                    return {ErrorCodes::BadValue, "Can't hide index on system collection"};
                 }
 
                 indexSpecs.push_back(std::move(indexSpec));
@@ -317,13 +319,11 @@ boost::optional<CommitQuorumOptions> parseAndGetCommitQuorum(OperationContext* o
 std::vector<BSONObj> resolveDefaultsAndRemoveExistingIndexes(OperationContext* opCtx,
                                                              const Collection* collection,
                                                              std::vector<BSONObj> indexSpecs) {
-    auto swDefaults = collection->addCollationDefaultsToIndexSpecsForCreate(opCtx, indexSpecs);
-    uassertStatusOK(swDefaults.getStatus());
+    // Normalize the specs' collations, wildcard projections, and partial filters as applicable.
+    auto normalSpecs = IndexBuildsCoordinator::normalizeIndexSpecs(opCtx, collection, indexSpecs);
 
-    auto indexCatalog = collection->getIndexCatalog();
-
-    return indexCatalog->removeExistingIndexes(
-        opCtx, swDefaults.getValue(), false /*removeIndexBuildsToo*/);
+    return collection->getIndexCatalog()->removeExistingIndexes(
+        opCtx, normalSpecs, false /*removeIndexBuildsToo*/);
 }
 
 /**

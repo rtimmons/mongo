@@ -35,6 +35,7 @@
 #include "mongo/db/service_context.h"
 #include "mongo/executor/connection_pool.h"
 #include "mongo/executor/network_interface.h"
+#include "mongo/logv2/log_severity.h"
 #include "mongo/platform/mutex.h"
 #include "mongo/rpc/metadata/metadata_hook.h"
 #include "mongo/stdx/thread.h"
@@ -151,7 +152,7 @@ private:
 
         RemoteCommandRequestOnAny requestOnAny;
         TaskExecutor::CallbackHandle cbHandle;
-        Date_t deadline = RemoteCommandRequest::kNoExpirationDate;
+        Date_t deadline = kNoExpirationDate;
 
         ClockSource::StopWatch stopwatch;
 

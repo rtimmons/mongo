@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kSharding
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kSharding
 
 #include "mongo/platform/basic.h"
 
@@ -90,8 +90,8 @@ public:
             stdx::lock_guard lg(_mutex);
             return std::accumulate(_collections.begin(),
                                    _collections.end(),
-                                   uint64_t(0),
-                                   [](uint64_t total, const auto& coll) {
+                                   0LL,
+                                   [](long long total, const auto& coll) {
                                        return total +
                                            coll.second->numberOfRangesScheduledForDeletion();
                                    });

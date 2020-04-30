@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kCommand
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kCommand
 
 #include "mongo/platform/basic.h"
 
@@ -72,8 +72,8 @@ boost::optional<NamespaceString> getNamespaceFromUUID(OperationContext* opCtx, c
 }
 
 bool isCollectionSharded(OperationContext* opCtx, const NamespaceString& nss) {
-    auto* const css = CollectionShardingState::get(opCtx, nss);
-    return css->getCollectionDescription_DEPRECATED().isSharded();
+    return opCtx->writesAreReplicated() &&
+        CollectionShardingState::get(opCtx, nss)->getCollectionDescription().isSharded();
 }
 
 // From a replicated to an unreplicated collection or vice versa.
@@ -98,7 +98,7 @@ Status checkSourceAndTargetNamespaces(OperationContext* opCtx,
                       str::stream() << "Not primary while renaming collection " << source << " to "
                                     << target);
 
-    if (isCollectionSharded(opCtx, source))
+    if (!options.skipSourceCollectionShardedCheck && isCollectionSharded(opCtx, source))
         return {ErrorCodes::IllegalOperation, "source namespace cannot be sharded"};
 
     if (isReplicatedChanged(opCtx, source, target))
@@ -173,12 +173,13 @@ Status renameTargetCollectionToTmp(OperationContext* opCtx,
         LOGV2(20397,
               "Successfully renamed the target {targetNs} ({targetUUID}) to {tmpName} so that the "
               "source {sourceNs} ({sourceUUID}) could be renamed to {targetNs2}",
-              "targetNs"_attr = targetNs,
-              "targetUUID"_attr = targetUUID,
-              "tmpName"_attr = tmpName,
-              "sourceNs"_attr = sourceNs,
+              "Successfully renamed the target so that the source could be renamed",
+              "existingTargetNamespace"_attr = targetNs,
+              "existingTargetUUID"_attr = targetUUID,
+              "renamedExistingTarget"_attr = tmpName,
+              "sourceNamespace"_attr = sourceNs,
               "sourceUUID"_attr = sourceUUID,
-              "targetNs2"_attr = targetNs);
+              "newTargetNamespace"_attr = targetNs);
 
         return Status::OK();
     });
@@ -497,6 +498,7 @@ Status renameBetweenDBs(OperationContext* opCtx,
         return Status(ErrorCodes::NamespaceNotFound, "source namespace does not exist");
     }
 
+    // The source collection is not temporary, so we should check if is sharded or not.
     if (isCollectionSharded(opCtx, source))
         return {ErrorCodes::IllegalOperation, "source namespace cannot be sharded"};
 
@@ -554,8 +556,9 @@ Status renameBetweenDBs(OperationContext* opCtx,
     LOGV2(20398,
           "Attempting to create temporary collection: {tmpName} with the contents of collection: "
           "{source}",
-          "tmpName"_attr = tmpName,
-          "source"_attr = source);
+          "Attempting to create temporary collection",
+          "temporaryCollection"_attr = tmpName,
+          "sourceCollection"_attr = source);
 
     Collection* tmpColl = nullptr;
     {
@@ -590,10 +593,11 @@ Status renameBetweenDBs(OperationContext* opCtx,
             LOGV2(20399,
                   "Unable to drop temporary collection {tmpName} while renaming from {source} to "
                   "{target}: {status}",
-                  "tmpName"_attr = tmpName,
+                  "Unable to drop temporary collection while renaming",
+                  "tempCollection"_attr = tmpName,
                   "source"_attr = source,
                   "target"_attr = target,
-                  "status"_attr = status);
+                  "reason"_attr = status);
         }
     });
 
@@ -703,7 +707,9 @@ Status renameBetweenDBs(OperationContext* opCtx,
     // Getting here means we successfully built the target copy. We now do the final
     // in-place rename and remove the source collection.
     invariant(tmpName.db() == target.db());
-    Status status = renameCollectionWithinDB(opCtx, tmpName, target, options);
+    RenameCollectionOptions tempOptions(options);
+    tempOptions.skipSourceCollectionShardedCheck = true;
+    Status status = renameCollectionWithinDB(opCtx, tmpName, target, tempOptions);
     if (!status.isOK())
         return status;
 
@@ -717,8 +723,7 @@ Status renameBetweenDBs(OperationContext* opCtx,
 void doLocalRenameIfOptionsAndIndexesHaveNotChanged(OperationContext* opCtx,
                                                     const NamespaceString& sourceNs,
                                                     const NamespaceString& targetNs,
-                                                    bool dropTarget,
-                                                    bool stayTemp,
+                                                    const RenameCollectionOptions& options,
                                                     std::list<BSONObj> originalIndexes,
                                                     BSONObj originalCollectionOptions) {
     AutoGetDb dbLock(opCtx, targetNs.db(), MODE_X);
@@ -755,13 +760,12 @@ void doLocalRenameIfOptionsAndIndexesHaveNotChanged(OperationContext* opCtx,
                            currentIndexes.begin(),
                            SimpleBSONObjComparator::kInstance.makeEqualTo()));
 
-    validateAndRunRenameCollection(opCtx, sourceNs, targetNs, dropTarget, stayTemp);
+    validateAndRunRenameCollection(opCtx, sourceNs, targetNs, options);
 }
 void validateAndRunRenameCollection(OperationContext* opCtx,
                                     const NamespaceString& source,
                                     const NamespaceString& target,
-                                    bool dropTarget,
-                                    bool stayTemp) {
+                                    const RenameCollectionOptions& options) {
     uassert(ErrorCodes::InvalidNamespace,
             str::stream() << "Invalid source namespace: " << source.ns(),
             source.isValid());
@@ -799,9 +803,6 @@ void validateAndRunRenameCollection(OperationContext* opCtx,
                   "allowed");
     }
 
-    RenameCollectionOptions options;
-    options.dropTarget = dropTarget;
-    options.stayTemp = stayTemp;
     uassertStatusOK(renameCollection(opCtx, source, target, options));
 }
 
@@ -822,13 +823,13 @@ Status renameCollection(OperationContext* opCtx,
             "renaming system.views collection or renaming to system.views is not allowed");
     }
 
-    const std::string dropTargetMsg =
-        options.dropTarget ? " and drop " + target.toString() + "." : ".";
+    StringData dropTargetMsg = options.dropTarget ? "yes"_sd : "no"_sd;
     LOGV2(20400,
           "renameCollectionForCommand: rename {source} to {target}{dropTargetMsg}",
-          "source"_attr = source,
-          "target"_attr = target,
-          "dropTargetMsg"_attr = dropTargetMsg);
+          "renameCollectionForCommand",
+          "sourceNamespace"_attr = source,
+          "targetNamespace"_attr = target,
+          "dropTarget"_attr = dropTargetMsg);
 
     if (source.db() == target.db())
         return renameCollectionWithinDB(opCtx, source, target, options);
@@ -920,16 +921,16 @@ Status renameCollectionForApplyOps(OperationContext* opCtx,
                           << sourceNss.toString());
     }
 
-    const std::string dropTargetMsg =
-        uuidToDrop ? " and drop " + uuidToDrop->toString() + "." : ".";
+    const std::string uuidToDropString = uuidToDrop ? uuidToDrop->toString() : "<none>";
     const std::string uuidString = uuidToRename ? uuidToRename->toString() : "UUID unknown";
     LOGV2(20401,
           "renameCollectionForApplyOps: rename {sourceNss} ({uuidString}) to "
           "{targetNss}{dropTargetMsg}",
-          "sourceNss"_attr = sourceNss,
-          "uuidString"_attr = uuidString,
-          "targetNss"_attr = targetNss,
-          "dropTargetMsg"_attr = dropTargetMsg);
+          "renameCollectionForApplyOps",
+          "sourceNamespace"_attr = sourceNss,
+          "uuid"_attr = uuidString,
+          "targetNamespace"_attr = targetNss,
+          "uuidToDrop"_attr = uuidToDropString);
 
     if (sourceNss.db() == targetNss.db()) {
         return renameCollectionWithinDBForApplyOps(
@@ -952,6 +953,7 @@ Status renameCollectionForRollback(OperationContext* opCtx,
 
     LOGV2(20402,
           "renameCollectionForRollback: rename {source} ({uuid}) to {target}.",
+          "renameCollectionForRollback",
           "source"_attr = *source,
           "uuid"_attr = uuid,
           "target"_attr = target);

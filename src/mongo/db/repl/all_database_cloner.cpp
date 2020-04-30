@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kReplicationInitialSync
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kReplicationInitialSync
 
 #include "mongo/platform/basic.h"
 
@@ -131,12 +131,6 @@ BaseCloner::AfterStageBehavior AllDatabaseCloner::getInitialSyncIdStage() {
         return kContinueNormally;
     auto initialSyncId = getClient()->findOne(
         ReplicationConsistencyMarkersImpl::kDefaultInitialSyncIdNamespace.toString(), Query());
-    // TODO(SERVER-47150): Remove this "if" and allow the uassert to fail.
-    if (initialSyncId.isEmpty()) {
-        stdx::lock_guard<InitialSyncSharedData> lk(*getSharedData());
-        getSharedData()->setInitialSyncSourceId(lk, UUID::gen());
-        return kContinueNormally;
-    }
     uassert(ErrorCodes::InitialSyncFailure,
             "Cannot retrieve sync source initial sync ID",
             !initialSyncId.isEmpty());

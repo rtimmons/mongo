@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kSharding
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kSharding
 
 #define LOGV2_FOR_CATALOG_REFRESH(ID, DLEVEL, MESSAGE, ...) \
     LOGV2_DEBUG_OPTIONS(                                    \
@@ -47,6 +47,7 @@
 #include "mongo/s/client/shard_registry.h"
 #include "mongo/s/database_version_helpers.h"
 #include "mongo/s/grid.h"
+#include "mongo/s/is_mongos.h"
 #include "mongo/s/mongos_server_parameters_gen.h"
 #include "mongo/s/stale_exception.h"
 #include "mongo/util/concurrency/with_lock.h"
@@ -582,7 +583,7 @@ void CatalogCache::report(BSONObjBuilder* builder) const {
 
 void CatalogCache::checkAndRecordOperationBlockedByRefresh(OperationContext* opCtx,
                                                            mongo::LogicalOp opType) {
-    if (!operationBlockedBehindCatalogCacheRefresh(opCtx)) {
+    if (!isMongos() || !operationBlockedBehindCatalogCacheRefresh(opCtx)) {
         return;
     }
 
@@ -638,7 +639,7 @@ void CatalogCache::_scheduleDatabaseRefresh(WithLock lk,
             : 1;
         LOGV2_FOR_CATALOG_REFRESH(
             24101,
-            logSeverityV1toV2(logLevel).toInt(),
+            logLevel,
             "Refreshed cached database entry for {db} to version {newDbVersion} from version "
             "{oldDbVersion}. Took {duration}",
             "Refreshed cached database entry",
@@ -749,7 +750,7 @@ void CatalogCache::_scheduleCollectionRefresh(WithLock lk,
                 : 1;
             LOGV2_FOR_CATALOG_REFRESH(
                 24104,
-                logSeverityV1toV2(logLevel).toInt(),
+                logLevel,
                 "Refreshed cached collection {namespace} to version {newVersion} from version "
                 "{oldVersion}. Took {duration}",
                 "Refreshed cached collection",
@@ -923,23 +924,25 @@ void CatalogCache::Stats::report(BSONObjBuilder* builder) const {
 
     builder->append("countFailedRefreshes", countFailedRefreshes.load());
 
-    BSONObjBuilder operationsBlockedByRefreshBuilder(
-        builder->subobjStart("operationsBlockedByRefresh"));
+    if (isMongos()) {
+        BSONObjBuilder operationsBlockedByRefreshBuilder(
+            builder->subobjStart("operationsBlockedByRefresh"));
 
-    operationsBlockedByRefreshBuilder.append("countAllOperations",
-                                             operationsBlockedByRefresh.countAllOperations.load());
-    operationsBlockedByRefreshBuilder.append("countInserts",
-                                             operationsBlockedByRefresh.countInserts.load());
-    operationsBlockedByRefreshBuilder.append("countQueries",
-                                             operationsBlockedByRefresh.countQueries.load());
-    operationsBlockedByRefreshBuilder.append("countUpdates",
-                                             operationsBlockedByRefresh.countUpdates.load());
-    operationsBlockedByRefreshBuilder.append("countDeletes",
-                                             operationsBlockedByRefresh.countDeletes.load());
-    operationsBlockedByRefreshBuilder.append("countCommands",
-                                             operationsBlockedByRefresh.countCommands.load());
+        operationsBlockedByRefreshBuilder.append(
+            "countAllOperations", operationsBlockedByRefresh.countAllOperations.load());
+        operationsBlockedByRefreshBuilder.append("countInserts",
+                                                 operationsBlockedByRefresh.countInserts.load());
+        operationsBlockedByRefreshBuilder.append("countQueries",
+                                                 operationsBlockedByRefresh.countQueries.load());
+        operationsBlockedByRefreshBuilder.append("countUpdates",
+                                                 operationsBlockedByRefresh.countUpdates.load());
+        operationsBlockedByRefreshBuilder.append("countDeletes",
+                                                 operationsBlockedByRefresh.countDeletes.load());
+        operationsBlockedByRefreshBuilder.append("countCommands",
+                                                 operationsBlockedByRefresh.countCommands.load());
 
-    operationsBlockedByRefreshBuilder.done();
+        operationsBlockedByRefreshBuilder.done();
+    }
 }
 
 CachedDatabaseInfo::CachedDatabaseInfo(DatabaseType dbt, std::shared_ptr<Shard> primaryShard)

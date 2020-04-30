@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kSharding
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kSharding
 
 #include "mongo/platform/basic.h"
 
@@ -67,7 +67,6 @@
 #include "mongo/db/service_context.h"
 #include "mongo/db/service_liaison_mongos.h"
 #include "mongo/db/session_killer.h"
-#include "mongo/db/sessions_collection_sharded.h"
 #include "mongo/db/startup_warnings_common.h"
 #include "mongo/db/wire_version.h"
 #include "mongo/executor/task_executor_pool.h"
@@ -90,6 +89,7 @@
 #include "mongo/s/query/cluster_cursor_manager.h"
 #include "mongo/s/service_entry_point_mongos.h"
 #include "mongo/s/session_catalog_router.h"
+#include "mongo/s/sessions_collection_sharded.h"
 #include "mongo/s/sharding_egress_metadata_hook_for_mongos.h"
 #include "mongo/s/sharding_initialization.h"
 #include "mongo/s/sharding_uptime_reporter.h"
@@ -125,7 +125,7 @@
 
 namespace mongo {
 
-using logger::LogComponent;
+using logv2::LogComponent;
 
 #if !defined(__has_feature)
 #define __has_feature(x) 0
@@ -270,9 +270,8 @@ void cleanupTask(ServiceContext* serviceContext) {
 
         // Shutdown the TransportLayer so that new connections aren't accepted
         if (auto tl = serviceContext->getTransportLayer()) {
-            LOGV2_OPTIONS(22843,
-                          {logComponentV1toV2(LogComponent::kNetwork)},
-                          "shutdown: going to close all sockets...");
+            LOGV2_OPTIONS(
+                22843, {LogComponent::kNetwork}, "shutdown: going to close all sockets...");
 
             tl->shutdown();
         }
@@ -335,7 +334,7 @@ void cleanupTask(ServiceContext* serviceContext) {
         if (auto sep = serviceContext->getServiceEntryPoint()) {
             if (!sep->shutdown(Seconds(10))) {
                 LOGV2_OPTIONS(22844,
-                              {logComponentV1toV2(LogComponent::kNetwork)},
+                              {LogComponent::kNetwork},
                               "Service entry point did not shutdown within the time limit");
             }
         }
@@ -345,7 +344,7 @@ void cleanupTask(ServiceContext* serviceContext) {
             Status status = svcExec->shutdown(Seconds(5));
             if (!status.isOK()) {
                 LOGV2_OPTIONS(22845,
-                              {logComponentV1toV2(LogComponent::kNetwork)},
+                              {LogComponent::kNetwork},
                               "Service executor did not shutdown within the time limit",
                               "error"_attr = status);
             }
@@ -758,7 +757,7 @@ ExitCode main(ServiceContext* serviceContext) {
 
         if (configAddr.isLocalHost() != shardingContext->allowLocalHost()) {
             LOGV2_OPTIONS(22852,
-                          {logComponentV1toV2(LogComponent::kDefault)},
+                          {LogComponent::kDefault},
                           "cannot mix localhost and ip addresses in configdbs");
             return EXIT_BADOPTIONS;
         }
@@ -791,7 +790,7 @@ MONGO_INITIALIZER_WITH_PREREQUISITES(SetFeatureCompatibilityVersionLatest,
                                      ("EndStartupOptionStorage"))
 (InitializerContext* context) {
     serverGlobalParams.featureCompatibility.setVersion(
-        ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo44);
+        ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo46);
     return Status::OK();
 }
 

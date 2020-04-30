@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kSharding
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kSharding
 
 #include "mongo/platform/basic.h"
 
@@ -63,7 +63,6 @@ public:
         return {kUnshardedCollection};
     }
     void checkShardVersionOrThrow(OperationContext*) override {}
-    void checkShardVersionOrThrow_DEPRECATED(OperationContext*) override {}
 
     void appendShardVersion(BSONObjBuilder* builder) override {}
 

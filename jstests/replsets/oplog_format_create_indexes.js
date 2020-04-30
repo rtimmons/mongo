@@ -1,8 +1,6 @@
 /**
  * Tests that the index's full specification is included in the oplog entry corresponding to its
  * creation.
- *
- * @tags: [requires_fcv_44]
  */
 (function() {
 "use strict";
@@ -41,8 +39,6 @@ function testOplogEntryContainsIndexInfoObj(coll, keyPattern, indexOptions) {
     const allOplogEntriesJson = tojson(allOplogEntries);
     const indexSpecJson = tojson(indexSpec);
 
-    // Compare entries without ns field, which may still be present in 4.2 index specs.
-    delete indexSpec.ns;
     const found = allOplogEntries.filter((entry) => {
         const entrySpec = entry.o;
 

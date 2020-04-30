@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kSharding
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kSharding
 
 #include "mongo/platform/basic.h"
 
@@ -74,7 +74,7 @@ StatusWith<DistributionStatus> createCollectionDistributionStatus(
         shardToChunksMap[stat.shardId];
     }
 
-    for (const auto& chunkEntry : chunkMgr->chunks()) {
+    chunkMgr->forEachChunk([&](const auto& chunkEntry) {
         ChunkType chunk;
         chunk.setNS(chunkMgr->getns());
         chunk.setMin(chunkEntry.getMin());
@@ -84,7 +84,9 @@ StatusWith<DistributionStatus> createCollectionDistributionStatus(
         chunk.setVersion(chunkEntry.getLastmod());
 
         shardToChunksMap[chunkEntry.getShardId()].push_back(chunk);
-    }
+
+        return true;
+    });
 
     const auto swCollectionTags =
         Grid::get(opCtx)->catalogClient()->getTagsForCollection(opCtx, chunkMgr->getns());

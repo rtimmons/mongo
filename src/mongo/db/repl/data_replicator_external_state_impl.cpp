@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kReplication
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kReplication
 
 #include "mongo/platform/basic.h"
 
@@ -86,7 +86,7 @@ void DataReplicatorExternalStateImpl::processMetadata(const rpc::ReplSetMetadata
 
     _replicationCoordinator->processReplSetMetadata(replMetadata);
 
-    if (oqMetadata.getPrimaryIndex() != rpc::OplogQueryMetadata::kNoPrimary) {
+    if (oqMetadata.hasPrimaryIndex()) {
         _replicationCoordinator->cancelAndRescheduleElectionTimeout();
     }
 }

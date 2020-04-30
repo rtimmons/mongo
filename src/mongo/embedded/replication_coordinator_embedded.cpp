@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kReplication
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kReplication
 
 #include "mongo/platform/basic.h"
 
@@ -51,7 +51,9 @@ void ReplicationCoordinatorEmbedded::startup(OperationContext* opCtx) {}
 
 void ReplicationCoordinatorEmbedded::enterTerminalShutdown() {}
 
-void ReplicationCoordinatorEmbedded::enterQuiesceMode() {}
+bool ReplicationCoordinatorEmbedded::enterQuiesceModeIfSecondary() {
+    return true;
+}
 
 void ReplicationCoordinatorEmbedded::shutdown(OperationContext* opCtx) {}
 

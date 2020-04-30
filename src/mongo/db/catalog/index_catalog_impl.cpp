@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kIndex
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kIndex
 
 #include "mongo/platform/basic.h"
 
@@ -246,35 +246,29 @@ void IndexCatalogImpl::_logInternalState(OperationContext* opCtx,
                                          bool haveIdIndex) {
     invariant(opCtx->lockState()->isCollectionLockedForMode(_collection->ns(), MODE_X));
 
-    LOGV2_ERROR(
-        20365,
-        "Internal Index Catalog state:  numIndexesTotal(): {numIndexesTotal_opCtx} "
-        "numSystemIndexesEntries: {numIndexesInCollectionCatalogEntry} _readyIndexes.size(): "
-        "{readyIndexes_size} _buildingIndexes.size(): {buildingIndexes_size} indexNamesToDrop: "
-        "{indexNamesToDrop_size} haveIdIndex: {haveIdIndex}",
-        "numIndexesTotal_opCtx"_attr = numIndexesTotal(opCtx),
-        "numIndexesInCollectionCatalogEntry"_attr = numIndexesInCollectionCatalogEntry,
-        "readyIndexes_size"_attr = _readyIndexes.size(),
-        "buildingIndexes_size"_attr = _buildingIndexes.size(),
-        "indexNamesToDrop_size"_attr = indexNamesToDrop.size(),
-        "haveIdIndex"_attr = haveIdIndex);
+    LOGV2_ERROR(20365,
+                "Internal Index Catalog state",
+                "numIndexesTotal"_attr = numIndexesTotal(opCtx),
+                "numIndexesInCollectionCatalogEntry"_attr = numIndexesInCollectionCatalogEntry,
+                "readyIndexes_size"_attr = _readyIndexes.size(),
+                "buildingIndexes_size"_attr = _buildingIndexes.size(),
+                "indexNamesToDrop_size"_attr = indexNamesToDrop.size(),
+                "haveIdIndex"_attr = haveIdIndex);
 
     // Report the ready indexes.
-    LOGV2_ERROR(20366, "Ready indexes:");
     for (const auto& entry : _readyIndexes) {
         const IndexDescriptor* desc = entry->descriptor();
         LOGV2_ERROR(20367,
-                    "Index '{desc_indexName}' with specification: {desc_infoObj}",
+                    "readyIndex",
                     "desc_indexName"_attr = desc->indexName(),
                     "desc_infoObj"_attr = redact(desc->infoObj()));
     }
 
     // Report the in-progress indexes.
-    LOGV2_ERROR(20368, "In-progress indexes:");
     for (const auto& entry : _buildingIndexes) {
         const IndexDescriptor* desc = entry->descriptor();
         LOGV2_ERROR(20369,
-                    "Index '{desc_indexName}' with specification: {desc_infoObj}",
+                    "inprogIndex",
                     "desc_indexName"_attr = desc->indexName(),
                     "desc_infoObj"_attr = redact(desc->infoObj()));
     }
@@ -287,36 +281,28 @@ void IndexCatalogImpl::_logInternalState(OperationContext* opCtx,
     durableCatalog->getAllIndexes(opCtx, _collection->getCatalogId(), &allIndexes);
     durableCatalog->getReadyIndexes(opCtx, _collection->getCatalogId(), &readyIndexes);
 
-    LOGV2_ERROR(20371, "All indexes:");
     for (const auto& index : allIndexes) {
         LOGV2_ERROR(20372,
-                    "Index '{index}' with specification: "
-                    "{durableCatalog_getIndexSpec_opCtx_collection_getCatalogId_index}",
+                    "allIndexes",
                     "index"_attr = index,
-                    "durableCatalog_getIndexSpec_opCtx_collection_getCatalogId_index"_attr = redact(
+                    "spec"_attr = redact(
                         durableCatalog->getIndexSpec(opCtx, _collection->getCatalogId(), index)));
     }
 
-    LOGV2_ERROR(20373, "Ready indexes:");
     for (const auto& index : readyIndexes) {
         LOGV2_ERROR(20374,
-                    "Index '{index}' with specification: "
-                    "{durableCatalog_getIndexSpec_opCtx_collection_getCatalogId_index}",
+                    "readyIndexes",
                     "index"_attr = index,
-                    "durableCatalog_getIndexSpec_opCtx_collection_getCatalogId_index"_attr = redact(
+                    "spec"_attr = redact(
                         durableCatalog->getIndexSpec(opCtx, _collection->getCatalogId(), index)));
     }
 
-    LOGV2_ERROR(20375, "Index names to drop:");
     for (const auto& indexNameToDrop : indexNamesToDrop) {
-        LOGV2_ERROR(
-            20376,
-            "Index '{indexNameToDrop}' with specification: "
-            "{durableCatalog_getIndexSpec_opCtx_collection_getCatalogId_indexNameToDrop}",
-            "indexNameToDrop"_attr = indexNameToDrop,
-            "durableCatalog_getIndexSpec_opCtx_collection_getCatalogId_indexNameToDrop"_attr =
-                redact(durableCatalog->getIndexSpec(
-                    opCtx, _collection->getCatalogId(), indexNameToDrop)));
+        LOGV2_ERROR(20376,
+                    "indexNamesToDrop",
+                    "index"_attr = indexNameToDrop,
+                    "spec"_attr = redact(durableCatalog->getIndexSpec(
+                        opCtx, _collection->getCatalogId(), indexNameToDrop)));
     }
 }
 
@@ -422,11 +408,10 @@ IndexCatalogEntry* IndexCatalogImpl::createIndexEntry(OperationContext* opCtx,
     Status status = _isSpecOk(opCtx, descriptor->infoObj());
     if (!status.isOK()) {
         LOGV2_FATAL_NOTRACE(28782,
-                            "Found an invalid index {descriptor_infoObj} on the {collection_ns} "
-                            "collection: {status}",
-                            "descriptor_infoObj"_attr = descriptor->infoObj(),
-                            "collection_ns"_attr = _collection->ns(),
-                            "status"_attr = redact(status));
+                            "Found an invalid index",
+                            "descriptor"_attr = descriptor->infoObj(),
+                            "namespace"_attr = _collection->ns(),
+                            "error"_attr = redact(status));
     }
 
     auto engine = opCtx->getServiceContext()->getStorageEngine();
@@ -788,100 +773,113 @@ Status IndexCatalogImpl::_isSpecOk(OperationContext* opCtx, const BSONObj& spec)
 Status IndexCatalogImpl::_doesSpecConflictWithExisting(OperationContext* opCtx,
                                                        const BSONObj& spec,
                                                        const bool includeUnfinishedIndexes) const {
-    const char* name = spec.getStringField("name");
+    const char* name = spec.getStringField(IndexDescriptor::kIndexNameFieldName);
     invariant(name[0]);
 
-    const BSONObj key = spec.getObjectField("key");
-    const BSONObj collation = spec.getObjectField("collation");
+    const BSONObj key = spec.getObjectField(IndexDescriptor::kKeyPatternFieldName);
 
     {
+        // Check whether an index with the specified candidate name already exists in the catalog.
         const IndexDescriptor* desc = findIndexByName(opCtx, name, includeUnfinishedIndexes);
+
         if (desc) {
-            // index already exists with same name
+            // Index already exists with same name. Check whether the options are the same as well.
+            IndexDescriptor candidate(_collection, _getAccessMethodName(key), spec);
+            auto indexComparison = candidate.compareIndexOptions(opCtx, getEntry(desc));
 
-            if (SimpleBSONObjComparator::kInstance.evaluate(desc->keyPattern() == key) &&
-                SimpleBSONObjComparator::kInstance.evaluate(
-                    desc->infoObj().getObjectField("collation") != collation)) {
-                // key patterns are equal but collations differ.
-                return Status(ErrorCodes::IndexOptionsConflict,
-                              str::stream()
-                                  << "An index with the same key pattern, but a different "
-                                  << "collation already exists with the same name.  Try again with "
-                                  << "a unique name. "
-                                  << "Existing index: " << desc->infoObj()
-                                  << " Requested index: " << spec);
-            }
-
-            if (SimpleBSONObjComparator::kInstance.evaluate(desc->keyPattern() != key) ||
-                SimpleBSONObjComparator::kInstance.evaluate(
-                    desc->infoObj().getObjectField("collation") != collation)) {
+            // Key pattern or another uniquely-identifying option differs. We can build this index,
+            // but not with the specified (duplicate) name. User must specify another index name.
+            if (indexComparison == IndexDescriptor::Comparison::kDifferent) {
                 return Status(ErrorCodes::IndexKeySpecsConflict,
-                              str::stream()
-                                  << "Index must have unique name."
-                                  << "The existing index: " << desc->infoObj()
-                                  << " has the same name as the requested index: " << spec);
+                              str::stream() << "An existing index has the same name as the "
+                                               "requested index. Requested index: "
+                                            << spec << ", existing index: " << desc->infoObj());
             }
 
-            IndexDescriptor temp(_collection, _getAccessMethodName(key), spec);
-            if (!desc->areIndexOptionsEquivalent(&temp))
+            // The candidate's key and uniquely-identifying options are equivalent to an existing
+            // index, but some other options are not identical. Return a message to that effect.
+            if (indexComparison == IndexDescriptor::Comparison::kEquivalent) {
                 return Status(ErrorCodes::IndexOptionsConflict,
-                              str::stream() << "Index with name: " << name
-                                            << " already exists with different options");
+                              str::stream() << "An equivalent index already exists with the same "
+                                               "name but different options. Requested index: "
+                                            << spec << ", existing index: " << desc->infoObj());
+            }
 
+            // If we've reached this point, the requested index is identical to an existing index.
+            invariant(indexComparison == IndexDescriptor::Comparison::kIdentical);
 
             // If an identical index exists, but it is frozen, return an error with a different
-            // code to the user, forcing the user to drop before recreating the index.
+            // error code to the user, forcing the user to drop before recreating the index.
             auto entry = getEntry(desc);
             if (entry->isFrozen()) {
                 return Status(ErrorCodes::CannotCreateIndex,
-                              str::stream() << "An identical, unfinished index already exists. The "
-                                               "index must be dropped first: "
-                                            << name << ", spec: " << desc->infoObj());
+                              str::stream()
+                                  << "An identical, unfinished index '" << name
+                                  << "' already exists. Must drop before recreating. Spec: "
+                                  << desc->infoObj());
             }
 
-            // Index already exists with the same options, so no need to build a new
-            // one (not an error). Most likely requested by a client using ensureIndex.
+            // Index already exists with the same options, so there is no need to build a new one.
+            // This is not an error condition.
             return Status(ErrorCodes::IndexAlreadyExists,
                           str::stream() << "Identical index already exists: " << name);
         }
     }
 
     {
+        // No index with the candidate name exists. Check for an index with conflicting options.
         const IndexDescriptor* desc =
-            findIndexByKeyPatternAndCollationSpec(opCtx, key, collation, includeUnfinishedIndexes);
+            findIndexByKeyPatternAndOptions(opCtx, key, spec, includeUnfinishedIndexes);
+
         if (desc) {
             LOGV2_DEBUG(20353,
                         2,
-                        "Index already exists with a different name: {name} pattern: {key} "
-                        "collation: {collation}",
-                        "name"_attr = name,
-                        "key"_attr = key,
-                        "collation"_attr = collation);
+                        "Index already exists with a different name: {name}, spec: {spec}",
+                        "Index already exists with a different name",
+                        "name"_attr = desc->indexName(),
+                        "spec"_attr = desc->infoObj());
 
-            IndexDescriptor temp(_collection, _getAccessMethodName(key), spec);
-            if (!desc->areIndexOptionsEquivalent(&temp))
+            // Index already exists with a different name. Check whether the options are identical.
+            // We will return an error in either case, but this check allows us to generate a more
+            // informative error message.
+            IndexDescriptor candidate(_collection, _getAccessMethodName(key), spec);
+            auto indexComparison = candidate.compareIndexOptions(opCtx, getEntry(desc));
+
+            // The candidate's key and uniquely-identifying options are equivalent to an existing
+            // index, but some other options are not identical. Return a message to that effect.
+            if (indexComparison == IndexDescriptor::Comparison::kEquivalent)
                 return Status(ErrorCodes::IndexOptionsConflict,
-                              str::stream()
-                                  << "Index: " << spec
-                                  << " already exists with different options: " << desc->infoObj());
+                              str::stream() << "An equivalent index already exists with a "
+                                               "different name and options. Requested index: "
+                                            << spec << ", existing index: " << desc->infoObj());
 
+            // If we've reached this point, the requested index is identical to an existing index.
+            invariant(indexComparison == IndexDescriptor::Comparison::kIdentical);
+
+            // An identical index already exists with a different name. We cannot build this index.
             return Status(ErrorCodes::IndexOptionsConflict,
-                          str::stream() << "Index with name: " << name
-                                        << " already exists with a different name");
+                          str::stream() << "Index already exists with a different name: "
+                                        << desc->indexName());
         }
     }
 
     if (numIndexesTotal(opCtx) >= kMaxNumIndexesAllowed) {
         string s = str::stream() << "add index fails, too many indexes for " << _collection->ns()
                                  << " key:" << key;
-        LOGV2(20354, "{s}", "s"_attr = s);
+        LOGV2(20354,
+              "Exceeded maximum number of indexes",
+              "namespace"_attr = _collection->ns(),
+              "key"_attr = key,
+              "maxNumIndexes"_attr = kMaxNumIndexesAllowed);
         return Status(ErrorCodes::CannotCreateIndex, s);
     }
 
-    // Refuse to build text index if another text index exists or is in progress.
-    // Collections should only have one text index.
+    // Refuse to build text index for user connections if another text index exists or is in
+    // progress. This constraint is not based on technical limitations of the storage or execution
+    // layers, and thus we allow internal connections to temporarily build multiple text indexes for
+    // idempotency reasons.
     string pluginName = IndexNames::findPluginName(key);
-    if (pluginName == IndexNames::TEXT) {
+    if (pluginName == IndexNames::TEXT && opCtx->getClient()->isFromUserConnection()) {
         vector<const IndexDescriptor*> textIndexes;
         findIndexByType(opCtx, IndexNames::TEXT, textIndexes, includeUnfinishedIndexes);
         if (textIndexes.size() > 0) {
@@ -1088,9 +1086,10 @@ void IndexCatalogImpl::deleteIndexFromDisk(OperationContext* opCtx, const string
         LOGV2_WARNING(
             20364,
             "couldn't drop index {indexName} on collection: {collection_ns} because of {status}",
-            "indexName"_attr = indexName,
-            "collection_ns"_attr = _collection->ns(),
-            "status"_attr = redact(status));
+            "couldn't drop index",
+            "index"_attr = indexName,
+            "namespace"_attr = _collection->ns(),
+            "reason"_attr = redact(status));
     }
 }
 
@@ -1146,7 +1145,7 @@ int IndexCatalogImpl::numIndexesTotal(OperationContext* opCtx) const {
             }
             // Ignore the write conflict for read transactions; we will eventually roll back this
             // transaction anyway.
-            LOGV2(20356, " Skipping dassert check due to: {ex}", "ex"_attr = ex);
+            LOGV2(20356, "Skipping dassert check", "reason"_attr = ex);
         }
     }
 
@@ -1167,19 +1166,15 @@ int IndexCatalogImpl::numIndexesReady(OperationContext* opCtx) const {
         // There is a potential inconistency where the index information in the collection catalog
         // entry and the index catalog differ. Log as much information as possible here.
         if (itIndexes.size() != completedIndexes.size()) {
-            LOGV2(20357, "index catalog reports: ");
             for (const IndexDescriptor* i : itIndexes) {
-                LOGV2(20358, "  index: {i}", "i"_attr = *i);
+                LOGV2(20358, "index catalog reports", "index"_attr = *i);
             }
 
-            LOGV2(20359, "collection catalog reports: ");
             for (auto const& i : completedIndexes) {
-                LOGV2(20360, "  index: {i}", "i"_attr = i);
+                LOGV2(20360, "collection catalog reports", "index"_attr = i);
             }
 
-            LOGV2(20361,
-                  "collection uuid: {collection_uuid}",
-                  "collection_uuid"_attr = _collection->uuid());
+            LOGV2(20361, "uuid", "collection_uuid"_attr = _collection->uuid());
 
             invariant(itIndexes.size() == completedIndexes.size(),
                       "The number of ready indexes reported in the collection metadata catalog did "
@@ -1215,18 +1210,17 @@ const IndexDescriptor* IndexCatalogImpl::findIndexByName(OperationContext* opCtx
     return nullptr;
 }
 
-const IndexDescriptor* IndexCatalogImpl::findIndexByKeyPatternAndCollationSpec(
+const IndexDescriptor* IndexCatalogImpl::findIndexByKeyPatternAndOptions(
     OperationContext* opCtx,
     const BSONObj& key,
-    const BSONObj& collationSpec,
+    const BSONObj& indexSpec,
     bool includeUnfinishedIndexes) const {
     std::unique_ptr<IndexIterator> ii = getIndexIterator(opCtx, includeUnfinishedIndexes);
+    IndexDescriptor needle(_collection, _getAccessMethodName(key), indexSpec);
     while (ii->more()) {
-        const IndexDescriptor* desc = ii->next()->descriptor();
-        if (SimpleBSONObjComparator::kInstance.evaluate(desc->keyPattern() == key) &&
-            SimpleBSONObjComparator::kInstance.evaluate(
-                desc->infoObj().getObjectField("collation") == collationSpec)) {
-            return desc;
+        const auto* entry = ii->next();
+        if (needle.compareIndexOptions(opCtx, entry) != IndexDescriptor::Comparison::kDifferent) {
+            return entry->descriptor();
         }
     }
     return nullptr;
@@ -1254,7 +1248,7 @@ const IndexDescriptor* IndexCatalogImpl::findShardKeyPrefixedIndex(OperationCont
     std::unique_ptr<IndexIterator> ii = getIndexIterator(opCtx, false);
     while (ii->more()) {
         const IndexDescriptor* desc = ii->next()->descriptor();
-        bool hasSimpleCollation = desc->infoObj().getObjectField("collation").isEmpty();
+        bool hasSimpleCollation = desc->collation().isEmpty();
 
         if (desc->isPartial() || desc->isSparse())
             continue;
@@ -1561,9 +1555,10 @@ void IndexCatalogImpl::_unindexKeys(OperationContext* opCtx,
     if (!status.isOK()) {
         LOGV2(20362,
               "Couldn't unindex record {obj} from collection {collection_ns}. Status: {status}",
-              "obj"_attr = redact(obj),
-              "collection_ns"_attr = _collection->ns(),
-              "status"_attr = redact(status));
+              "Couldn't unindex record",
+              "record"_attr = redact(obj),
+              "namespace"_attr = _collection->ns(),
+              "reason"_attr = redact(status));
     }
 
     if (keysDeletedOut) {
@@ -1701,9 +1696,7 @@ Status IndexCatalogImpl::compactIndexes(OperationContext* opCtx) {
                     "entry_descriptor"_attr = *(entry->descriptor()));
         Status status = entry->accessMethod()->compact(opCtx);
         if (!status.isOK()) {
-            LOGV2_ERROR(20377,
-                        "failed to compact index: {entry_descriptor}",
-                        "entry_descriptor"_attr = *(entry->descriptor()));
+            LOGV2_ERROR(20377, "failed to compact index", "index"_attr = *(entry->descriptor()));
             return status;
         }
     }

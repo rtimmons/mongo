@@ -131,6 +131,10 @@ Status createIndexFromSpec(OperationContext* opCtx, StringData ns, const BSONObj
     if (!status.isOK()) {
         return status;
     }
+    status = indexer.retrySkippedRecords(opCtx, coll);
+    if (!status.isOK()) {
+        return status;
+    }
     status = indexer.checkConstraints(opCtx);
     if (!status.isOK()) {
         return status;
@@ -174,7 +178,7 @@ int dbtestsMain(int argc, char** argv, char** envp) {
 
     mongo::runGlobalInitializersOrDie(argc, argv, envp);
     serverGlobalParams.featureCompatibility.setVersion(
-        ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo44);
+        ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo46);
     repl::ReplSettings replSettings;
     replSettings.setOplogSizeBytes(10 * 1024 * 1024);
     setGlobalServiceContext(ServiceContext::make());

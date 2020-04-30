@@ -91,7 +91,6 @@ public:
     ScopedCollectionDescription getCollectionDescription_DEPRECATED() override;
 
     void checkShardVersionOrThrow(OperationContext* opCtx) override;
-    void checkShardVersionOrThrow_DEPRECATED(OperationContext* opCtx) override;
 
     void appendShardVersion(BSONObjBuilder* builder) override;
 
@@ -166,8 +165,7 @@ public:
      * Methods to control the collection's critical section. Methods listed below must be called
      * with both the collection lock and CSRLock held in exclusive mode.
      *
-     * In these methods, the CSRLock ensures concurrent access to the
-     * critical section.
+     * In these methods, the CSRLock ensures concurrent access to the critical section.
      */
     void enterCriticalSectionCatchUpPhase(OperationContext* opCtx);
     void enterCriticalSectionCommitPhase(OperationContext* opCtx);
@@ -176,17 +174,18 @@ public:
      * Method to control the collection's critical secion. Method listed below must be called with
      * the collection lock in IX mode and the CSRLock in exclusive mode.
      *
-     * In this method, the CSRLock ensures concurrent access to the
-     * critical section.
+     * In this method, the CSRLock ensures concurrent access to the critical section.
      */
     void exitCriticalSection(OperationContext* opCtx);
 
     /**
      * If the collection is currently in a critical section, returns the critical section signal to
      * be waited on. Otherwise, returns nullptr.
+     *
+     * In this method, the CSRLock ensures concurrent access to the critical section.
      */
     std::shared_ptr<Notification<void>> getCriticalSectionSignal(
-        ShardingMigrationCriticalSection::Operation op) const;
+        OperationContext* opCtx, ShardingMigrationCriticalSection::Operation op);
 
     /**
      * Appends information about any chunks for which incoming migration has been requested, but the
@@ -219,11 +218,8 @@ private:
      * atClusterTime if specified. Throws StaleConfigInfo if the shard version attached to the
      * operation context does not match the shard version on the active metadata object.
      */
-    enum class TreatUnknownAsUnsharded { kYes, kNo };
     std::shared_ptr<ScopedCollectionDescription::Impl> _getMetadataWithVersionCheckAt(
-        OperationContext* opCtx,
-        const boost::optional<mongo::LogicalTime>& atClusterTime,
-        TreatUnknownAsUnsharded treatUnknownAsUnsharded);
+        OperationContext* opCtx, const boost::optional<mongo::LogicalTime>& atClusterTime);
 
     // Namespace this state belongs to.
     const NamespaceString _nss;
@@ -237,6 +233,7 @@ private:
     Lock::ResourceMutex _stateChangeMutex;
 
     // Tracks the migration critical section state for this collection.
+    // Must hold CSRLock while accessing.
     ShardingMigrationCriticalSection _critSec;
 
     mutable Mutex _metadataManagerLock =

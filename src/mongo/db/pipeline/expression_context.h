@@ -128,7 +128,8 @@ public:
                       const std::shared_ptr<MongoProcessInterface>& mongoProcessInterface,
                       StringMap<ExpressionContext::ResolvedNamespace> resolvedNamespaces,
                       boost::optional<UUID> collUUID,
-                      bool mayDbProfile);
+                      const boost::optional<BSONObj>& letParameters = boost::none,
+                      bool mayDbProfile = true);
 
     /**
      * Constructs an ExpressionContext suitable for use outside of the aggregation system, including
@@ -140,6 +141,7 @@ public:
                       std::unique_ptr<CollatorInterface> collator,
                       const NamespaceString& ns,
                       const boost::optional<RuntimeConstants>& runtimeConstants = boost::none,
+                      const boost::optional<BSONObj>& letParameters = boost::none,
                       bool mayDbProfile = true);
 
     /**

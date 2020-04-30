@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kSharding
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kSharding
 
 #include "mongo/platform/basic.h"
 
@@ -124,7 +124,7 @@ public:
                 // consistency guarantee.
                 auto const csr = CollectionShardingRuntime::get(opCtx, ns());
                 auto criticalSectionSignal =
-                    csr->getCriticalSectionSignal(ShardingMigrationCriticalSection::kRead);
+                    csr->getCriticalSectionSignal(opCtx, ShardingMigrationCriticalSection::kRead);
                 if (criticalSectionSignal) {
                     oss.setMigrationCriticalSectionSignal(criticalSectionSignal);
                 }

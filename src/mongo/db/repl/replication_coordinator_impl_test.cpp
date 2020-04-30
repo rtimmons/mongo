@@ -3309,7 +3309,7 @@ TEST_F(ReplCoordTest, IsMasterReturnsErrorOnEnteringQuiesceMode) {
 
     // Ensure that awaitIsMasterResponse() is called before entering quiesce mode.
     waitForIsMasterFailPoint->waitForTimesEntered(timesEnteredFailPoint + 1);
-    getReplCoord()->enterQuiesceMode();
+    ASSERT(getReplCoord()->enterQuiesceModeIfSecondary());
     ASSERT_EQUALS(currentTopologyVersion.getCounter() + 1,
                   getTopoCoord().getTopologyVersion().getCounter());
     // Check that the cached topologyVersion counter was updated correctly.
@@ -3330,7 +3330,7 @@ TEST_F(ReplCoordTest, IsMasterReturnsErrorInQuiesceMode) {
     ASSERT_OK(getReplCoord()->setFollowerMode(MemberState::RS_SECONDARY));
 
     auto currentTopologyVersion = getTopoCoord().getTopologyVersion();
-    getReplCoord()->enterQuiesceMode();
+    ASSERT(getReplCoord()->enterQuiesceModeIfSecondary());
     ASSERT_EQUALS(currentTopologyVersion.getCounter() + 1,
                   getTopoCoord().getTopologyVersion().getCounter());
     // Check that the cached topologyVersion counter was updated correctly.
@@ -3369,6 +3369,39 @@ TEST_F(ReplCoordTest, IsMasterReturnsErrorInQuiesceMode) {
         getReplCoord()->awaitIsMasterResponse(opCtx.get(), {}, boost::none, boost::none),
         AssertionException,
         ErrorCodes::ShutdownInProgress);
+}
+
+TEST_F(ReplCoordTest, DoNotEnterQuiesceModeInStatesOtherThanSecondary) {
+    init();
+
+    // Do not enter quiesce mode in state RS_STARTUP.
+    ASSERT_TRUE(getReplCoord()->getMemberState().startup());
+    ASSERT_FALSE(getReplCoord()->enterQuiesceModeIfSecondary());
+
+    assertStartSuccess(BSON("_id"
+                            << "mySet"
+                            << "version" << 2 << "members"
+                            << BSON_ARRAY(BSON("host"
+                                               << "node1:12345"
+                                               << "_id" << 0)
+                                          << BSON("host"
+                                                  << "node2:12345"
+                                                  << "_id" << 1))),
+                       HostAndPort("node1", 12345));
+
+    // Do not enter quiesce mode in state RS_STARTUP2.
+    ASSERT_TRUE(getReplCoord()->getMemberState().startup2());
+    ASSERT_FALSE(getReplCoord()->enterQuiesceModeIfSecondary());
+
+    // Become primary.
+    ASSERT_OK(getReplCoord()->setFollowerMode(MemberState::RS_SECONDARY));
+    replCoordSetMyLastAppliedOpTime(OpTimeWithTermOne(100, 1), Date_t() + Seconds(100));
+    replCoordSetMyLastDurableOpTime(OpTimeWithTermOne(100, 1), Date_t() + Seconds(100));
+    simulateSuccessfulV1Election();
+    ASSERT(getReplCoord()->getMemberState().primary());
+
+    // Do not enter quiesce mode in state RS_PRIMARY.
+    ASSERT_FALSE(getReplCoord()->enterQuiesceModeIfSecondary());
 }
 
 TEST_F(ReplCoordTest, AllIsMasterFieldsRespectHorizon) {
@@ -6388,7 +6421,7 @@ TEST_F(ReplCoordTest, PrepareOplogQueryMetadata) {
     ASSERT_EQ(oqMetadata.getValue().getLastOpApplied(), optime2);
     ASSERT_EQ(oqMetadata.getValue().getRBID(), 100);
     ASSERT_EQ(oqMetadata.getValue().getSyncSourceIndex(), -1);
-    ASSERT_EQ(oqMetadata.getValue().getPrimaryIndex(), -1);
+    ASSERT_EQ(oqMetadata.getValue().hasPrimaryIndex(), false);
 
     auto replMetadata = rpc::ReplSetMetadata::readFromMetadata(metadata);
     ASSERT_OK(replMetadata.getStatus());
@@ -7667,6 +7700,36 @@ TEST_F(ReplCoordTest, NodeDoesNotGrantVoteIfInTerminalShutdown) {
     ASSERT_NOT_OK(r);
     ASSERT_EQUALS("In the process of shutting down", r.reason());
     ASSERT_EQUALS(ErrorCodes::ShutdownInProgress, r.code());
+}
+
+TEST_F(ReplCoordTest, RemovedNodeDoesNotGrantVote) {
+    // A 1-node set. This node is not a member.
+    assertStartSuccess(BSON("_id"
+                            << "mySet"
+                            << "version" << 1 << "members"
+                            << BSON_ARRAY(BSON("host"
+                                               << "node1:12345"
+                                               << "_id" << 0))),
+                       HostAndPort("node2", 12345));
+
+    ASSERT_OK(getReplCoord()->setFollowerMode(MemberState::RS_REMOVED));
+    ReplSetRequestVotesArgs args;
+    ASSERT_OK(args.initialize(BSON(
+        "replSetRequestVotes" << 1 << "setName"
+                              << "mySet"
+                              << "term" << 2 << "candidateIndex" << 0LL << "configVersion" << 1LL
+                              << "dryRun" << false << "lastAppliedOpTime" << OpTime().toBSON())));
+
+    ReplSetRequestVotesResponse response;
+    auto opCtx = makeOperationContext();
+    auto r = getReplCoord()->processReplSetRequestVotes(opCtx.get(), args, &response);
+    ASSERT_NOT_OK(r);
+    ASSERT_EQUALS("Invalid replica set config, or this node is not a member", r.reason());
+    ASSERT_EQUALS(ErrorCodes::InvalidReplicaSetConfig, r.code());
+
+    // Vote was not recorded.
+    ServiceContext* svcCtx = getServiceContext();
+    ASSERT(ReplicationMetrics::get(svcCtx).getElectionParticipantMetricsBSON().isEmpty());
 }
 
 TEST_F(ReplCoordTest, CheckIfCommitQuorumHasReached) {

@@ -28,7 +28,7 @@
  */
 #include "mongo/client/sdam/topology_description.h"
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kNetwork
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kNetwork
 #include "mongo/client/sdam/server_description.h"
 #include "mongo/db/wire_version.h"
 #include "mongo/logv2/log.h"
@@ -129,7 +129,6 @@ boost::optional<ServerDescriptionPtr> TopologyDescription::installServerDescript
             const auto& currentDescription = *it;
             if (currentDescription->getAddress() == newServerDescription->getAddress()) {
                 previousDescription = *it;
-
                 *it = std::shared_ptr<ServerDescription>(newServerDescription);
                 break;
             }
@@ -139,14 +138,11 @@ boost::optional<ServerDescriptionPtr> TopologyDescription::installServerDescript
             _servers.push_back(std::shared_ptr<ServerDescription>(newServerDescription));
         }
     }
-
     newServerDescription->_topologyDescription = shared_from_this();
-
     checkWireCompatibilityVersions();
     calculateLogicalSessionTimeout();
 
     topologyDescriptionInstallServerDescription.shouldFail();
-
     return previousDescription;
 }
 

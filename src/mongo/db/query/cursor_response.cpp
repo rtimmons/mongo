@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kQuery
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kQuery
 
 #include "mongo/platform/basic.h"
 
@@ -44,6 +44,7 @@ const char kCursorsField[] = "cursors";
 const char kCursorField[] = "cursor";
 const char kIdField[] = "id";
 const char kNsField[] = "ns";
+const char kAtClusterTimeField[] = "atClusterTime";
 const char kBatchField[] = "nextBatch";
 const char kBatchFieldInitial[] = "firstBatch";
 const char kBatchDocSequenceField[] = "cursor.nextBatch";
@@ -84,6 +85,9 @@ void CursorResponseBuilder::done(CursorId cursorId, StringData cursorNamespace) 
     }
     _cursorObject->append(kIdField, cursorId);
     _cursorObject->append(kNsField, cursorNamespace);
+    if (_options.atClusterTime) {
+        _cursorObject->append(kAtClusterTimeField, _options.atClusterTime->asTimestamp());
+    }
     _cursorObject.reset();
 
     _bodyBuilder.reset();

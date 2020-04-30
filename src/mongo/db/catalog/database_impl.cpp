@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
 
 #include "mongo/platform/basic.h"
 
@@ -144,7 +144,10 @@ void DatabaseImpl::init(OperationContext* const opCtx) const {
     Status status = validateDBName(_name);
 
     if (!status.isOK()) {
-        LOGV2_WARNING(20325, "tried to open invalid db: {name}", "name"_attr = _name);
+        LOGV2_WARNING(20325,
+                      "tried to open invalid db: {name}",
+                      "tried to open invalid db",
+                      "db"_attr = _name);
         uasserted(10028, status.toString());
     }
 
@@ -167,10 +170,10 @@ void DatabaseImpl::init(OperationContext* const opCtx) const {
     if (!reloadStatus.isOK()) {
         LOGV2_WARNING_OPTIONS(20326,
                               {logv2::LogTag::kStartupWarnings},
-                              "Unable to parse views: {reloadStatus}; remove any invalid views "
-                              "from the {viewsName} collection to restore server functionality.",
-                              "reloadStatus"_attr = redact(reloadStatus),
-                              "viewsName"_attr = _viewsName);
+                              "Unable to parse views; remove any invalid views "
+                              "from the collection to restore server functionality.",
+                              "error"_attr = redact(reloadStatus),
+                              "namespace"_attr = _viewsName);
     }
 }
 
@@ -184,15 +187,17 @@ void DatabaseImpl::clearTmpCollections(OperationContext* opCtx) const {
             if (!status.isOK()) {
                 LOGV2_WARNING(20327,
                               "could not drop temp collection '{collection_ns}': {status}",
-                              "collection_ns"_attr = collection->ns(),
-                              "status"_attr = redact(status));
+                              "could not drop temp collection",
+                              "namespace"_attr = collection->ns(),
+                              "error"_attr = redact(status));
             }
             wuow.commit();
         } catch (const WriteConflictException&) {
             LOGV2_WARNING(
                 20328,
                 "could not drop temp collection '{collection_ns}' due to WriteConflictException",
-                "collection_ns"_attr = collection->ns());
+                "could not drop temp collection due to WriteConflictException",
+                "namespace"_attr = collection->ns());
             opCtx->recoveryUnit()->abandonSnapshot();
         }
         return true;
@@ -304,8 +309,9 @@ void DatabaseImpl::getStats(OperationContext* opCtx, BSONObjBuilder* output, dou
             output->appendNumber("fsTotalSize", -1);
             LOGV2(20312,
                   "Failed to query filesystem disk stats (code: {ec_value}): {ec_message}",
-                  "ec_value"_attr = ec.value(),
-                  "ec_message"_attr = ec.message());
+                  "Failed to query filesystem disk stats",
+                  "errorCode"_attr = ec.value(),
+                  "errorMessage"_attr = ec.message());
         }
     }
 }
@@ -411,7 +417,9 @@ Status DatabaseImpl::dropCollectionEvenIfSystem(OperationContext* opCtx,
         LOGV2(20314,
               "dropCollection: {nss} ({uuid}) - storage engine will take ownership of drop-pending "
               "collection with optime {dropOpTime} and commit timestamp {commitTimestamp}",
-              "nss"_attr = nss,
+              "dropCollection: storage engine will take ownership of drop-pending "
+              "collection",
+              "namespace"_attr = nss,
               "uuid"_attr = uuid,
               "dropOpTime"_attr = dropOpTime,
               "commitTimestamp"_attr = commitTimestamp);
@@ -456,9 +464,10 @@ Status DatabaseImpl::dropCollectionEvenIfSystem(OperationContext* opCtx,
     LOGV2(20315,
           "dropCollection: {nss} ({uuid}) - renaming to drop-pending collection: {dpns} with drop "
           "optime {dropOpTime}",
-          "nss"_attr = nss,
+          "dropCollection: renaming to drop-pending collection",
+          "namespace"_attr = nss,
           "uuid"_attr = uuid,
-          "dpns"_attr = dpns,
+          "dropPendingName"_attr = dpns,
           "dropOpTime"_attr = dropOpTime);
     {
         Lock::CollectionLock collLk(opCtx, dpns, MODE_X);
@@ -490,7 +499,8 @@ Status DatabaseImpl::_finishDropCollection(OperationContext* opCtx,
     UUID uuid = collection->uuid();
     LOGV2(20318,
           "Finishing collection drop for {nss} ({uuid}).",
-          "nss"_attr = nss,
+          "Finishing collection drop",
+          "namespace"_attr = nss,
           "uuid"_attr = uuid);
 
     auto status = DurableCatalog::get(opCtx)->dropCollection(opCtx, collection->getCatalogId());
@@ -537,18 +547,21 @@ Status DatabaseImpl::renameCollection(OperationContext* opCtx,
 
         Collection* toColl =
             CollectionCatalog::get(opCtx).lookupCollectionByNamespace(opCtx, toNss);
-        invariant(
-            !toColl->getIndexCatalog()->haveAnyIndexesInProgress(),
-            str::stream() << "cannot perform operation: an index build is currently running for "
+        if (toColl) {
+            invariant(!toColl->getIndexCatalog()->haveAnyIndexesInProgress(),
+                      str::stream()
+                          << "cannot perform operation: an index build is currently running for "
                              "collection "
                           << toNss);
+        }
     }
 
     LOGV2(20319,
           "renameCollection: renaming collection {collToRename_uuid} from {fromNss} to {toNss}",
-          "collToRename_uuid"_attr = collToRename->uuid(),
-          "fromNss"_attr = fromNss,
-          "toNss"_attr = toNss);
+          "renameCollection: renaming collection",
+          "uuid"_attr = collToRename->uuid(),
+          "fromName"_attr = fromNss,
+          "toName"_attr = toNss);
 
     Top::get(opCtx->getServiceContext()).collectionDropped(fromNss);
 
@@ -662,8 +675,8 @@ Collection* DatabaseImpl::createCollection(OperationContext* opCtx,
         if (!canAcceptWrites) {
             LOGV2_ERROR_OPTIONS(20329,
                                 {logv2::UserAssertAfterLog(ErrorCodes::InvalidOptions)},
-                                "Attempted to create a new collection {nss} without a UUID",
-                                "nss"_attr = nss);
+                                "Attempted to create a new collection without a UUID",
+                                "namespace"_attr = nss);
         } else {
             optionsWithUUID.uuid.emplace(CollectionUUID::gen());
             generatedUUID = true;
@@ -696,9 +709,10 @@ Collection* DatabaseImpl::createCollection(OperationContext* opCtx,
     LOGV2(20320,
           "createCollection: {nss} with {generatedUUID_generated_provided} UUID: "
           "{optionsWithUUID_uuid_get} and options: {options}",
-          "nss"_attr = nss,
-          "generatedUUID_generated_provided"_attr = (generatedUUID ? "generated" : "provided"),
-          "optionsWithUUID_uuid_get"_attr = optionsWithUUID.uuid.get(),
+          "createCollection",
+          "namespace"_attr = nss,
+          "uuidDisposition"_attr = (generatedUUID ? "generated" : "provided"),
+          "uuid"_attr = optionsWithUUID.uuid.get(),
           "options"_attr = options.toBSON());
 
     // Create Collection object
@@ -826,7 +840,8 @@ void DatabaseImpl::checkForIdIndexesAndDropPendingCollections(OperationContext* 
             auto dropOpTime = fassert(40459, nss.getDropPendingNamespaceOpTime());
             LOGV2(20321,
                   "Found drop-pending namespace {nss} with drop optime {dropOpTime}",
-                  "nss"_attr = nss,
+                  "Found drop-pending namespace",
+                  "namespace"_attr = nss,
                   "dropOpTime"_attr = dropOpTime);
             repl::DropPendingCollectionReaper::get(opCtx)->addDropPendingNamespace(
                 opCtx, dropOpTime, nss);
@@ -844,12 +859,12 @@ void DatabaseImpl::checkForIdIndexesAndDropPendingCollections(OperationContext* 
 
         LOGV2_OPTIONS(20322,
                       {logv2::LogTag::kStartupWarnings},
-                      "WARNING: the collection '{nss}' lacks a unique index on _id. This index is "
+                      "WARNING: a collection lacks a unique index on _id. This index is "
                       "needed for replication to function properly",
-                      "nss"_attr = nss);
+                      "namespace"_attr = nss);
         LOGV2_OPTIONS(20323,
                       {logv2::LogTag::kStartupWarnings},
-                      "\t To fix this, you need to create a unique index on _id. See "
+                      "To fix this, you need to create a unique index on _id. See "
                       "http://dochub.mongodb.org/core/build-replica-set-indexes");
     }
 }
@@ -897,11 +912,11 @@ Status DatabaseImpl::userCreateNS(OperationContext* opCtx,
         // Save this to a variable to avoid reading the atomic variable multiple times.
         const auto currentFCV = serverGlobalParams.featureCompatibility.getVersion();
 
-        // If the feature compatibility version is not 4.4, and we are validating features as
-        // master, ban the use of new agg features introduced in 4.4 to prevent them from being
+        // If the feature compatibility version is not 4.6, and we are validating features as
+        // master, ban the use of new agg features introduced in 4.6 to prevent them from being
         // persisted in the catalog.
         if (serverGlobalParams.validateFeaturesAsMaster.load() &&
-            currentFCV != ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo44) {
+            currentFCV != ServerGlobalParams::FeatureCompatibility::Version::kFullyUpgradedTo46) {
             expCtx->maxFeatureCompatibilityVersion = currentFCV;
         }
 
@@ -909,8 +924,17 @@ Status DatabaseImpl::userCreateNS(OperationContext* opCtx,
         // validator to apply some additional checks.
         expCtx->isParsingCollectionValidator = true;
 
-        auto statusWithMatcher =
-            MatchExpressionParser::parse(collectionOptions.validator, std::move(expCtx));
+        // If the validation action is "warn" or the level is "moderate", then disallow any
+        // encryption keywords. This is to prevent any plaintext data from showing up in the logs.
+        auto allowedFeatures = MatchExpressionParser::kDefaultSpecialFeatures;
+        if (collectionOptions.validationAction == "warn" ||
+            collectionOptions.validationLevel == "moderate")
+            allowedFeatures &= ~MatchExpressionParser::AllowedFeatures::kEncryptKeywords;
+
+        auto statusWithMatcher = MatchExpressionParser::parse(collectionOptions.validator,
+                                                              std::move(expCtx),
+                                                              ExtensionsCallbackNoop(),
+                                                              allowedFeatures);
 
         // We check the status of the parse to see if there are any banned features, but we don't
         // actually need the result for now.

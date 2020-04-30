@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kASIO
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kASIO
 
 #include "mongo/platform/basic.h"
 
@@ -321,7 +321,7 @@ AsyncDBClient* NetworkInterfaceTL::RequestState::getClient(const ConnectionHandl
 }
 
 void NetworkInterfaceTL::CommandStateBase::setTimer() {
-    if (deadline == RemoteCommandRequest::kNoExpirationDate) {
+    if (deadline == kNoExpirationDate) {
         return;
     }
 
@@ -350,7 +350,12 @@ void NetworkInterfaceTL::CommandStateBase::setTimer() {
                                                   << ", deadline was " << deadline.toString()
                                                   << ", op was " << redact(requestOnAny.toString());
 
-        LOGV2_DEBUG(22595, 2, "", "message"_attr = message);
+        LOGV2_DEBUG(22595,
+                    2,
+                    "Request timed out",
+                    "requestId"_attr = requestOnAny.id,
+                    "deadline"_attr = deadline,
+                    "request"_attr = requestOnAny);
         fulfillFinalPromise(Status(ErrorCodes::NetworkInterfaceExceededTimeLimit, message));
     });
 }
@@ -437,10 +442,8 @@ Status NetworkInterfaceTL::startCommand(const TaskExecutor::CallbackHandle& cbHa
         return kNetworkInterfaceShutdownInProgress;
     }
 
-    LOGV2_DEBUG(22596,
-                logSeverityV1toV2(kDiagnosticLogLevel).toInt(),
-                "startCommand",
-                "request"_attr = redact(request.toString()));
+    LOGV2_DEBUG(
+        22596, kDiagnosticLogLevel, "startCommand", "request"_attr = redact(request.toString()));
 
     if (_metadataHook) {
         BSONObjBuilder newMetadata(std::move(request.metadata));
@@ -522,6 +525,7 @@ Status NetworkInterfaceTL::startCommand(const TaskExecutor::CallbackHandle& cbHa
                     2,
                     "Request finished with response",
                     "requestId"_attr = cmdState->requestOnAny.id,
+                    "isOK"_attr = rs.isOK(),
                     "response"_attr =
                         redact(rs.isOK() ? rs.data.toString() : rs.status.toString()));
         onFinish(std::move(rs));
@@ -699,7 +703,7 @@ void NetworkInterfaceTL::RequestManager::killOperationsForPendingRequests() {
                     "Sending remote _killOperations request to cancel command",
                     "operationKey"_attr = cmdState.lock()->operationKey,
                     "target"_attr = requestState->request->target,
-                    "request_id"_attr = requestState->request->id);
+                    "requestId"_attr = requestState->request->id);
 
         auto status = requestState->interface()->_killOperation(requestState);
         if (!status.isOK()) {
@@ -768,9 +772,9 @@ void NetworkInterfaceTL::RequestManager::trySend(
 
         LOGV2_DEBUG(4647200,
                     2,
-                    "Setup hedge request",
-                    "request_id"_attr = cmdStatePtr->requestOnAny.id,
-                    "request"_attr = redact(request.toString()),
+                    "Set maxTimeMS for request",
+                    "maxTime"_attr = Milliseconds(maxTimeMS),
+                    "requestId"_attr = cmdStatePtr->requestOnAny.id,
                     "target"_attr = cmdStatePtr->requestOnAny.target[idx]);
 
         if (cmdStatePtr->interface->_svcCtx) {
@@ -838,12 +842,8 @@ void NetworkInterfaceTL::RequestState::resolve(Future<RemoteCommandResponse> fut
         .getAsync([ this, anchor = shared_from_this() ](auto swr) noexcept {
             auto response = uassertStatusOK(std::move(swr));
             auto commandStatus = getStatusFromCommandResult(response.data);
-
-            if (!cmdState->finishLine.arriveStrongly()) {
-                return;
-            }
-
-            // Ignore maxTimeMS expiration errors for hedged reads
+            // Ignore maxTimeMS expiration errors for hedged reads without triggering the finish
+            // line.
             if (isHedge && commandStatus == ErrorCodes::MaxTimeMSExpired) {
                 LOGV2_DEBUG(4660701,
                             2,
@@ -851,15 +851,27 @@ void NetworkInterfaceTL::RequestState::resolve(Future<RemoteCommandResponse> fut
                             "requestId"_attr = request->id,
                             "target"_attr = request->target,
                             "status"_attr = commandStatus);
-            } else {
-                if (isHedge) {
-                    auto hm = HedgingMetrics::get(cmdState->interface->_svcCtx);
-                    invariant(hm);
-                    hm->incrementNumAdvantageouslyHedgedOperations();
-                }
-                fulfilledPromise = true;
-                cmdState->fulfillFinalPromise(std::move(response));
+                return;
             }
+
+            if (!cmdState->finishLine.arriveStrongly()) {
+                LOGV2_DEBUG(4754301,
+                            2,
+                            "Skipping the response because it was already received from other node",
+                            "requestId"_attr = request->id,
+                            "target"_attr = request->target,
+                            "status"_attr = commandStatus);
+
+                return;
+            }
+
+            if (isHedge) {
+                auto hm = HedgingMetrics::get(cmdState->interface->_svcCtx);
+                invariant(hm);
+                hm->incrementNumAdvantageouslyHedgedOperations();
+            }
+            fulfilledPromise = true;
+            cmdState->fulfillFinalPromise(std::move(response));
         });
 }
 
@@ -965,7 +977,7 @@ void NetworkInterfaceTL::ExhaustCommandState::continueExhaustRequest(
 
     // Reset the stopwatch to measure the correct duration for the folowing reply
     stopwatch.restart();
-    if (deadline != RemoteCommandRequest::kNoExpirationDate) {
+    if (deadline != kNoExpirationDate) {
         deadline = stopwatch.start() + requestOnAny.timeout;
     }
     setTimer();
@@ -986,10 +998,8 @@ Status NetworkInterfaceTL::startExhaustCommand(const TaskExecutor::CallbackHandl
         return {ErrorCodes::ShutdownInProgress, "NetworkInterface shutdown in progress"};
     }
 
-    LOGV2_DEBUG(23909,
-                logSeverityV1toV2(kDiagnosticLogLevel).toInt(),
-                "startCommand",
-                "request"_attr = redact(request.toString()));
+    LOGV2_DEBUG(
+        23909, kDiagnosticLogLevel, "startCommand", "request"_attr = redact(request.toString()));
 
     if (_metadataHook) {
         BSONObjBuilder newMetadata(std::move(request.metadata));

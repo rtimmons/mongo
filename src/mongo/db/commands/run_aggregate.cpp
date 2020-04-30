@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kCommand
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kCommand
 
 #include "mongo/platform/basic.h"
 
@@ -162,6 +162,7 @@ bool handleCursorCommand(OperationContext* opCtx,
 
     CursorResponseBuilder::Options options;
     options.isInitialResponse = true;
+    options.atClusterTime = repl::ReadConcernArgs::get(opCtx).getArgsAtClusterTime();
     CursorResponseBuilder responseBuilder(result, options);
 
     auto curOp = CurOp::get(opCtx);

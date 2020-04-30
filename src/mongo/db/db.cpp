@@ -64,6 +64,7 @@
 #include "mongo/db/clientcursor.h"
 #include "mongo/db/commands/feature_compatibility_version.h"
 #include "mongo/db/commands/feature_compatibility_version_gen.h"
+#include "mongo/db/commands/shutdown.h"
 #include "mongo/db/concurrency/d_concurrency.h"
 #include "mongo/db/concurrency/flow_control_ticketholder.h"
 #include "mongo/db/concurrency/lock_state.h"
@@ -208,10 +209,12 @@
 
 namespace mongo {
 
-using logger::LogComponent;
+using logv2::LogComponent;
 using std::endl;
 
 namespace {
+
+MONGO_FAIL_POINT_DEFINE(hangDuringQuiesceMode);
 
 const NamespaceString startupLogCollectionName("local.startup_log");
 
@@ -321,8 +324,7 @@ ExitCode _initAndListen(ServiceContext* serviceContext, int listenPort) {
     }
 
     if (kDebugBuild)
-        LOGV2_OPTIONS(
-            20533, {logComponentV1toV2(LogComponent::kControl)}, "DEBUG build (which is slower)");
+        LOGV2_OPTIONS(20533, {LogComponent::kControl}, "DEBUG build (which is slower)");
 
 #if defined(_WIN32)
     VersionInfoInterface::instance().logTargetMinOS();
@@ -684,7 +686,7 @@ ExitCode _initAndListen(ServiceContext* serviceContext, int listenPort) {
             LOGV2(20553,
                   "**          For more info see http://dochub.mongodb.org/core/ttlcollections");
         } else {
-            startTTLBackgroundJob(serviceContext);
+            startTTLMonitor(serviceContext);
         }
 
         if (replSettings.usingReplSets() || !gInternalValidateFeaturesAsMaster) {
@@ -706,11 +708,19 @@ ExitCode _initAndListen(ServiceContext* serviceContext, int listenPort) {
     // Only do this on storage engines supporting snapshot reads, which hold resources we wish to
     // release periodically in order to avoid storage cache pressure build up.
     if (storageEngine->supportsReadConcernSnapshot()) {
-        PeriodicThreadToAbortExpiredTransactions::get(serviceContext)->start();
-        // The inMemory engine is not yet used for replica or sharded transactions in production so
-        // it does not currently maintain snapshot history. It is live in testing, however.
-        if (!storageEngine->isEphemeral() || getTestCommandsEnabled()) {
-            PeriodicThreadToDecreaseSnapshotHistoryCachePressure::get(serviceContext)->start();
+        try {
+            PeriodicThreadToAbortExpiredTransactions::get(serviceContext)->start();
+            // The inMemory engine is not yet used for replica or sharded transactions in production
+            // so it does not currently maintain snapshot history. It is live in testing, however.
+            if (!storageEngine->isEphemeral() || getTestCommandsEnabled()) {
+                PeriodicThreadToDecreaseSnapshotHistoryCachePressure::get(serviceContext)->start();
+            }
+        } catch (ExceptionFor<ErrorCodes::PeriodicJobIsStopped>&) {
+            LOGV2_WARNING(4747501, "Not starting periodic jobs as shutdown is in progress");
+            // Shutdown has already started before initialization is complete. Wait for the
+            // shutdown task to complete and return.
+            MONGO_IDLE_THREAD_BLOCK;
+            return waitForShutdown();
         }
     }
 
@@ -1044,6 +1054,14 @@ void shutdownTask(const ShutdownTaskArgs& shutdownArgs) {
     auto const client = Client::getCurrent();
     auto const serviceContext = client->getServiceContext();
 
+    Milliseconds shutdownTimeout;
+    if (shutdownArgs.quiesceTime) {
+        shutdownTimeout = *shutdownArgs.quiesceTime;
+    } else {
+        invariant(!shutdownArgs.isUserInitiated);
+        shutdownTimeout = Milliseconds(repl::shutdownTimeoutMillisForSignaledShutdown.load());
+    }
+
     // If we don't have shutdownArgs, we're shutting down from a signal, or other clean shutdown
     // path.
     //
@@ -1058,28 +1076,32 @@ void shutdownTask(const ShutdownTaskArgs& shutdownArgs) {
             opCtx = uniqueOpCtx.get();
         }
 
-        // If this is a single node replica set, then we don't have to wait
-        // for any secondaries. Ignore stepdown.
-        if (repl::ReplicationCoordinator::get(serviceContext)->getConfig().getNumMembers() != 1) {
-            try {
-                // For faster tests, we allow a short wait time with setParameter.
-                auto waitTime = repl::waitForStepDownOnNonCommandShutdown.load()
-                    ? Milliseconds(Seconds(15))
-                    : Milliseconds(100);
-                replCoord->stepDown(opCtx, false /* force */, waitTime, Seconds(120));
-            } catch (const ExceptionFor<ErrorCodes::NotMaster>&) {
-                // ignore not master errors
-            } catch (const DBException& e) {
-                LOGV2_WARNING(20561,
-                              "Error stepping down in non-command initiated shutdown path: {error}",
-                              "Error stepping down in non-command initiated shutdown path",
-                              "error"_attr = e);
-            }
+        const auto forceShutdown = true;
+        auto stepDownStartTime = opCtx->getServiceContext()->getPreciseClockSource()->now();
+        // stepDown should never return an error during force shutdown.
+        invariantStatusOK(stepDownForShutdown(opCtx, shutdownTimeout, forceShutdown));
+        shutdownTimeout = std::max(
+            Milliseconds::zero(),
+            shutdownTimeout -
+                (opCtx->getServiceContext()->getPreciseClockSource()->now() - stepDownStartTime));
+    }
 
-            // Even if the replCoordinator failed to step down, ensure we still shut down the
-            // TransactionCoordinatorService (see SERVER-45009)
-            TransactionCoordinatorService::get(serviceContext)->onStepDown();
+    if (auto replCoord = repl::ReplicationCoordinator::get(serviceContext);
+        replCoord && replCoord->enterQuiesceModeIfSecondary()) {
+        ServiceContext::UniqueOperationContext uniqueOpCtx;
+        OperationContext* opCtx = client->getOperationContext();
+        if (!opCtx) {
+            uniqueOpCtx = client->makeOperationContext();
+            opCtx = uniqueOpCtx.get();
         }
+        if (MONGO_unlikely(hangDuringQuiesceMode.shouldFail())) {
+            LOGV2(4695101, "hangDuringQuiesceMode failpoint enabled");
+            hangDuringQuiesceMode.pauseWhileSet(opCtx);
+        }
+
+        LOGV2(4695102, "Entering quiesce mode for shutdown", "quiesceTime"_attr = shutdownTimeout);
+        opCtx->sleepFor(shutdownTimeout);
+        LOGV2(4695103, "Exiting quiesce mode for shutdown");
     }
 
     MirrorMaestro::shutdown(serviceContext);
@@ -1098,9 +1120,8 @@ void shutdownTask(const ShutdownTaskArgs& shutdownArgs) {
 
     // Shutdown the TransportLayer so that new connections aren't accepted
     if (auto tl = serviceContext->getTransportLayer()) {
-        LOGV2_OPTIONS(20562,
-                      {logComponentV1toV2(LogComponent::kNetwork)},
-                      "Shutdown: going to close listening sockets");
+        LOGV2_OPTIONS(
+            20562, {LogComponent::kNetwork}, "Shutdown: going to close listening sockets");
         tl->shutdown();
     }
 
@@ -1207,7 +1228,7 @@ void shutdownTask(const ShutdownTaskArgs& shutdownArgs) {
     if (auto sep = serviceContext->getServiceEntryPoint()) {
         if (!sep->shutdown(Seconds(10))) {
             LOGV2_OPTIONS(20563,
-                          {logComponentV1toV2(LogComponent::kNetwork)},
+                          {LogComponent::kNetwork},
                           "Service entry point did not shutdown within the time limit");
         }
     }
@@ -1217,7 +1238,7 @@ void shutdownTask(const ShutdownTaskArgs& shutdownArgs) {
         Status status = svcExec->shutdown(Seconds(10));
         if (!status.isOK()) {
             LOGV2_OPTIONS(20564,
-                          {logComponentV1toV2(LogComponent::kNetwork)},
+                          {LogComponent::kNetwork},
                           "Service executor did not shutdown within the time limit",
                           "error"_attr = status);
         }
@@ -1229,6 +1250,7 @@ void shutdownTask(const ShutdownTaskArgs& shutdownArgs) {
     stopMongoDFTDC();
 
     HealthLog::get(serviceContext).shutdown();
+    shutdownTTLMonitor(serviceContext);
 
     // We should always be able to acquire the global lock at shutdown.
     //
@@ -1248,7 +1270,7 @@ void shutdownTask(const ShutdownTaskArgs& shutdownArgs) {
     // the memory and makes leak sanitizer happy.
     ScriptEngine::dropScopeCache();
 
-    LOGV2_OPTIONS(20565, {logComponentV1toV2(LogComponent::kControl)}, "Now exiting");
+    LOGV2_OPTIONS(20565, {LogComponent::kControl}, "Now exiting");
 
     audit::logShutdown(client);
 

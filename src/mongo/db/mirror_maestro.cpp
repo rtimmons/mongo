@@ -27,7 +27,6 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kCommand
 #define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kCommand
 
 #include "mongo/platform/basic.h"
@@ -322,7 +321,8 @@ void MirrorMaestroImpl::tryMirror(std::shared_ptr<CommandInvocation> invocation)
     auto clientExecutor = ClientOutOfLineExecutor::get(Client::getCurrent());
     auto clientExecutorHandle = clientExecutor->getHandle();
 
-    // TODO SERVER-46619 delegates collection to the client's baton
+    // NOTE: before using Client's out-of-line executor outside of MirrorMaestro, we must first
+    // move the consumption (i.e., `consumeAllTasks`) to the baton.
     clientExecutor->consumeAllTasks();
 
     // There is the potential to actually mirror requests, so schedule the _mirror() invocation

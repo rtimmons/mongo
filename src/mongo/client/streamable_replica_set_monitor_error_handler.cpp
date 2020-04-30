@@ -26,7 +26,7 @@
  *    exception statement from all source files in the program, then also delete
  *    it in the license file.
  */
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kNetwork
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kNetwork
 #include "mongo/client/streamable_replica_set_monitor_error_handler.h"
 
 #include "mongo/logv2/log.h"
@@ -46,7 +46,7 @@ SdamErrorHandler::ErrorActions SdamErrorHandler::computeErrorActions(const HostA
 
         LOGV2(4712102,
               "Host failed in replica set",
-              "setName"_attr = _setName,
+              "replicaSet"_attr = _setName,
               "host"_attr = host,
               "error"_attr = status,
               "action"_attr = result);

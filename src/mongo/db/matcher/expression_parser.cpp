@@ -394,7 +394,7 @@ StatusWithMatchExpression parseJSONSchema(StringData name,
     }
 
     return JSONSchemaParser::parse(
-        expCtx, elem.Obj(), internalQueryIgnoreUnknownJSONSchemaKeywords.load());
+        expCtx, elem.Obj(), allowedFeatures, internalQueryIgnoreUnknownJSONSchemaKeywords.load());
 }
 
 template <class T>
@@ -1739,6 +1739,15 @@ StatusWithMatchExpression MatchExpressionParser::parse(
     } catch (const DBException& ex) {
         return {ex.toStatus()};
     }
+}
+
+std::unique_ptr<MatchExpression> MatchExpressionParser::parseAndNormalize(
+    const BSONObj& obj,
+    const boost::intrusive_ptr<ExpressionContext>& expCtx,
+    const ExtensionsCallback& extensionsCallback,
+    AllowedFeatureSet allowedFeatures) {
+    auto parsedTree = uassertStatusOK(parse(obj, expCtx, extensionsCallback, allowedFeatures));
+    return MatchExpression::normalize(std::move(parsedTree));
 }
 
 namespace {

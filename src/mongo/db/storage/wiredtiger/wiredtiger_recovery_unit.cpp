@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
 
 #include "mongo/platform/basic.h"
 
@@ -433,7 +433,7 @@ Status WiredTigerRecoveryUnit::obtainMajorityCommittedSnapshot() {
 boost::optional<Timestamp> WiredTigerRecoveryUnit::getPointInTimeReadTimestamp() {
     // After a ReadSource has been set on this RecoveryUnit, callers expect that this method returns
     // the read timestamp that will be used for current or future transactions. Because callers use
-    // this timestamp to inform visiblity of operations, it is therefore necessary to open a
+    // this timestamp to inform visibility of operations, it is therefore necessary to open a
     // transaction to establish a read timestamp, but only for ReadSources that are expected to have
     // read timestamps.
     switch (_timestampReadSource) {

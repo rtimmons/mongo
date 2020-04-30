@@ -439,6 +439,18 @@ class _StepdownThread(threading.Thread):  # pylint: disable=too-many-instance-at
         # Wait for Mongos to retarget the primary for each shard and the config server.
         self._do_wait_for_mongos_retarget()
 
+        # Check that fixtures are still running
+        for rs_fixture in self._rs_fixtures:
+            if not rs_fixture.is_running():
+                raise errors.ServerFailure(
+                    "ReplicaSetFixture with pids {} expected to be running in"
+                    " ContinuousStepdown, but wasn't.".format(rs_fixture.pids()))
+        for mongos_fixture in self._mongos_fixtures:
+            if not mongos_fixture.is_running():
+                raise errors.ServerFailure("MongoSFixture with pids {} expected to be running in"
+                                           " ContinuousStepdown, but wasn't.".format(
+                                               mongos_fixture.pids()))
+
     def resume(self):
         """Resume the thread."""
         self.__lifecycle.mark_test_started()
@@ -551,6 +563,10 @@ class _StepdownThread(threading.Thread):  # pylint: disable=too-many-instance-at
                 self.logger.info("Failed to step up the secondary on port %d of replica set '%s'.",
                                  chosen.port, rs_fixture.replset_name)
                 secondaries.remove(chosen)
+            except pymongo.errors.AutoReconnect:
+                # It is possible for a replSetStepUp to fail with AutoReconnect if that node goes
+                # into Rollback (which causes it to close any open connections).
+                pass
 
         if self._terminate:
             self.logger.info("Waiting for the old primary on port %d of replica set '%s' to exit.",

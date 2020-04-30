@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kQuery
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kQuery
 
 #include "mongo/platform/basic.h"
 
@@ -613,6 +613,7 @@ Update CommonMongodProcessInterface::buildUpdateOp(
         return wcb;
     }());
     updateOp.setRuntimeConstants(expCtx->getRuntimeConstants());
+    updateOp.setLet(expCtx->variables.serializeLetParameters(expCtx->variablesParseState));
     return updateOp;
 }
 

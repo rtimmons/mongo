@@ -1,7 +1,5 @@
 /**
  * Tests setFeatureCompatibilityVersion.
- *
- * @tags: [fix_for_fcv_46]
  */
 
 // Checking UUID consistency involves talking to a shard node, which in this test is shutdown
@@ -42,7 +40,7 @@ checkFCV(adminDB, latestFCV);
 jsTestLog("EXPECTED TO FAIL: featureCompatibilityVersion cannot be set to an invalid value");
 assert.commandFailed(adminDB.runCommand({setFeatureCompatibilityVersion: 5}));
 assert.commandFailed(adminDB.runCommand({setFeatureCompatibilityVersion: "3.2"}));
-assert.commandFailed(adminDB.runCommand({setFeatureCompatibilityVersion: "4.6"}));
+assert.commandFailed(adminDB.runCommand({setFeatureCompatibilityVersion: "4.8"}));
 assert.commandFailed(adminDB.runCommand({setFeatureCompatibilityVersion: "3.4"}));
 
 jsTestLog("EXPECTED TO FAIL: setFeatureCompatibilityVersion rejects unknown fields.");
@@ -291,7 +289,7 @@ checkFCV(shardPrimaryAdminDB, latestFCV);
 jsTestLog("EXPECTED TO FAIL: featureCompatibilityVersion cannot be set to invalid value on mongos");
 assert.commandFailed(mongosAdminDB.runCommand({setFeatureCompatibilityVersion: 5}));
 assert.commandFailed(mongosAdminDB.runCommand({setFeatureCompatibilityVersion: "3.2"}));
-assert.commandFailed(mongosAdminDB.runCommand({setFeatureCompatibilityVersion: "4.6"}));
+assert.commandFailed(mongosAdminDB.runCommand({setFeatureCompatibilityVersion: "4.8"}));
 
 jsTestLog("EXPECTED TO FAIL: setFeatureCompatibilityVersion rejects unknown fields on mongos");
 assert.commandFailed(

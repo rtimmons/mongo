@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kCommand
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kCommand
 
 #include "mongo/platform/basic.h"
 
@@ -286,6 +286,7 @@ void convertToCapped(OperationContext* opCtx, const NamespaceString& ns, long lo
     RenameCollectionOptions options;
     options.dropTarget = true;
     options.stayTemp = false;
+    options.skipSourceCollectionShardedCheck = true;
     uassertStatusOK(renameCollection(opCtx, tempNs, ns, options));
 }
 
