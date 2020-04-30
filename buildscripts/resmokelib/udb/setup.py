@@ -63,8 +63,9 @@ class System:
 #         if self.system.path_exists
 #
 
+
 class CLI:
-    def __init__(self, , system: System):
+    def __init__(self, system: System):
         self.system = system
 
     def main(self, argv: List[str]) -> int:
@@ -73,6 +74,7 @@ class CLI:
         if not self.system.im_on_vpn():
             raise SetupException("Must be on the MongoDB VPN to access udb license server.")
         return self.system.run(argv)
+
 
 if __name__ == "__main__":
     mainsys = System(os.getcwd(), os.environ)
