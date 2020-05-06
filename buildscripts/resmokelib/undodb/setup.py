@@ -1,5 +1,5 @@
 """
-Deals with installing and setting up udb.
+Deals with installing and setting up undodb.
 """
 import copy
 import os
@@ -35,7 +35,7 @@ class System:
         return True  # TODO
 
     def has_on_path(self) -> bool:
-        # look for `udb` executable
+        # look for `undodb` executable
         return True
 
     def run(self, argv: List[str]) -> int:
@@ -70,9 +70,9 @@ class CLI:
 
     def main(self, argv: List[str]) -> int:
         if not self.system.has_on_path():
-            raise SetupException(f"Must setup udb first")
+            raise SetupException(f"Must setup undodb first")
         if not self.system.im_on_vpn():
-            raise SetupException("Must be on the MongoDB VPN to access udb license server.")
+            raise SetupException("Must be on the MongoDB VPN to access undodb license server.")
         return self.system.run(argv)
 
 
