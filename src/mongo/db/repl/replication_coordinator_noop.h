@@ -53,6 +53,8 @@ public:
 
     bool enterQuiesceModeIfSecondary() final;
 
+    bool inQuiesceMode() const final;
+
     void shutdown(OperationContext* opCtx) final;
 
     void markAsCleanShutdownIfPossible(OperationContext* opCtx) final;
@@ -278,7 +280,7 @@ public:
         const SplitHorizon::Parameters& horizonParams,
         boost::optional<TopologyVersion> clientTopologyVersion) final;
 
-    OpTime getLatestWriteOpTime(OperationContext* opCtx) const override;
+    StatusWith<OpTime> getLatestWriteOpTime(OperationContext* opCtx) const noexcept override;
 
     HostAndPort getCurrentPrimaryHostAndPort() const override;
 

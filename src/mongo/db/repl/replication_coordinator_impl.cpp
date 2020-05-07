@@ -930,6 +930,11 @@ bool ReplicationCoordinatorImpl::enterQuiesceModeIfSecondary() {
     return true;
 }
 
+bool ReplicationCoordinatorImpl::inQuiesceMode() const {
+    stdx::lock_guard lk(_mutex);
+    return _inQuiesceMode;
+}
+
 void ReplicationCoordinatorImpl::shutdown(OperationContext* opCtx) {
     // Shutdown must:
     // * prevent new threads from blocking in awaitReplication
@@ -1970,12 +1975,12 @@ ReplicationCoordinator::StatusAndDuration ReplicationCoordinatorImpl::awaitRepli
         stdx::lock_guard lock(_mutex);
         LOGV2(21339,
               "Replication failed for write concern: {writeConcern}, waiting for optime: {opTime}, "
-              "opID: {opID}, all_durable: {all_durable}, progress: {progress}",
+              "opID: {opID}, all_durable: {allDurable}, progress: {progress}",
               "Replication failed for write concern",
               "writeConcern"_attr = writeConcern.toBSON(),
               "opTime"_attr = opTime,
               "opID"_attr = opCtx->getOpID(),
-              "all_durable"_attr = _storage->getAllDurableTimestamp(_service),
+              "allDurable"_attr = _storage->getAllDurableTimestamp(_service),
               "progress"_attr = _getReplicationProgress(lock));
     }
     return {std::move(status), duration_cast<Milliseconds>(timer.elapsed())};
@@ -2257,9 +2262,9 @@ std::shared_ptr<const IsMasterResponse> ReplicationCoordinatorImpl::awaitIsMaste
     // If clientTopologyVersion is not none, deadline must also be not none.
     invariant(deadline);
     const TopologyVersion topologyVersion = _topCoord->getTopologyVersion();
-    lk.unlock();
 
     IsMasterMetrics::get(opCtx)->incrementNumAwaitingTopologyChanges();
+    lk.unlock();
 
     if (MONGO_unlikely(waitForIsMasterResponse.shouldFail())) {
         // Used in tests that wait for this failpoint to be entered before triggering a topology
@@ -2300,18 +2305,25 @@ std::shared_ptr<const IsMasterResponse> ReplicationCoordinatorImpl::awaitIsMaste
     return statusWithIsMaster.getValue();
 }
 
-OpTime ReplicationCoordinatorImpl::getLatestWriteOpTime(OperationContext* opCtx) const {
+StatusWith<OpTime> ReplicationCoordinatorImpl::getLatestWriteOpTime(OperationContext* opCtx) const
+    noexcept try {
     ShouldNotConflictWithSecondaryBatchApplicationBlock noPBWMBlock(opCtx->lockState());
     Lock::GlobalLock globalLock(opCtx, MODE_IS);
     // Check if the node is primary after acquiring global IS lock.
-    uassert(ErrorCodes::NotMaster,
-            "Not primary so can't get latest write optime",
-            canAcceptNonLocalWrites());
+    if (!canAcceptNonLocalWrites()) {
+        return {ErrorCodes::NotMaster, "Not primary so can't get latest write optime"};
+    }
     auto oplog = LocalOplogInfo::get(opCtx)->getCollection();
-    uassert(ErrorCodes::NamespaceNotFound, "oplog collection does not exist.", oplog);
-    auto latestOplogTimestamp =
-        uassertStatusOK(oplog->getRecordStore()->getLatestOplogTimestamp(opCtx));
-    return OpTime(latestOplogTimestamp, getTerm());
+    if (!oplog) {
+        return {ErrorCodes::NamespaceNotFound, "oplog collection does not exist"};
+    }
+    auto latestOplogTimestampSW = oplog->getRecordStore()->getLatestOplogTimestamp(opCtx);
+    if (!latestOplogTimestampSW.isOK()) {
+        return latestOplogTimestampSW.getStatus();
+    }
+    return OpTime(latestOplogTimestampSW.getValue(), getTerm());
+} catch (const DBException& e) {
+    return e.toStatus();
 }
 
 HostAndPort ReplicationCoordinatorImpl::getCurrentPrimaryHostAndPort() const {
@@ -3574,7 +3586,7 @@ Status ReplicationCoordinatorImpl::awaitConfigCommitment(OperationContext* opCtx
     lk.unlock();
 
     // Wait for the config document to be replicated to a majority of nodes in the current config.
-    LOGV2(4508702, "Waiting for the current config to propagate to a majority of nodes.");
+    LOGV2(4508702, "Waiting for the current config to propagate to a majority of nodes");
     StatusAndDuration configAwaitStatus =
         awaitReplication(opCtx, fakeOpTime, _getConfigReplicationWriteConcern());
 
@@ -3599,7 +3611,7 @@ Status ReplicationCoordinatorImpl::awaitConfigCommitment(OperationContext* opCtx
     // current config.
     LOGV2(51815,
           "Waiting for the last committed optime in the previous config "
-          "to be committed in the current config.",
+          "to be committed in the current config",
           "configOplogCommitmentOpTime"_attr = configOplogCommitmentOpTime);
     StatusAndDuration oplogAwaitStatus =
         awaitReplication(opCtx, configOplogCommitmentOpTime, oplogWriteConcern);
@@ -3729,7 +3741,7 @@ Status ReplicationCoordinatorImpl::processReplSetInitiate(OperationContext* opCt
     lk.unlock();
 
     ReplSetConfig newConfig;
-    Status status = newConfig.initializeForInitiate(configObj);
+    Status status = newConfig.initializeForInitiate(configObj, OID::gen());
     if (!status.isOK()) {
         LOGV2_ERROR(21423,
                     "replSet initiate got {error} while parsing {config}",

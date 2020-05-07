@@ -188,36 +188,6 @@ public:
     };
 
     /**
-     * RAII-style class required for checkpoint activity. Instances should be obtained via
-     * getCheckpointLock() calls.
-     *
-     * Operations taking a checkpoint should create a CheckpointLock first. Also used when opening
-     * several checkpoint cursors to guarantee that all cursors are against the same checkpoint.
-     *
-     * This interface is placed in the StorageEngine in order to be accessible externally and
-     * internally to the storage layer. Each storage engine chooses how to implement it.
-     */
-    class CheckpointLock {
-        CheckpointLock(const CheckpointLock&) = delete;
-        CheckpointLock& operator=(const CheckpointLock&) = delete;
-
-        // We should never call the move constructor of the base class. We should not create base
-        // CheckpointLock instances, so any CheckpointLock type will actually be an instance of a
-        // derived class. At that point, moving the CheckpointLock type would call this constructor
-        // and skip the derived class' move constructor, likely leading to subtle bugs.
-        //
-        // Always using CheckpointLock pointer types will obviate needing a move constructor in
-        // either base or derived classes.
-        CheckpointLock(CheckpointLock&&) = delete;
-
-    public:
-        virtual ~CheckpointLock() = default;
-
-    protected:
-        CheckpointLock() = default;
-    };
-
-    /**
      * The destructor should only be called if we are tearing down but not exiting the process.
      */
     virtual ~StorageEngine() {}
@@ -455,11 +425,6 @@ public:
     virtual void clearDropPendingState() = 0;
 
     /**
-     * Returns true if the storage engine supports two phase index builds.
-     */
-    virtual bool supportsTwoPhaseIndexBuild() const = 0;
-
-    /**
      * Recovers the storage engine state to the last stable timestamp. "Stable" in this case
      * refers to a timestamp that is guaranteed to never be rolled back. The stable timestamp
      * used should be one provided by StorageEngine::setStableTimestamp().
@@ -630,20 +595,6 @@ public:
     virtual const KVEngine* getEngine() const = 0;
     virtual DurableCatalog* getCatalog() = 0;
     virtual const DurableCatalog* getCatalog() const = 0;
-
-    /**
-     * Returns a CheckpointLock RAII instance that holds the checkpoint resource mutex.
-     *
-     * All operations taking a checkpoint should use this CheckpointLock. Also applicable for
-     * opening several checkpoint cursors to ensure the same checkpoint is targeted.
-     */
-    virtual std::unique_ptr<CheckpointLock> getCheckpointLock(OperationContext* opCtx) = 0;
-
-    virtual void addIndividuallyCheckpointedIndexToList(const std::string& ident) = 0;
-
-    virtual void clearIndividuallyCheckpointedIndexesList() = 0;
-
-    virtual bool isInIndividuallyCheckpointedIndexesList(const std::string& ident) const = 0;
 };
 
 }  // namespace mongo

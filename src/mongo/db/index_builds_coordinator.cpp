@@ -65,8 +65,6 @@
 
 namespace mongo {
 
-using namespace indexbuildentryhelpers;
-
 MONGO_FAIL_POINT_DEFINE(hangAfterIndexBuildFirstDrain);
 MONGO_FAIL_POINT_DEFINE(hangAfterIndexBuildSecondDrain);
 MONGO_FAIL_POINT_DEFINE(hangAfterIndexBuildDumpsInsertsFromBulk);
@@ -163,31 +161,62 @@ bool shouldSkipIndexBuildStateTransitionCheck(OperationContext* opCtx,
 }
 
 /**
+ * Removes the index build from the config.system.indexBuilds collection after the primary has
+ * written the commitIndexBuild or abortIndexBuild oplog entry.
+ */
+void removeIndexBuildEntryAfterCommitOrAbort(OperationContext* opCtx,
+                                             const NamespaceStringOrUUID& dbAndUUID,
+                                             const ReplIndexBuildState& replState) {
+    if (IndexBuildProtocol::kSinglePhase == replState.protocol) {
+        return;
+    }
+
+    auto replCoord = repl::ReplicationCoordinator::get(opCtx);
+    if (!replCoord->canAcceptWritesFor(opCtx, dbAndUUID)) {
+        return;
+    }
+
+    auto status = indexbuildentryhelpers::removeIndexBuildEntry(opCtx, replState.buildUUID);
+
+    // If we fail to remove the document from config.system.indexBuilds, it is because the document
+    // or collection is missing. In any case, we do not need to fail the commit or abort operation.
+    // TODO(SERVER-47323): Do not ignore removeIndexBuildEntry() errors. Convert to fatal assertion.
+    if (!status.isOK()) {
+        LOGV2(4763501,
+              "Unable to remove index build from system collection. Ignoring error",
+              "buildUUID"_attr = replState.buildUUID,
+              "collectionUUID"_attr = replState.collectionUUID,
+              "status"_attr = status);
+    }
+}
+
+
+/**
  * Replicates a commitIndexBuild oplog entry for two-phase builds, which signals downstream
  * secondary nodes to commit the index build.
  */
 void onCommitIndexBuild(OperationContext* opCtx,
                         const NamespaceString& nss,
-                        ReplIndexBuildState& replState) {
-    const auto& buildUUID = replState.buildUUID;
+                        std::shared_ptr<ReplIndexBuildState> replState) {
+    const auto& buildUUID = replState->buildUUID;
 
-    auto skipCheck = shouldSkipIndexBuildStateTransitionCheck(opCtx, replState.protocol);
-    {
-        stdx::unique_lock<Latch> lk(replState.mutex);
-        replState.indexBuildState.setState(IndexBuildState::kCommitted, skipCheck);
-    }
-    if (IndexBuildProtocol::kSinglePhase == replState.protocol) {
+    auto skipCheck = shouldSkipIndexBuildStateTransitionCheck(opCtx, replState->protocol);
+    opCtx->recoveryUnit()->onCommit([replState, skipCheck](boost::optional<Timestamp> commitTime) {
+        stdx::unique_lock<Latch> lk(replState->mutex);
+        replState->indexBuildState.setState(IndexBuildState::kCommitted, skipCheck);
+    });
+    if (IndexBuildProtocol::kSinglePhase == replState->protocol) {
         return;
     }
 
-    invariant(IndexBuildProtocol::kTwoPhase == replState.protocol,
+    invariant(IndexBuildProtocol::kTwoPhase == replState->protocol,
               str::stream() << "onCommitIndexBuild: " << buildUUID);
     invariant(opCtx->lockState()->isWriteLocked(),
               str::stream() << "onCommitIndexBuild: " << buildUUID);
 
     auto opObserver = opCtx->getServiceContext()->getOpObserver();
-    const auto& collUUID = replState.collectionUUID;
-    const auto& indexSpecs = replState.indexSpecs;
+    const auto& collUUID = replState->collectionUUID;
+    const auto& indexSpecs = replState->indexSpecs;
     auto fromMigrate = false;
 
     // Since two phase index builds are allowed to survive replication state transitions, we should
@@ -328,11 +357,6 @@ IndexBuildsCoordinator::~IndexBuildsCoordinator() {
     invariant(_allIndexBuilds.empty());
 }
 
-bool IndexBuildsCoordinator::supportsTwoPhaseIndexBuild() {
-    auto storageEngine = getGlobalServiceContext()->getStorageEngine();
-    return storageEngine->supportsTwoPhaseIndexBuild();
-}
-
 std::vector<std::string> IndexBuildsCoordinator::extractIndexNames(
     const std::vector<BSONObj>& specs) {
     std::vector<std::string> indexNames;
@@ -470,6 +494,7 @@ Status IndexBuildsCoordinator::_startIndexBuildForRecovery(OperationContext* opC
         }
 
         IndexBuildsManager::SetupOptions options;
+        options.protocol = protocol;
         status = _indexBuildsManager.setUpIndexBuild(
             opCtx, collection, specs, buildUUID, MultiIndexBlock::kNoopOnInitFn, options);
         if (!status.isOK()) {
@@ -1031,6 +1056,7 @@ void IndexBuildsCoordinator::_completeAbort(OperationContext* opCtx,
                                             Status reason) {
     auto coll =
         CollectionCatalog::get(opCtx).lookupCollectionByUUID(opCtx, replState->collectionUUID);
+    const NamespaceStringOrUUID dbAndUUID(replState->dbName, replState->collectionUUID);
     auto nss = coll->ns();
     auto replCoord = repl::ReplicationCoordinator::get(opCtx);
     switch (signalAction) {
@@ -1047,6 +1073,7 @@ void IndexBuildsCoordinator::_completeAbort(OperationContext* opCtx,
                                     << (IndexBuildProtocol::kSinglePhase == replState->protocol));
             auto onCleanUpFn = [&] { onAbortIndexBuild(opCtx, coll->ns(), *replState, reason); };
             _indexBuildsManager.abortIndexBuild(opCtx, coll, replState->buildUUID, onCleanUpFn);
+            removeIndexBuildEntryAfterCommitOrAbort(opCtx, dbAndUUID, *replState);
             break;
         }
         // Deletes the index from the durable catalog.
@@ -1169,7 +1196,7 @@ void IndexBuildsCoordinator::onStepUp(OperationContext* opCtx) {
 
     // This would create an empty table even for FCV 4.2 to handle case where a primary node started
     // with FCV 4.2, and then upgraded FCV 4.4.
-    ensureIndexBuildEntriesNamespaceExists(opCtx);
+    indexbuildentryhelpers::ensureIndexBuildEntriesNamespaceExists(opCtx);
 
     auto indexBuilds = _getIndexBuilds();
     auto onIndexBuild = [this, opCtx](std::shared_ptr<ReplIndexBuildState> replState) {
@@ -1179,7 +1206,11 @@ void IndexBuildsCoordinator::onStepUp(OperationContext* opCtx) {
 
         if (!_signalIfCommitQuorumNotEnabled(opCtx, replState)) {
             // This reads from system.indexBuilds collection to see if commit quorum got satisfied.
-            _signalIfCommitQuorumIsSatisfied(opCtx, replState);
+            try {
+                _signalIfCommitQuorumIsSatisfied(opCtx, replState);
+            } catch (DBException& ex) {
+                fassert(31440, ex.toStatus());
+            }
         }
     };
     forEachIndexBuild(indexBuilds, "IndexBuildsCoordinator::onStepUp - "_sd, onIndexBuild);
@@ -1680,7 +1711,7 @@ IndexBuildsCoordinator::PostSetupAction IndexBuildsCoordinator::_setUpIndexBuild
                                             replState->collectionUUID,
                                             indexBuildOptions.commitQuorum.get(),
                                             replState->indexNames);
-            uassertStatusOK(addIndexBuildEntry(opCtx, indexBuildEntry));
+            uassertStatusOK(indexbuildentryhelpers::addIndexBuildEntry(opCtx, indexBuildEntry));
 
             opCtx->getServiceContext()->getOpObserver()->onStartIndexBuild(
                 opCtx,
@@ -2256,7 +2287,7 @@ IndexBuildsCoordinator::CommitResult IndexBuildsCoordinator::_insertKeysFromSide
 
     // If two phase index builds is enabled, index build will be coordinated using
     // startIndexBuild and commitIndexBuild oplog entries.
-    auto onCommitFn = [&] { onCommitIndexBuild(opCtx, collection->ns(), *replState); };
+    auto onCommitFn = [&] { onCommitIndexBuild(opCtx, collection->ns(), replState); };
 
     auto onCreateEachFn = [&](const BSONObj& spec) {
         if (IndexBuildProtocol::kTwoPhase == replState->protocol) {
@@ -2288,6 +2319,7 @@ IndexBuildsCoordinator::CommitResult IndexBuildsCoordinator::_insertKeysFromSide
     TimestampBlock tsBlock(opCtx, commitIndexBuildTimestamp);
     uassertStatusOK(_indexBuildsManager.commitIndexBuild(
         opCtx, collection, collection->ns(), replState->buildUUID, onCreateEachFn, onCommitFn));
+    removeIndexBuildEntryAfterCommitOrAbort(opCtx, dbAndUUID, *replState);
     replState->stats.numIndexesAfter = getNumIndexesTotal(opCtx, collection);
     LOGV2(20663,
           "Index build completed successfully",

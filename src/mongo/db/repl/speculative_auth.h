@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2018-present MongoDB, Inc.
+ *    Copyright (C) 2020-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -29,17 +29,16 @@
 
 #pragma once
 
+#include "mongo/bson/bsonobj.h"
+#include "mongo/bson/bsonobjbuilder.h"
+#include "mongo/db/operation_context.h"
+
 namespace mongo {
 
-/*
- *  If "myMap" contains "key", returns "myMap[key]".  Otherwise, returns "defaultValue."
+/**
+ * Check an isMaster sent to mongod in ReplSet mode or mongos for "speculativeAuthenticate".
+ * If present, dispatch to saslStart or authenticate commands as appropriate.
  */
-template <typename M, typename K, typename V = typename M::mapped_type>
-V mapFindWithDefault(const M& myMap, const K& key, const V& defaultValue = V()) {
-    typename M::const_iterator it = myMap.find(key);
-    if (it == myMap.end())
-        return defaultValue;
-    return it->second;
-}
+void handleIsMasterSpeculativeAuth(OperationContext* opCtx, BSONObj cmdObj, BSONObjBuilder* result);
 
 }  // namespace mongo

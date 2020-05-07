@@ -14,6 +14,8 @@ import sys
 import textwrap
 import uuid
 
+from pkg_resources import parse_version
+
 import SCons
 
 # This must be first, even before EnsureSConsVersion, if
@@ -3844,6 +3846,11 @@ elif env.ToolchainIs("gcc"):
 env.Tool('icecream')
 
 if get_option('ninja') != 'disabled':
+
+    if 'ICECREAM_VERSION' in env and not env.get('CCACHE', None):
+        if env['ICECREAM_VERSION'] < parse_version("1.2"):
+            env.FatalError("Use of ccache is mandatory with --ninja and icecream older than 1.2. You are running {}.".format(env['ICECREAM_VERSION']))
+
     if get_option('ninja') == 'stable':
         ninja_builder = Tool("ninja")
         ninja_builder.generate(env)
@@ -4018,8 +4025,7 @@ if get_option('install-mode') == 'hygienic':
             map_entry = env["AIB_SUFFIX_MAP"].get(osuf)
             if map_entry:
                 return map_entry[0]
-
-        return "Unable to find debuginfo for {}".format(str(source))
+        env.FatalError("Unable to find debuginfo file in _aib_debugdir: (source='{}')".format(str(source)))
 
     env["PREFIX_DEBUGDIR"] = _aib_debugdir
 
@@ -4161,7 +4167,7 @@ if get_option('install-mode') == 'hygienic':
             ],
         )
 
-        env.Default(env.Alias("install-default"))
+    env.Default(env.Alias("install-default"))
 
 elif get_option('separate-debug') == "on":
     env.FatalError('Cannot use --separate-debug without --install-mode=hygienic')
@@ -4215,7 +4221,7 @@ if get_option('lint-scope') == 'changed':
             "buildscripts/pylinters.py",
             patch_file,
         ],
-        action="$PYTHON ${SOURCES[0]} lint-patch ${SOURCES[1]}"
+        action="REVISION=$REVISION ENTERPRISE_REV=$ENTERPRISE_REV $PYTHON ${SOURCES[0]} lint-git-diff"
     )
 
     clang_format = env.Command(
@@ -4224,7 +4230,7 @@ if get_option('lint-scope') == 'changed':
             "buildscripts/clang_format.py",
             patch_file,
         ],
-        action="$PYTHON ${SOURCES[0]} lint-patch ${SOURCES[1]}"
+        action="REVISION=$REVISION ENTERPRISE_REV=$ENTERPRISE_REV $PYTHON ${SOURCES[0]} lint-git-diff"
     )
 
     eslint = env.Command(

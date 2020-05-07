@@ -1023,7 +1023,12 @@ var ReplSetTest = function(opts) {
         return this.start(nextId, config);
     };
 
+    /**
+     * Calls stop() on the node identifed by nodeId and removes it from the list of nodes managed by
+     * ReplSetTest.
+     */
     this.remove = function(nodeId) {
+        this.stop(nodeId);
         nodeId = this.getNodeId(nodeId);
         this.nodes.splice(nodeId, 1);
         this.ports.splice(nodeId, 1);
@@ -1884,15 +1889,6 @@ var ReplSetTest = function(opts) {
         }
     };
 
-    // TODO: SERVER-38961 Remove when simultaneous index builds complete.
-    this.waitForAllIndexBuildsToFinish = function(dbName, collName) {
-        // Run a no-op command and wait for it to be applied on secondaries. Due to the asynchronous
-        // completion nature of indexes on secondaries, we can guarantee an index build is complete
-        // on all secondaries once all secondaries have applied this collMod command.
-        assert.commandWorked(this.getPrimary().getDB(dbName).runCommand({collMod: collName}));
-        this.awaitReplication();
-    };
-
     this.getHashesUsingSessions = function(sessions, dbName, {
         filterCapped: filterCapped = true,
         readAtClusterTime,
@@ -2072,39 +2068,6 @@ var ReplSetTest = function(opts) {
         // Call getPrimary to populate rst with information about the nodes.
         var primary = this.getPrimary();
         assert(primary, 'calling getPrimary() failed');
-
-        // Since we cannot determine if there is a background index in progress (SERVER-26624), we
-        // use the "collMod" command to wait for any index builds that may be in progress on the
-        // primary or on one of the secondaries to complete.
-        for (let dbName of primary.getDBNames()) {
-            if (dbName === "local") {
-                continue;
-            }
-
-            let dbHandle = primary.getDB(dbName);
-            dbHandle.getCollectionInfos({$or: [{type: "collection"}, {type: {$exists: false}}]})
-                .forEach(function(collInfo) {
-                    // Skip system collections. We handle here rather than in the getCollectionInfos
-                    // filter to take advantage of the fact that a simple 'collection' filter will
-                    // skip view evaluation, and therefore won't fail on an invalid view.
-                    if (!collInfo.name.startsWith('system.')) {
-                        // We intentionally await replication without doing any I/O to avoid any
-                        // overhead. We call awaitReplication() later on to ensure the collMod
-                        // is replicated to all nodes.
-                        try {
-                            assert.commandWorked(dbHandle.runCommand(
-                                {collMod: collInfo.name, writeConcern: {w: 1}}));
-                        } catch (e) {
-                            // Ignore NamespaceNotFound errors because a background thread could
-                            // have dropped the collection after getCollectionInfos but before
-                            // running collMod.
-                            if (e.code != ErrorCodes.NamespaceNotFound) {
-                                throw e;
-                            }
-                        }
-                    }
-                });
-        }
 
         // Prevent an election, which could start, then hang due to the fsyncLock.
         jsTestLog(`Freezing nodes: [${slaves.map((n) => n.host)}]`);
@@ -2800,6 +2763,11 @@ var ReplSetTest = function(opts) {
         options.setParameter.numInitialSyncConnectAttempts =
             options.setParameter.numInitialSyncConnectAttempts || 60;
 
+        // The default time for stepdown and quiesce mode in response to SIGTERM is 15 seconds.
+        // Reduce this to 100ms for faster shutdown.
+        options.setParameter.shutdownTimeoutMillisForSignaledShutdown =
+            options.setParameter.shutdownTimeoutMillisForSignaledShutdown || 100;
+
         if (tojson(options) != tojson({}))
             printjson(options);
 
@@ -2946,14 +2914,9 @@ var ReplSetTest = function(opts) {
      * with the intent to call start() with restart=true for the same node(s) n.
      * @param {boolean} [extraOptions.waitPid=true] if true, we will wait for the process to
      * terminate after stopping it.
-     * @param {number} [extraOptions.shutdownTimeoutMillis=100] the time for stepdown and quiesce
-     *     mode at shutdown.
      */
-    this.stop = _nodeParamToSingleNode(_nodeParamToConn(function(n, signal, opts, {
-        forRestart: forRestart = false,
-        waitpid: waitPid = true,
-        shutdownTimeoutMillis: shutdownTimeoutMillis = 100
-    } = {}) {
+    this.stop = _nodeParamToSingleNode(_nodeParamToConn(function(
+        n, signal, opts, {forRestart: forRestart = false, waitpid: waitPid = true} = {}) {
         // Can specify wait as second parameter, if using default signal
         if (signal == true || signal == false) {
             signal = undefined;
@@ -2962,22 +2925,6 @@ var ReplSetTest = function(opts) {
         n = this.getNodeId(n);
 
         var conn = _useBridge ? _unbridgedNodes[n] : this.nodes[n];
-
-        // The default time for stepdown and quiesce mode in response to SIGTERM is 15 seconds.
-        // Reduce this to 100ms for faster shutdown.
-        try {
-            print(
-                "ReplSetTest stop setting 'shutdownTimeoutMillisForSignaledShutdown' for mongod on port " +
-                conn.port);
-            assert.commandWorked(conn.adminCommand({
-                setParameter: 1,
-                shutdownTimeoutMillisForSignaledShutdown: shutdownTimeoutMillis,
-            }));
-        } catch (e) {
-            // Ignore errors, since this setParameter does not exist in versions 4.4 and earlier.
-            print("Error in setParameter for shutdownTimeoutMillisForSignaledShutdown:");
-            print(e);
-        }
 
         print('ReplSetTest stop *** Shutting down mongod in port ' + conn.port +
               ', wait for process termination: ' + waitPid + ' ***');
@@ -3078,8 +3025,6 @@ var ReplSetTest = function(opts) {
                             waitForStepDownOnNonCommandShutdown: false,
                         }));
                     } catch (e) {
-                        print("Error in setParameter for waitForStepDownOnNonCommandShutdown:");
-                        print(e);
                     }
                 }
             });

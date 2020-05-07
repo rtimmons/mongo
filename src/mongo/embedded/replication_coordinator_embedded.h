@@ -51,6 +51,8 @@ public:
 
     bool enterQuiesceModeIfSecondary() override;
 
+    bool inQuiesceMode() const override;
+
     void shutdown(OperationContext* opCtx) override;
 
     void markAsCleanShutdownIfPossible(OperationContext* opCtx) override;
@@ -286,7 +288,7 @@ public:
     getIsMasterResponseFuture(const repl::SplitHorizon::Parameters& horizonParams,
                               boost::optional<TopologyVersion> clientTopologyVersion);
 
-    repl::OpTime getLatestWriteOpTime(OperationContext* opCtx) const override;
+    StatusWith<repl::OpTime> getLatestWriteOpTime(OperationContext* opCtx) const noexcept override;
 
     HostAndPort getCurrentPrimaryHostAndPort() const override;
 
