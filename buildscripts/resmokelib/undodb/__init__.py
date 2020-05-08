@@ -97,10 +97,12 @@ class _System:
         self.logger = logger
 
     def run(self, argv: List[str]) -> int:
+        """
+        :param argv: program and args to run
+        :return: exit code of the program
+        """
         self.logger.info("Running undodb command %s", argv)
-        proc = process.Process(
-            args=argv, env=self.env, cwd=self.cwd, logger=self.logger
-        )
+        proc = process.Process(args=argv, env=self.env, cwd=self.cwd, logger=self.logger)
         proc.start()
         return proc.wait()
 
@@ -142,12 +144,8 @@ class UndoDb(interface.Subcommand):
             self.system = _System(os.getcwd(), os.environ, self.logger)
 
     def execute(self):
-        if (
-            len(self.args) <= 1
-            or self.args[0] == "help"
-            or self.args[0] != "run"
-            or self.args[0] == "--help"
-        ):
+        if (len(self.args) <= 1 or self.args[0] == "help" or self.args[0] != "run"
+                or self.args[0] == "--help"):
             print(_OVERVIEW)
             return
         argv = self.args[1:]
