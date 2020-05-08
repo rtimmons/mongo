@@ -80,26 +80,24 @@ class SetupException(Exception):
         super().__init__(message)
 
 
-class System:
+class _System:
     """
     Simplified process interface. Used to make the logic more testable.
     """
-    def __init__(self, cwd: str, env: Dict[str, str]):
+    def __init__(self, cwd: str, env: Dict[str, str], logger):
         """
         :param cwd: cwd of the current process. Programs started will use this as the cwd.
         :param env: env vars. Programs started will use this as the env.
+        :param logger: logger to use
         """
         self.cwd = cwd
         self.env = copy.deepcopy(env)
-        # 🌲 Logging 🌳
-        self.root_logger = logging.Logger(_COMMAND, level=logging.DEBUG)
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(logging.Formatter(fmt="%(message)s"))
-        self.root_logger.addHandler(handler)
+        self.logger = logger
+
 
     def run(self, argv: List[str]) -> int:
-        self.root_logger.info("Running undodb command", argv)
-        proc = process.Process(args=argv, env=self.env, cwd=self.cwd, logger=self.root_logger)
+        self.logger.info("Running undodb command %s", argv)
+        proc = process.Process(args=argv, env=self.env, cwd=self.cwd, logger=self.logger)
         proc.start()
         return proc.wait()
 
@@ -107,13 +105,38 @@ class System:
         return shutil.which(program)
 
 
+_KNOWN_UNDODB_COMMANDS = {
+    "dw_at_comp_dir",
+    "live-record",
+    "patch-goland-delve",
+    "recording-converter",
+    "recording-dump",
+    "shmem-log-dump",
+    "udb",
+    "udb-automate",
+    "undo-keyclient_x32",
+    "undo-keyclient_x64",
+    "undo-keyserver",
+    "undo-sysinfo",
+    "undo-upload",
+    "undodb-server_x32",
+    "undodb-server_x64",
+}
+
+
 class UndoDb(interface.Subcommand):
-    def __init__(self, parsed_args, system=None):
+    def __init__(self, parsed_args, system: _System = None):
         self.args = parsed_args.args
+        # 🌲 Logging 🌳
+        self.logger = logging.Logger(_COMMAND, level=logging.DEBUG)
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(logging.Formatter(fmt="%(message)s"))
+        self.logger.addHandler(handler)
+
         if system is not None:
             self.system = system
         else:
-            self.system = System(os.getcwd(), os.environ)
+            self.system = _System(os.getcwd(), os.environ, self.logger)
 
     def execute(self):
         if len(self.args) <= 1 \
@@ -122,7 +145,15 @@ class UndoDb(interface.Subcommand):
                 or self.args[0] == "--help":
             print(_OVERVIEW)
             return
-        cmd = self.system.which(self.args[1])
+        argv = self.args[1:]
+        program = argv[0]
+
+        cmd = self.system.which(program)
         if cmd is None:
-            raise SetupException(_NOT_FOUND.format(self.args[1]))
-        self.system.run(self.args)
+            raise SetupException(_NOT_FOUND.format(program))
+
+        if program not in _KNOWN_UNDODB_COMMANDS:
+            self.logger.warning(
+                "The program `%s` is not a known undodb command. Did you mean one of %s?", program,
+                _KNOWN_UNDODB_COMMANDS)
+        self.system.run(argv)

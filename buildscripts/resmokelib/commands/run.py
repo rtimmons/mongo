@@ -13,8 +13,6 @@ import time
 import pkg_resources
 import requests
 
-from .. import undodb
-
 try:
     import grpc_tools.protoc
     import grpc
@@ -109,8 +107,6 @@ class TestRunner(interface.Subcommand):  # pylint: disable=too-many-instance-att
                 self.list_suites()
             elif self.__command == "find-suites":
                 self.find_suites()
-            elif self.__command == "undodb":
-                self.undodb()
             elif config.DRY_RUN == "tests":
                 self.dry_run()
             else:
@@ -119,9 +115,6 @@ class TestRunner(interface.Subcommand):  # pylint: disable=too-many-instance-att
             # self._exit_logging() may never return when the log output is incomplete.
             # Our workaround is to call os._exit().
             self._exit_logging()
-
-    def undodb(self):
-        undodb.run()
 
     def list_suites(self):
         """List the suites that are available to execute."""
