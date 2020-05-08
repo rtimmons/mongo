@@ -1,7 +1,5 @@
 """Parser for command line arguments."""
 
-import os
-import sys
 import shlex
 
 import argparse
@@ -23,6 +21,7 @@ def _make_parser():
     _add_list_suites(subparsers)
     _add_find_suites(subparsers)
     _add_hang_analyzer(subparsers)
+    _add_undodb(subparsers)
 
     return parser
 
@@ -440,6 +439,15 @@ def _add_find_suites(subparsers):
               " configurations."))
 
 
+def _add_undodb(subparsers):
+    """
+    Add 'undodb' subcommand.
+    """
+    parser = subparsers.add_parser("undodb", help=commands.undodb.__doc__)
+    parser.add_argument("args", nargs="*")
+
+
+
 def _add_hang_analyzer(subparsers):
     """Create and add the parser for the hang analyzer subcommand."""
 
@@ -589,6 +597,8 @@ def parse_command_line(sys_args, **kwargs):
             subcommand_obj = commands.run.TestRunner(subcommand, **kwargs)
     elif subcommand == 'hang-analyzer':
         subcommand_obj = commands.hang_analyzer.HangAnalyzer(parsed_args)
+    elif subcommand == 'undodb':
+        subcommand_obj = commands.undodb.UndoDb(parsed_args)
 
     if subcommand_obj is None:
         raise RuntimeError(
