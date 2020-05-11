@@ -1,3 +1,4 @@
+"""Interactions with the undodb tool-suite."""
 import copy
 import logging
 import os
@@ -53,19 +54,21 @@ _COMMAND = "undodb"
 def add_subcommand(subparsers) -> None:
     """
     Add 'undodb' subcommand.
+
+    :param subparsers: argparse parser to add to
+    :return: None
     """
     parser = subparsers.add_parser(_COMMAND, help=_OVERVIEW)
     parser.add_argument("args", nargs="*")
 
 
-def subcommand(command, parsed_args) -> Optional[interface.Subcommand]:
+def subcommand(command: str, parsed_args) -> Optional[interface.Subcommand]:
     """
-    :param command:
-        The first arg to resmoke.py (e.g. resmoke.py run => command = run).
-    :param parsed_args:
-        Additional arguments parsed as a result of the `parser.parse` call.
-    :return:
-        Callback if the command is for undodb else none.
+    Return UndoDb if command is one we recognize.
+
+    :param command: The first arg to resmoke.py (e.g. resmoke.py run => command = run).
+    :param parsed_args: Additional arguments parsed as a result of the `parser.parse` call.
+    :return: Callback if the command is for undodb else none.
     """
     if command != _COMMAND:
         return None
@@ -73,21 +76,16 @@ def subcommand(command, parsed_args) -> Optional[interface.Subcommand]:
 
 
 class SetupException(Exception):
-    """
-    Something has gone wrong with setup (e.g. programs missing from $PATH)
-    """
-
-    def __init__(self, message: str):
-        super().__init__(message)
+    """Something has gone wrong with setup (e.g. programs missing from $PATH)."""
 
 
 class _System:
-    """
-    Simplified process interface. Used to make the logic more testable.
-    """
+    """Simplified process interface. Used to make the logic more testable."""
 
     def __init__(self, cwd: str, env: Dict[str, str], logger):
         """
+        Constructor.
+
         :param cwd: cwd of the current process. Programs started will use this as the cwd.
         :param env: env vars. Programs started will use this as the env.
         :param logger: logger to use
@@ -98,6 +96,8 @@ class _System:
 
     def run(self, argv: List[str]) -> int:
         """
+        Run a command via resmoke's process machinery.
+
         :param argv: program and args to run
         :return: exit code of the program
         """
@@ -106,7 +106,14 @@ class _System:
         proc.start()
         return proc.wait()
 
-    def which(self, program) -> Optional[str]:
+    # pylint: disable=no-self-use
+    def which(self, program: str) -> Optional[str]:
+        """
+        Delegate for shutil.which.
+
+        :param program: e.g. 'ls', 'undodb', etc.
+        :return: path to program or None
+        """
         return shutil.which(program)
 
 
@@ -129,8 +136,17 @@ _KNOWN_UNDODB_COMMANDS = {
 }
 
 
+# pylint: disable=missing-docstring
 class UndoDb(interface.Subcommand):
+    """Interact with UndoDB."""
+
     def __init__(self, parsed_args, system: _System = None):
+        """
+        Constructor.
+
+        :param parsed_args: output from argparse
+        :param system: system to use
+        """
         self.args = parsed_args.args
         # 🌲 Logging 🌳
         self.logger = logging.Logger(_COMMAND, level=logging.DEBUG)
@@ -143,7 +159,12 @@ class UndoDb(interface.Subcommand):
         else:
             self.system = _System(os.getcwd(), os.environ, self.logger)
 
-    def execute(self):
+    def execute(self) -> None:
+        """
+        Work your magic.
+
+        :return: None
+        """
         if (len(self.args) <= 1 or self.args[0] == "help" or self.args[0] != "run"
                 or self.args[0] == "--help"):
             print(_OVERVIEW)

@@ -4,11 +4,11 @@ import shlex
 
 import argparse
 
+from buildscripts.resmokelib import undodb
+
 from . import config as _config
 from . import configure_resmoke
 from . import commands
-
-from buildscripts.resmokelib import undodb
 
 _EVERGREEN_ARGUMENT_TITLE = "Evergreen options"
 
