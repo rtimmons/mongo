@@ -1,4 +1,6 @@
 """Command line utility for executing MongoDB tests of all kinds."""
+# pylint: disable=too-many-lines
+
 import argparse
 import collections
 import os
