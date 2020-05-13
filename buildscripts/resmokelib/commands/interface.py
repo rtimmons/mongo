@@ -1,4 +1,5 @@
 """Interface for creating a resmoke subcommand."""
+import abc
 
 
 class Subcommand(object):
@@ -7,3 +8,11 @@ class Subcommand(object):
     def execute(self):
         """Execute the subcommand."""
         raise NotImplementedError("execue must be implemented by Subcommand subclasses")
+
+
+class PluginInterface(abc.ABC):
+    def add_subcommand(self, subparsers):
+        raise NotImplementedError()
+
+    def parse(self, subcommand, parser, parsed_args, **kwargs):
+        raise NotImplementedError()

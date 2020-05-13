@@ -2,6 +2,7 @@
 from typing import Optional
 
 from buildscripts.resmokelib.commands import interface
+from buildscripts.resmokelib.commands.interface import PluginInterface
 
 _HELP = """
 Info on how to install undodb.
@@ -77,3 +78,11 @@ class UndoDb(interface.Subcommand):
         :return: None
         """
         print(_MESSAGE)
+
+
+class UndoDbPlugin(PluginInterface):
+    def add_subcommand(self, subparsers):
+        return add_subcommand(subparsers)
+
+    def parse(self, subcommand, parser, parsed_args, **kwargs):
+        return parse(subcommand, parser, parsed_args, **kwargs)
