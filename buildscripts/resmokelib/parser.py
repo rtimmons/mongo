@@ -1,6 +1,7 @@
 """Parser for command line arguments."""
 
 import shlex
+import abc
 
 import argparse
 
@@ -13,17 +14,53 @@ from . import commands
 _EVERGREEN_ARGUMENT_TITLE = "Evergreen options"
 
 
+class PluginInterface(abc.ABC):
+    def add_subcommand(self, subparsers):
+        raise NotImplementedError()
+
+    def parse(self, subcommand, parser, parsed_args, **kwargs):
+        raise NotImplementedError()
+
+
+class RunPlugin(PluginInterface):
+    def add_subcommand(self, subparsers):
+        return _run__add_subcommand(subparsers)
+
+    def parse(self, subcommand, parser, parsed_args, **kwargs):
+        return _run__parse(subcommand, parser, parsed_args, **kwargs)
+
+
+class HangAnalyzerPlugin(PluginInterface):
+    def add_subcommand(self, subparsers):
+        return _hang_analyzer__add_subcommand(subparsers)
+
+    def parse(self, subcommand, parser, parsed_args, **kwargs):
+        return _hang_analyzer__parse(subcommand, parser, parsed_args, **kwargs)
+
+
+class UndoDbPlugin(PluginInterface):
+    def add_subcommand(self, subparsers):
+        return undodb.add_subcommand(subparsers)
+
+    def parse(self, subcommand, parser, parsed_args, **kwargs):
+        return undodb.parse(subcommand, parser, parsed_args, **kwargs)
+
+
+_PLUGINS = [
+    RunPlugin(),
+    HangAnalyzerPlugin(),
+    UndoDbPlugin(),
+]
+
+
 def _add_subcommands():
     """Create and return the command line arguments parser."""
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command")
 
     # Add sub-commands.
-    plugins = [_run__add_subcommand,
-               _hang_analyzer__add_subcommand,
-               undodb.add_subcommand]
-    for plugin in plugins:
-        plugin(subparsers)
+    for plugin in _PLUGINS:
+        plugin.add_subcommand(subparsers)
 
     return parser
 
@@ -604,9 +641,8 @@ def parse_command_line(sys_args, **kwargs):
 
     subcommand = parsed_args.command
 
-    plugins = [_run__parse, _hang_analyzer__parse, undodb.parse]
-    for plugin in plugins:
-        subcommand_obj = plugin(subcommand, parser, parsed_args, **kwargs)
+    for plugin in _PLUGINS:
+        subcommand_obj = plugin.parse(subcommand, parser, parsed_args, **kwargs)
         if subcommand_obj is not None:
             return subcommand_obj
 
