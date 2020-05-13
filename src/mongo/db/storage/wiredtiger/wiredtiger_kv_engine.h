@@ -56,7 +56,6 @@ class WiredTigerRecordStore;
 class WiredTigerSessionCache;
 class WiredTigerSizeStorer;
 class WiredTigerEngineRuntimeConfigParameter;
-class WiredTigerMaxHistoryFileSizeGBParameter;
 
 struct WiredTigerFileVersion {
     // MongoDB 4.4+ will not open on datafiles left behind by 4.2.5 and earlier. MongoDB 4.4
@@ -67,6 +66,24 @@ struct WiredTigerFileVersion {
     StartupVersion _startupVersion;
     bool shouldDowngrade(bool readOnly, bool repairMode, bool hasRecoveryTimestamp);
     std::string getDowngradeString();
+};
+
+struct WiredTigerBackup {
+    WT_CURSOR* cursor = nullptr;
+    WT_CURSOR* dupCursor = nullptr;
+    std::set<std::string> logFilePathsSeenByExtendBackupCursor;
+    std::set<std::string> logFilePathsSeenByGetNextBatch;
+
+    // 'wtBackupCursorMutex' provides concurrency control between beginNonBlockingBackup(),
+    // endNonBlockingBackup(), and getNextBatch() because we stream the output of the backup cursor.
+    Mutex wtBackupCursorMutex = MONGO_MAKE_LATCH("WiredTigerKVEngine::wtBackupCursorMutex");
+
+    // 'wtBackupDupCursorMutex' provides concurrency control between getNextBatch() and
+    // extendBackupCursor() because WiredTiger only allows one duplicate cursor to be open at a
+    // time. extendBackupCursor() blocks on condition variable 'wtBackupDupCursorCV' if a duplicate
+    // cursor is already open.
+    Mutex wtBackupDupCursorMutex = MONGO_MAKE_LATCH("WiredTigerKVEngine::wtBackupDupCursorMutex");
+    stdx::condition_variable wtBackupDupCursorCV;
 };
 
 class WiredTigerKVEngine final : public KVEngine {
@@ -184,7 +201,7 @@ public:
 
     Status disableIncrementalBackup(OperationContext* opCtx) override;
 
-    StatusWith<StorageEngine::BackupInformation> beginNonBlockingBackup(
+    StatusWith<std::unique_ptr<StorageEngine::StreamingCursor>> beginNonBlockingBackup(
         OperationContext* opCtx, const StorageEngine::BackupOptions& options) override;
 
     void endNonBlockingBackup(OperationContext* opCtx) override;
@@ -255,8 +272,6 @@ public:
     bool supportsReadConcernSnapshot() const final override;
 
     bool supportsOplogStones() const final override;
-
-    bool isCacheUnderPressure(OperationContext* opCtx) const override;
 
     bool supportsReadConcernMajority() const final;
 
@@ -377,7 +392,7 @@ private:
     std::string _uri(StringData ident) const;
 
     /**
-     * Uses the 'stableTimestamp', the 'targetSnapshotHistoryWindowInSeconds' setting and the
+     * Uses the 'stableTimestamp', the 'minSnapshotHistoryWindowInSeconds' setting and the
      * current _oldestTimestamp to calculate what the new oldest_timestamp should be, in order to
      * maintain a window of available snapshots on the storage engine from oldest to stable
      * timestamp.
@@ -450,7 +465,8 @@ private:
     mutable Date_t _previousCheckedDropsQueued;
 
     std::unique_ptr<WiredTigerSession> _backupSession;
-    WT_CURSOR* _backupCursor;
+    WiredTigerBackup _wtBackup;
+
     mutable Mutex _oplogPinnedByBackupMutex =
         MONGO_MAKE_LATCH("WiredTigerKVEngine::_oplogPinnedByBackupMutex");
     boost::optional<Timestamp> _oplogPinnedByBackup;
@@ -465,8 +481,6 @@ private:
     AtomicWord<std::uint64_t> _initialDataTimestamp;
 
     std::unique_ptr<WiredTigerEngineRuntimeConfigParameter> _runTimeConfigParam;
-    std::unique_ptr<WiredTigerMaxHistoryFileSizeGBParameter> _maxHistoryFileSizeGBParam;
-    std::unique_ptr<ServerParameter> _maxCacheOverflowParam;
 
     mutable Mutex _highestDurableTimestampMutex =
         MONGO_MAKE_LATCH("WiredTigerKVEngine::_highestDurableTimestampMutex");

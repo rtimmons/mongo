@@ -11,26 +11,33 @@
 
 load("jstests/libs/global_snapshot_reads_util.js");
 
-// TODO(SERVER-47672): Use minSnapshotHistoryWindowInSeconds instead.
 const options = {
-    setParameter: {maxTargetSnapshotHistoryWindowInSeconds: 600}
+    // Set a large snapshot window of 10 minutes for the test.
+    setParameter: {minSnapshotHistoryWindowInSeconds: 600}
 };
 const replSet = new ReplSetTest({nodes: 3, nodeOptions: options});
 replSet.startSet();
 replSet.initiateWithHighElectionTimeout();
+let primaryAdmin = replSet.getPrimary().getDB("admin");
+assert.eq(assert
+              .commandWorked(
+                  primaryAdmin.runCommand({getParameter: 1, minSnapshotHistoryWindowInSeconds: 1}))
+              .minSnapshotHistoryWindowInSeconds,
+          600);
 const primaryDB = replSet.getPrimary().getDB('test');
 const secondaryDB = replSet.getSecondary().getDB('test');
-snapshotReadsTest({
-    testScenarioName: jsTestName(),
+const snapshotReadsTest = new SnapshotReadsTest({
     primaryDB: primaryDB,
     secondaryDB: secondaryDB,
-    collName: "test",
     awaitCommittedFn: () => {
         replSet.awaitLastOpCommitted();
     }
 });
 
-// Ensure "atClusterTime" is omitted from a regular (non-snapshot) reads.
+snapshotReadsTest.cursorTest({testScenarioName: jsTestName(), collName: "test"});
+snapshotReadsTest.distinctTest({testScenarioName: jsTestName(), collName: "test"});
+
+// Ensure "atClusterTime" is omitted from a regular (non-snapshot) read.
 primaryDB["collection"].insertOne({});
 const cursor = assert.commandWorked(primaryDB.runCommand({find: "test"})).cursor;
 assert(!cursor.hasOwnProperty("atClusterTime"));

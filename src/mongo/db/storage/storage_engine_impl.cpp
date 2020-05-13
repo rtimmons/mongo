@@ -688,8 +688,9 @@ Status StorageEngineImpl::disableIncrementalBackup(OperationContext* opCtx) {
     return _engine->disableIncrementalBackup(opCtx);
 }
 
-StatusWith<StorageEngine::BackupInformation> StorageEngineImpl::beginNonBlockingBackup(
-    OperationContext* opCtx, const StorageEngine::BackupOptions& options) {
+StatusWith<std::unique_ptr<StorageEngine::StreamingCursor>>
+StorageEngineImpl::beginNonBlockingBackup(OperationContext* opCtx,
+                                          const StorageEngine::BackupOptions& options) {
     return _engine->beginNonBlockingBackup(opCtx, options);
 }
 
@@ -780,14 +781,6 @@ void StorageEngineImpl::setOldestTimestamp(Timestamp newOldestTimestamp) {
 void StorageEngineImpl::setOldestActiveTransactionTimestampCallback(
     StorageEngine::OldestActiveTransactionTimestampCallback callback) {
     _engine->setOldestActiveTransactionTimestampCallback(callback);
-}
-
-bool StorageEngineImpl::isCacheUnderPressure(OperationContext* opCtx) const {
-    return _engine->isCacheUnderPressure(opCtx);
-}
-
-void StorageEngineImpl::setCachePressureForTest(int pressure) {
-    return _engine->setCachePressureForTest(pressure);
 }
 
 bool StorageEngineImpl::supportsRecoverToStableTimestamp() const {

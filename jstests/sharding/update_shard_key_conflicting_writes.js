@@ -5,7 +5,12 @@
  * Use the 'requires_find_command' tag to skip this test in sharding_op_query suite. Otherwise,
  * sessionDB.coll.find() will throw "Cannot run a legacy query on a session".
  *
- * @tags: [requires_find_command, uses_transactions, uses_multi_shard_transaction]
+ * @tags: [
+ *   requires_find_command,
+ *   uses_transactions,
+ *   uses_multi_shard_transaction,
+ *   need_fixing_for_46
+ * ]
  */
 
 (function() {
@@ -15,16 +20,13 @@
 load('jstests/libs/parallelTester.js');  // for Thread.
 load('jstests/sharding/libs/sharded_transactions_helpers.js');
 
-let st = new ShardingTest({
-    mongos: 1,
-    shards: 2,
-    shardOptions: {setParameter: {"coordinateCommitReturnImmediatelyAfterPersistingDecision": true}}
-});
+let st = new ShardingTest({mongos: 1, shards: 2});
 let kDbName = 'db';
 let mongos = st.s0;
 let ns = kDbName + '.foo';
 let db = mongos.getDB(kDbName);
 
+enableCoordinateCommitReturnImmediatelyAfterPersistingDecision(st);
 assert.commandWorked(mongos.adminCommand({enableSharding: kDbName}));
 st.ensurePrimaryShard(kDbName, st.shard0.shardName);
 

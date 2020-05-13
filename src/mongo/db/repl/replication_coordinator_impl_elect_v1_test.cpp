@@ -160,7 +160,7 @@ TEST_F(ReplCoordTest, ElectionSucceedsWhenNodeIsTheOnlyElectableNode) {
     }
     net->exitNetwork();
 
-    // _startElectSelfV1 is called when election timeout expires, so election
+    // _startElectSelfV1_inlock is called when election timeout expires, so election
     // finished event has been set.
     getReplCoord()->waitForElectionFinish_forTest();
 
@@ -558,17 +558,14 @@ TEST_F(ReplCoordTest, NodeWillNotStandForElectionDuringHeartbeatReconfig) {
     NetworkInterfaceMock* net = getNet();
     net->enterNetwork();
     ReplSetHeartbeatResponse hbResp2;
-    ReplSetConfig config;
-    config
-        .initialize(BSON("_id"
-                         << "mySet"
-                         << "version" << 3 << "members"
-                         << BSON_ARRAY(BSON("_id" << 1 << "host"
-                                                  << "node1:12345")
-                                       << BSON("_id" << 2 << "host"
-                                                     << "node2:12345"))
-                         << "protocolVersion" << 1))
-        .transitional_ignore();
+    auto config = ReplSetConfig::parse(BSON("_id"
+                                            << "mySet"
+                                            << "version" << 3 << "members"
+                                            << BSON_ARRAY(BSON("_id" << 1 << "host"
+                                                                     << "node1:12345")
+                                                          << BSON("_id" << 2 << "host"
+                                                                        << "node2:12345"))
+                                            << "protocolVersion" << 1));
     hbResp2.setConfig(config);
     hbResp2.setConfigVersion(3);
     hbResp2.setSetName("mySet");
@@ -902,6 +899,47 @@ TEST_F(ReplCoordTest, ElectionFailsWhenTermChangesDuringActualElection) {
     ASSERT_EQUALS(
         1,
         countTextFormatLogLinesContaining("Not becoming primary, we have been superseded already"));
+}
+
+TEST_F(ReplCoordTest, StartElectionOnSingleNodeInitiate) {
+    init("mySet");
+    start(HostAndPort("node1", 12345));
+    auto opCtx = makeOperationContext();
+    BSONObj configObj = configWithMembers(1, 0, BSON_ARRAY(member(1, "node1:12345")));
+
+    // Initialize my last applied, so that the node is electable.
+    replCoordSetMyLastAppliedAndDurableOpTime({Timestamp(100, 1), 0});
+
+    BSONObjBuilder result;
+    ASSERT_OK(getReplCoord()->processReplSetInitiate(opCtx.get(), configObj, &result));
+    ASSERT_EQUALS(MemberState::RS_RECOVERING, getReplCoord()->getMemberState().s);
+    // Oplog applier attempts to transition the state to Secondary, which triggers
+    // election on single node.
+    getReplCoord()->finishRecoveryIfEligible(opCtx.get());
+    // Run pending election operations on executor.
+    getNet()->enterNetwork();
+    getNet()->runReadyNetworkOperations();
+    getNet()->exitNetwork();
+    ASSERT_EQUALS(MemberState::RS_PRIMARY, getReplCoord()->getMemberState().s);
+}
+
+TEST_F(ReplCoordTest, StartElectionOnSingleNodeStartup) {
+    BSONObj configObj = configWithMembers(1, 0, BSON_ARRAY(member(1, "node1:12345")));
+    assertStartSuccess(configObj, HostAndPort("node1", 12345));
+
+    // Initialize my last applied, so that the node is electable.
+    replCoordSetMyLastAppliedAndDurableOpTime({Timestamp(100, 1), 0});
+
+    ASSERT_OK(getReplCoord()->setFollowerMode(MemberState::RS_RECOVERING));
+    // Oplog applier attempts to transition the state to Secondary, which triggers
+    // election on single node.
+    auto opCtx = makeOperationContext();
+    getReplCoord()->finishRecoveryIfEligible(opCtx.get());
+    // Run pending election operations on executor.
+    getNet()->enterNetwork();
+    getNet()->runReadyNetworkOperations();
+    getNet()->exitNetwork();
+    ASSERT_EQUALS(MemberState::RS_PRIMARY, getReplCoord()->getMemberState().s);
 }
 
 class TakeoverTest : public ReplCoordTest {

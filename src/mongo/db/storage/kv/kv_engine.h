@@ -237,7 +237,7 @@ public:
         MONGO_UNREACHABLE;
     }
 
-    virtual StatusWith<StorageEngine::BackupInformation> beginNonBlockingBackup(
+    virtual StatusWith<std::unique_ptr<StorageEngine::StreamingCursor>> beginNonBlockingBackup(
         OperationContext* opCtx, const StorageEngine::BackupOptions& options) {
         return Status(ErrorCodes::CommandNotSupported,
                       "The current storage engine doesn't support backup mode");
@@ -354,18 +354,6 @@ public:
      * See `StorageEngine::setOldestTimestamp`
      */
     virtual void setOldestTimestamp(Timestamp newOldestTimestamp, bool force) {}
-
-    /**
-     * See `StorageEngine::isCacheUnderPressure()`
-     */
-    virtual bool isCacheUnderPressure(OperationContext* opCtx) const {
-        return false;
-    }
-
-    /**
-     * See 'StorageEngine::setCachePressureForTest()'
-     */
-    virtual void setCachePressureForTest(int pressure) {}
 
     /**
      * See `StorageEngine::supportsRecoverToStableTimestamp`

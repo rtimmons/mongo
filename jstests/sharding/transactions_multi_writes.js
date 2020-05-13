@@ -5,6 +5,7 @@
 //   requires_sharding,
 //   uses_multi_shard_transaction,
 //   uses_transactions,
+//   need_fixing_for_46
 // ]
 (function() {
 "use strict";
@@ -15,13 +16,9 @@ const dbName = "test";
 const collName = "foo";
 const ns = dbName + "." + collName;
 
-const st = new ShardingTest({
-    shards: 3,
-    config: 1,
-    mongos: 2,
-    shardOptions: {setParameter: {"coordinateCommitReturnImmediatelyAfterPersistingDecision": true}}
-});
+const st = new ShardingTest({shards: 3, config: 1, mongos: 2});
 
+enableCoordinateCommitReturnImmediatelyAfterPersistingDecision(st);
 enableStaleVersionAndSnapshotRetriesWithinTransactions(st);
 
 // Set up a sharded collection with 3 chunks, [min, 0), [0, 10), [10, max), one on each shard,

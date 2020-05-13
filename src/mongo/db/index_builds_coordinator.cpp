@@ -2037,6 +2037,9 @@ void IndexBuildsCoordinator::_runIndexBuildInner(OperationContext* opCtx,
 void IndexBuildsCoordinator::_buildIndex(OperationContext* opCtx,
                                          std::shared_ptr<ReplIndexBuildState> replState,
                                          const IndexBuildOptions& indexBuildOptions) {
+    // Read without a timestamp. When we commit, we block writes which guarantees all writes are
+    // visible.
+    opCtx->recoveryUnit()->setTimestampReadSource(RecoveryUnit::ReadSource::kNoTimestamp);
     _scanCollectionAndInsertKeysIntoSorter(opCtx, replState);
     _insertKeysFromSideTablesWithoutBlockingWrites(opCtx, replState);
     _signalPrimaryForCommitReadiness(opCtx, replState);
@@ -2199,12 +2202,6 @@ IndexBuildsCoordinator::CommitResult IndexBuildsCoordinator::_insertKeysFromSide
                             << replState->buildUUID
                             << ", collection UUID: " << replState->collectionUUID);
 
-    {
-        auto dss = DatabaseShardingState::get(opCtx, replState->dbName);
-        auto dssLock = DatabaseShardingState::DSSLock::lockShared(opCtx, dss);
-        dss->checkDbVersion(opCtx, dssLock);
-    }
-
     // Perform the third and final drain after releasing a shared lock and reacquiring an
     // exclusive lock on the database.
     uassertStatusOK(_indexBuildsManager.drainBackgroundWrites(
@@ -2216,6 +2213,12 @@ IndexBuildsCoordinator::CommitResult IndexBuildsCoordinator::_insertKeysFromSide
     try {
         failIndexBuildOnCommit.execute(
             [](const BSONObj&) { uasserted(4698903, "index build aborted due to failpoint"); });
+
+        {
+            auto dss = DatabaseShardingState::get(opCtx, replState->dbName);
+            auto dssLock = DatabaseShardingState::DSSLock::lockShared(opCtx, dss);
+            dss->checkDbVersion(opCtx, dssLock);
+        }
 
         // If we are no longer primary and a single phase index build started as primary attempts to
         // commit, trigger a self-abort.
