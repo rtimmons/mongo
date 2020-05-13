@@ -81,7 +81,7 @@ public:
         return Status(ErrorCodes::CommandNotSupported,
                       "The current storage engine doesn't support backup mode");
     }
-    StatusWith<StorageEngine::BackupInformation> beginNonBlockingBackup(
+    StatusWith<std::unique_ptr<StorageEngine::StreamingCursor>> beginNonBlockingBackup(
         OperationContext* opCtx, const StorageEngine::BackupOptions& options) final {
         return Status(ErrorCodes::CommandNotSupported,
                       "The current storage engine doesn't support backup mode");
@@ -138,10 +138,7 @@ public:
     void setOldestTimestamp(Timestamp timestamp) final {}
     void setOldestActiveTransactionTimestampCallback(
         OldestActiveTransactionTimestampCallback callback) final {}
-    bool isCacheUnderPressure(OperationContext* opCtx) const final {
-        return false;
-    }
-    void setCachePressureForTest(int pressure) final {}
+
     StatusWith<StorageEngine::ReconcileResult> reconcileCatalogAndIdents(
         OperationContext* opCtx) final {
         return ReconcileResult{};

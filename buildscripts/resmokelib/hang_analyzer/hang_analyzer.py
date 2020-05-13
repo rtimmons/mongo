@@ -198,7 +198,6 @@ class HangAnalyzerPlugin(PluginInterface):
 
     def add_subcommand(self, subparsers):
         """Create and add the parser for the hang analyzer subcommand."""
-
         parser = subparsers.add_parser("hang-analyzer", help=__doc__)
 
         parser.add_argument(

@@ -99,7 +99,7 @@ public:
 
     virtual Status disableIncrementalBackup(OperationContext* opCtx) override;
 
-    virtual StatusWith<BackupInformation> beginNonBlockingBackup(
+    virtual StatusWith<std::unique_ptr<StreamingCursor>> beginNonBlockingBackup(
         OperationContext* opCtx, const BackupOptions& options) override;
 
     virtual void endNonBlockingBackup(OperationContext* opCtx) override;
@@ -132,10 +132,6 @@ public:
 
     virtual void setOldestActiveTransactionTimestampCallback(
         StorageEngine::OldestActiveTransactionTimestampCallback) override;
-
-    virtual bool isCacheUnderPressure(OperationContext* opCtx) const override;
-
-    virtual void setCachePressureForTest(int pressure) override;
 
     virtual bool supportsRecoverToStableTimestamp() const override;
 

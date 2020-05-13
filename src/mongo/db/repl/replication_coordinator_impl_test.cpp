@@ -3318,6 +3318,52 @@ TEST_F(ReplCoordTest, IsMasterReturnsErrorOnEnteringQuiesceMode) {
     getIsMasterThread.join();
 }
 
+TEST_F(ReplCoordTest, IsMasterReturnsErrorOnEnteringQuiesceModeAfterWaitingTimesOut) {
+    init();
+    assertStartSuccess(BSON("_id"
+                            << "mySet"
+                            << "version" << 1 << "members"
+                            << BSON_ARRAY(BSON("host"
+                                               << "node1:12345"
+                                               << "_id" << 0))),
+                       HostAndPort("node1", 12345));
+    ASSERT_OK(getReplCoord()->setFollowerMode(MemberState::RS_SECONDARY));
+
+    auto opCtx = makeOperationContext();
+    auto currentTopologyVersion = getTopoCoord().getTopologyVersion();
+
+    auto maxAwaitTime = Milliseconds(5000);
+    auto deadline = getNet()->now() + maxAwaitTime;
+
+    stdx::thread getIsMasterThread([&] {
+        ASSERT_THROWS_CODE(getReplCoord()->awaitIsMasterResponse(
+                               opCtx.get(), {}, currentTopologyVersion, deadline),
+                           AssertionException,
+                           ErrorCodes::ShutdownInProgress);
+    });
+
+    auto failPoint = globalFailPointRegistry().find("hangAfterWaitingForTopologyChangeTimesOut");
+    auto timesEnteredFailPoint = failPoint->setMode(FailPoint::alwaysOn);
+    ON_BLOCK_EXIT([&] { failPoint->setMode(FailPoint::off, 0); });
+
+    getNet()->enterNetwork();
+    getNet()->advanceTime(deadline);
+    ASSERT_EQUALS(deadline, getNet()->now());
+    getNet()->exitNetwork();
+
+    // Ensure that waiting for a topology change timed out before entering quiesce mode.
+    failPoint->waitForTimesEntered(timesEnteredFailPoint + 1);
+    ASSERT(getReplCoord()->enterQuiesceModeIfSecondary());
+    failPoint->setMode(FailPoint::off, 0);
+
+    // Advance the clock so that pauseWhileSet() will wake up.
+    getNet()->enterNetwork();
+    getNet()->advanceTime(getNet()->now() + Milliseconds(100));
+    getNet()->exitNetwork();
+
+    getIsMasterThread.join();
+}
+
 TEST_F(ReplCoordTest, IsMasterReturnsErrorInQuiesceMode) {
     init();
     assertStartSuccess(BSON("_id"
@@ -3999,14 +4045,14 @@ TEST_F(ReplCoordTest, IsMasterOnRemovedNode) {
 
     // Receive a config that excludes node1 and with node2 having a configured horizon.
     ReplSetHeartbeatResponse hbResp;
-    ReplSetConfig removedFromConfig;
-    ASSERT_OK(removedFromConfig.initialize(
-        BSON("_id"
-             << "mySet"
-             << "protocolVersion" << 1 << "version" << 2 << "members"
-             << BSON_ARRAY(BSON("host" << nodeTwoHostName << "_id" << 2 << "horizons"
-                                       << BSON("horizon1"
-                                               << "testhorizon.com:100"))))));
+    auto removedFromConfig =
+        ReplSetConfig::parse(BSON("_id"
+                                  << "mySet"
+                                  << "protocolVersion" << 1 << "version" << 2 << "members"
+                                  << BSON_ARRAY(BSON("host" << nodeTwoHostName << "_id" << 2
+                                                            << "horizons"
+                                                            << BSON("horizon1"
+                                                                    << "testhorizon.com:100")))));
     hbResp.setConfig(removedFromConfig);
     hbResp.setConfigVersion(2);
     hbResp.setSetName("mySet");
@@ -4165,14 +4211,14 @@ TEST_F(ReplCoordTest, AwaitIsMasterRespondsCorrectlyWhenNodeRemovedAndReadded) {
 
     // Receive a config that excludes node1 and with node2 having a configured horizon.
     ReplSetHeartbeatResponse hbResp;
-    ReplSetConfig removedFromConfig;
-    ASSERT_OK(removedFromConfig.initialize(
-        BSON("_id"
-             << "mySet"
-             << "protocolVersion" << 1 << "version" << 2 << "members"
-             << BSON_ARRAY(BSON("host" << nodeTwoHostName << "_id" << 2 << "horizons"
-                                       << BSON("horizon1"
-                                               << "testhorizon.com:100"))))));
+    auto removedFromConfig =
+        ReplSetConfig::parse(BSON("_id"
+                                  << "mySet"
+                                  << "protocolVersion" << 1 << "version" << 2 << "members"
+                                  << BSON_ARRAY(BSON("host" << nodeTwoHostName << "_id" << 2
+                                                            << "horizons"
+                                                            << BSON("horizon1"
+                                                                    << "testhorizon.com:100")))));
     hbResp.setConfig(removedFromConfig);
     hbResp.setConfigVersion(2);
     hbResp.setSetName("mySet");
@@ -6618,15 +6664,12 @@ TEST_F(ReplCoordTest,
 
     // Respond to node1's heartbeat command with a config that excludes node1.
     ReplSetHeartbeatResponse hbResp;
-    ReplSetConfig config;
-    config
-        .initialize(BSON("_id"
-                         << "mySet"
-                         << "protocolVersion" << 1 << "version" << 3 << "members"
-                         << BSON_ARRAY(BSON("host"
-                                            << "node2:12345"
-                                            << "_id" << 1))))
-        .transitional_ignore();
+    auto config = ReplSetConfig::parse(BSON("_id"
+                                            << "mySet"
+                                            << "protocolVersion" << 1 << "version" << 3 << "members"
+                                            << BSON_ARRAY(BSON("host"
+                                                               << "node2:12345"
+                                                               << "_id" << 1))));
     hbResp.setConfig(config);
     hbResp.setConfigVersion(3);
     hbResp.setSetName("mySet");
@@ -8008,6 +8051,163 @@ TEST_F(ReplCoordTest, NodeFailsVoteRequestIfCandidateIndexIsInvalid) {
         ASSERT_STRING_CONTAINS(r.reason(), "Invalid candidateIndex");
         ASSERT_EQUALS(ErrorCodes::BadValue, r.code());
     }
+}
+
+TEST_F(ReplCoordTest, ShouldChooseNearestNodeAsSyncSourceWhenSecondaryAndChainingAllowed) {
+    // Set up a three-node replica set with chainingAllowed set to true.
+    assertStartSuccess(BSON("_id"
+                            << "mySet"
+                            << "version" << 2 << "members"
+                            << BSON_ARRAY(BSON("host"
+                                               << "node1:12345"
+                                               << "_id" << 0)
+                                          << BSON("host"
+                                                  << "node2:12345"
+                                                  << "_id" << 1)
+                                          << BSON("host"
+                                                  << "node3:12345"
+                                                  << "_id" << 2))
+                            << "settings" << BSON("chainingAllowed" << true)),
+                       HostAndPort("node1", 12345));
+
+    auto replCoord = getReplCoord();
+    ASSERT_OK(replCoord->setFollowerMode(MemberState::RS_SECONDARY));
+
+    ReplSetHeartbeatResponse hbResp;
+    hbResp.setTerm(1);
+    hbResp.setConfigVersion(2);
+    hbResp.setConfigTerm(1);
+
+    const OpTime lastAppliedOpTime = OpTime(Timestamp(50, 0), 1);
+    const auto now = getNet()->now();
+    hbResp.setAppliedOpTimeAndWallTime({lastAppliedOpTime, now});
+    hbResp.setDurableOpTimeAndWallTime({lastAppliedOpTime, now});
+
+    // Set the primary's ping to be longer than the other secondary's ping.
+    const auto primaryPing = Milliseconds(10);
+    const auto nearestNodePing = Milliseconds(5);
+
+    // We must send two heartbeats per node, so that we satisfy the 2N requirement before choosing a
+    // new sync source.
+    for (auto i = 0; i < 2; i++) {
+        hbResp.setState(MemberState::RS_PRIMARY);
+        replCoord->handleHeartbeatResponse_forTest(
+            hbResp.toBSON(), 1 /* targetIndex */, primaryPing);
+        hbResp.setState(MemberState::RS_SECONDARY);
+        replCoord->handleHeartbeatResponse_forTest(
+            hbResp.toBSON(), 2 /* targetIndex */, nearestNodePing);
+    }
+
+    // We expect to sync from the closest node, since our read preference should be set to
+    // ReadPreference::Nearest.
+    ASSERT_EQ(HostAndPort("node3:12345"), replCoord->chooseNewSyncSource(OpTime()));
+}
+
+TEST_F(ReplCoordTest, ShouldChoosePrimaryAsSyncSourceWhenSecondaryAndChainingNotAllowed) {
+    // Set up a three-node replica set with chainingAllowed set to false.
+    assertStartSuccess(BSON("_id"
+                            << "mySet"
+                            << "version" << 2 << "members"
+                            << BSON_ARRAY(BSON("host"
+                                               << "node1:12345"
+                                               << "_id" << 0)
+                                          << BSON("host"
+                                                  << "node2:12345"
+                                                  << "_id" << 1)
+                                          << BSON("host"
+                                                  << "node3:12345"
+                                                  << "_id" << 2))
+                            << "settings" << BSON("chainingAllowed" << false)),
+                       HostAndPort("node1", 12345));
+
+    auto replCoord = getReplCoord();
+    ASSERT_OK(replCoord->setFollowerMode(MemberState::RS_SECONDARY));
+
+    ReplSetHeartbeatResponse hbResp;
+    hbResp.setTerm(1);
+    hbResp.setConfigVersion(2);
+    hbResp.setConfigTerm(1);
+
+    const OpTime lastAppliedOpTime = OpTime(Timestamp(50, 0), 1);
+    const auto now = getNet()->now();
+    hbResp.setAppliedOpTimeAndWallTime({lastAppliedOpTime, now});
+    hbResp.setDurableOpTimeAndWallTime({lastAppliedOpTime, now});
+
+    // Set the primary's ping to be longer than the other secondary's ping.
+    const auto primaryPing = Milliseconds(10);
+    const auto nearestNodePing = Milliseconds(5);
+
+    // We must send two heartbeats per node, so that we satisfy the 2N requirement before choosing a
+    // new sync source.
+    for (auto i = 0; i < 2; i++) {
+        hbResp.setState(MemberState::RS_PRIMARY);
+        replCoord->handleHeartbeatResponse_forTest(
+            hbResp.toBSON(), 1 /* targetIndex */, primaryPing);
+        hbResp.setState(MemberState::RS_SECONDARY);
+        replCoord->handleHeartbeatResponse_forTest(
+            hbResp.toBSON(), 2 /* targetIndex */, nearestNodePing);
+    }
+
+    // We expect to sync from the primary even though it is farther away, since our read preference
+    // should be set to ReadPreference::PrimaryOnly.
+    ASSERT_EQ(HostAndPort("node2:12345"), replCoord->chooseNewSyncSource(OpTime()));
+}
+
+TEST_F(ReplCoordTest, ShouldChooseNearestNodeAsSyncSourceWhenPrimaryAndChainingAllowed) {
+    // Set up a three-node replica set with chainingAllowed set to true.
+    assertStartSuccess(BSON("_id"
+                            << "mySet"
+                            << "version" << 2 << "members"
+                            << BSON_ARRAY(BSON("host"
+                                               << "node1:12345"
+                                               << "_id" << 0)
+                                          << BSON("host"
+                                                  << "node2:12345"
+                                                  << "_id" << 1)
+                                          << BSON("host"
+                                                  << "node3:12345"
+                                                  << "_id" << 2))
+                            << "settings" << BSON("chainingAllowed" << true)),
+                       HostAndPort("node1", 12345));
+
+    const auto opCtx = makeOperationContext();
+
+    // Get elected primary.
+    auto replCoord = getReplCoord();
+    ASSERT_OK(replCoord->setFollowerMode(MemberState::RS_SECONDARY));
+    replCoordSetMyLastAppliedOpTime(OpTimeWithTermOne(100, 1), Date_t() + Seconds(100));
+    replCoordSetMyLastDurableOpTime(OpTimeWithTermOne(100, 1), Date_t() + Seconds(100));
+    simulateSuccessfulV1ElectionWithoutExitingDrainMode(
+        getReplCoord()->getElectionTimeout_forTest(), opCtx.get());
+    ASSERT(replCoord->getMemberState().primary());
+    ASSERT(replCoord->getApplierState() == ReplicationCoordinator::ApplierState::Draining);
+
+    ReplSetHeartbeatResponse hbResp;
+    hbResp.setTerm(1);
+    hbResp.setConfigVersion(2);
+    hbResp.setConfigTerm(1);
+
+    const OpTime lastAppliedOpTime = OpTime(Timestamp(50, 0), 1);
+    const auto now = getNet()->now();
+    hbResp.setAppliedOpTimeAndWallTime({lastAppliedOpTime, now});
+    hbResp.setDurableOpTimeAndWallTime({lastAppliedOpTime, now});
+    hbResp.setState(MemberState::RS_SECONDARY);
+
+    const auto furthestNodePing = Milliseconds(10);
+    const auto nearestNodePing = Milliseconds(5);
+
+    // We must send two heartbeats per node, so that we satisfy the 2N requirement before choosing a
+    // new sync source.
+    for (auto i = 0; i < 2; i++) {
+        replCoord->handleHeartbeatResponse_forTest(
+            hbResp.toBSON(), 1 /* targetIndex */, furthestNodePing);
+        replCoord->handleHeartbeatResponse_forTest(
+            hbResp.toBSON(), 2 /* targetIndex */, nearestNodePing);
+    }
+
+    // We expect to sync from the closest node, since our read preference should be set to
+    // ReadPreference::Nearest.
+    ASSERT_EQ(HostAndPort("node3:12345"), replCoord->chooseNewSyncSource(OpTime()));
 }
 
 // TODO(schwerin): Unit test election id updating

@@ -8,18 +8,19 @@
  *   requires_find_command,
  *   uses_multi_shard_transaction,
  *   uses_transactions,
+ *   need_fixing_for_46
  * ]
  */
 (function() {
 'use strict';
 
+load("jstests/sharding/libs/sharded_transactions_helpers.js");
 load("jstests/sharding/libs/update_shard_key_helpers.js");
 
-const st = new ShardingTest({
-    mongos: 1,
-    shards: 3,
-    shardOptions: {setParameter: {"coordinateCommitReturnImmediatelyAfterPersistingDecision": true}}
-});
+const st = new ShardingTest({mongos: 1, shards: 3});
+
+enableCoordinateCommitReturnImmediatelyAfterPersistingDecision(st);
+
 const kDbName = 'update_compound_sk';
 const ns = kDbName + '.coll';
 const session = st.s.startSession({retryWrites: true});

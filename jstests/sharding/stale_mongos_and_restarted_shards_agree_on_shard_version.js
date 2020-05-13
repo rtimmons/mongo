@@ -1,11 +1,14 @@
 /**
  * Tests that after a restart of a shard, multi write operations, finds and aggregations still work
- * as expected with a stale router
+ * as expected with a stale router. Requrires persistence because it asumes the shard will still
+ * have it's data after a restart.
  *
- * This test requrires persistence because it asumes the shard will still have it's data after
- * restarting
+ * @tags: [
+ *  requires_fcv_46,
+ *  requires_persistence,
+ * ]
  *
- * @tags: [requires_persistence]
+ * TODO (SERVER-47265): Remove the requires_fcv_46 flag
  */
 (function() {
 'use strict';
