@@ -19,16 +19,22 @@ def _add_subcommands():
     subparsers = parser.add_subparsers(dest="command")
 
     # Add sub-commands.
-    _add_run(subparsers)
-    _add_list_suites(subparsers)
-    _add_find_suites(subparsers)
-    _add_hang_analyzer(subparsers)
-    undodb.add_subcommand(subparsers)
+    plugins = [_run__add_subcommand,
+               _hang_analyzer__add_subcommand,
+               undodb.add_subcommand]
+    for plugin in plugins:
+        plugin(subparsers)
 
     return parser
 
 
-def _add_run(subparsers):  # pylint: disable=too-many-statements
+def _run__add_subcommand(subparsers):
+    _run___add_run(subparsers)
+    _run__add_list_suites(subparsers)
+    _run__add_find_suites(subparsers)
+
+
+def _run___add_run(subparsers):  # pylint: disable=too-many-statements
     """Create and add the parser for the Run subcommand."""
     parser = subparsers.add_parser("run", help="Runs the specified tests.")
 
@@ -403,7 +409,7 @@ def _add_run(subparsers):  # pylint: disable=too-many-statements
                                    metavar="BENCHMARK_REPETITIONS", help=benchmark_repetitions_help)
 
 
-def _add_list_suites(subparsers):
+def _run__add_list_suites(subparsers):
     """Create and add the parser for the list-suites subcommand."""
     parser = subparsers.add_parser("list-suites",
                                    help="Lists the names of the suites available to execute.")
@@ -416,7 +422,7 @@ def _add_list_suites(subparsers):
     parser.set_defaults(logger_file="console")
 
 
-def _add_find_suites(subparsers):
+def _run__add_find_suites(subparsers):
     """Create and add the parser for the find-suites subcommand."""
     parser = subparsers.add_parser(
         "find-suites", help="Lists the names of the suites that will execute the specified tests.")
@@ -441,7 +447,7 @@ def _add_find_suites(subparsers):
               " configurations."))
 
 
-def _add_hang_analyzer(subparsers):
+def _hang_analyzer__add_subcommand(subparsers):
     """Create and add the parser for the hang analyzer subcommand."""
 
     parser = subparsers.add_parser("hang-analyzer", help=commands.hang_analyzer.__doc__)
