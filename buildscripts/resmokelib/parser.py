@@ -1,6 +1,7 @@
 """Parser for command line arguments."""
 
 import shlex
+import sys
 
 import argparse
 
