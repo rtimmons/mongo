@@ -22,8 +22,8 @@ UndoDB is only supported on linux platforms. It will not work on macOS or Window
 
 2. Untar and install:
 
-        tar xzf undodb-5.3.4.198.tgz
-        cd undodb-5.3.4.198
+        tar xzf undodb-*.tgz
+        cd undodb-*
         sudo make install
 
 There is good README help in the undodb directory if you have questions.
