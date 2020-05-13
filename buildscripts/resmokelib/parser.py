@@ -28,6 +28,7 @@ def _add_subcommands():
 
     return parser
 
+
 # def to_local_args(args=None):  # pylint: disable=too-many-branches,too-many-locals
 #     """
 #     Return a command line invocation for resmoke.py suitable for being run outside of Evergreen.
@@ -139,8 +140,7 @@ def parse_command_line(sys_args, **kwargs):
         if subcommand_obj is not None:
             return subcommand_obj
 
-    raise RuntimeError(
-        f"Resmoke configuration has invalid subcommand: {subcommand}. Try '--help'")
+    raise RuntimeError(f"Resmoke configuration has invalid subcommand: {subcommand}. Try '--help'")
 
 
 def set_run_options(argstr=''):

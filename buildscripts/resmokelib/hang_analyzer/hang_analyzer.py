@@ -199,8 +199,9 @@ class HangAnalyzerPlugin(PluginInterface):
         parser = subparsers.add_parser("hang-analyzer", help=__doc__)
 
         parser.add_argument(
-            '-m', '--process-match', dest='process_match', choices=('contains', 'exact'),
-            default='contains', help="Type of match for process names (-p & -g), specify 'contains', or"
+            '-m', '--process-match', dest='process_match', choices=('contains',
+                                                                    'exact'), default='contains',
+            help="Type of match for process names (-p & -g), specify 'contains', or"
             " 'exact'. Note that the process name match performs the following"
             " conversions: change all process names to lowecase, strip off the file"
             " extension, like '.exe' on Windows. Default is 'contains'.")
@@ -212,9 +213,10 @@ class HangAnalyzerPlugin(PluginInterface):
             '-d', '--process-ids', dest='process_ids', default=None,
             help='Comma separated list of process ids (PID) to analyze, overrides -p &'
             ' -g')
-        parser.add_argument('-c', '--dump-core', dest='dump_core', action="store_true", default=False,
-                            help='Dump core file for each analyzed process')
-        parser.add_argument('-s', '--max-core-dumps-size', dest='max_core_dumps_size', default=10000,
+        parser.add_argument('-c', '--dump-core', dest='dump_core', action="store_true",
+                            default=False, help='Dump core file for each analyzed process')
+        parser.add_argument('-s', '--max-core-dumps-size', dest='max_core_dumps_size',
+                            default=10000,
                             help='Maximum total size of core dumps to keep in megabytes')
         parser.add_argument(
             '-o', '--debugger-output', dest='debugger_output', action="append", choices=('file',

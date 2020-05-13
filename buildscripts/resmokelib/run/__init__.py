@@ -578,7 +578,8 @@ class RunPlugin(PluginInterface):
                   " indicates there is no limit."))
 
         parser.add_argument(
-            "--archiveLimitTests", type=int, dest="archive_limit_tests", metavar="ARCHIVE_LIMIT_TESTS",
+            "--archiveLimitTests", type=int, dest="archive_limit_tests",
+            metavar="ARCHIVE_LIMIT_TESTS",
             help=("Sets the maximum number of tests to archive to S3. A value"
                   " of 0 indicates there is no limit."))
 
@@ -588,8 +589,8 @@ class RunPlugin(PluginInterface):
                   " spawned by resmoke.py or the tests themselves. Each fixture and Job"
                   " allocates a contiguous range of ports."))
 
-        parser.add_argument("--buildloggerUrl", action="store", dest="buildlogger_url", metavar="URL",
-                            help="The root url of the buildlogger server.")
+        parser.add_argument("--buildloggerUrl", action="store", dest="buildlogger_url",
+                            metavar="URL", help="The root url of the buildlogger server.")
 
         parser.add_argument("--continueOnFailure", action="store_true", dest="continue_on_failure",
                             help="Executes all tests in all suites, even if some of them fail.")
@@ -603,7 +604,8 @@ class RunPlugin(PluginInterface):
                             help="The path to the dbtest executable for resmoke to use.")
 
         parser.add_argument(
-            "--excludeWithAnyTags", action="append", dest="exclude_with_any_tags", metavar="TAG1,TAG2",
+            "--excludeWithAnyTags", action="append", dest="exclude_with_any_tags",
+            metavar="TAG1,TAG2",
             help=("Comma separated list of tags. Any jstest that contains any of the"
                   " specified tags will be excluded from any suites that are run."
                   " The tag '{}' is implicitly part of this list.".format(_config.EXCLUDED_TAG)))
@@ -617,7 +619,8 @@ class RunPlugin(PluginInterface):
                   "Defaults to python. Options are 'python' or 'jasper'."))
 
         parser.add_argument(
-            "--includeWithAnyTags", action="append", dest="include_with_any_tags", metavar="TAG1,TAG2",
+            "--includeWithAnyTags", action="append", dest="include_with_any_tags",
+            metavar="TAG1,TAG2",
             help=("Comma separated list of tags. For the jstest portion of the suite(s),"
                   " only tests which have at least one of the specified tags will be"
                   " run."))
@@ -692,7 +695,8 @@ class RunPlugin(PluginInterface):
             " existing MongoDB cluster with the URL mongodb://localhost:[PORT]."
             " This is useful for connecting to a server running in a debugger.")
 
-        parser.add_argument("--repeat", "--repeatSuites", type=int, dest="repeat_suites", metavar="N",
+        parser.add_argument("--repeat", "--repeatSuites", type=int, dest="repeat_suites",
+                            metavar="N",
                             help="Repeats the given suite(s) N times, or until one fails.")
 
         parser.add_argument(
@@ -755,8 +759,8 @@ class RunPlugin(PluginInterface):
                   " to specifying --shuffleMode=on."))
 
         parser.add_argument(
-            "--shuffleMode", action="store", dest="shuffle", choices=("on", "off",
-                                                                      "auto"), metavar="ON|OFF|AUTO",
+            "--shuffleMode", action="store", dest="shuffle", choices=("on", "off", "auto"),
+            metavar="ON|OFF|AUTO",
             help=("Controls whether to randomize the order in which tests are executed."
                   " Defaults to auto when not supplied. auto enables randomization in"
                   " all cases except when the number of jobs requested is 1."))
@@ -772,7 +776,8 @@ class RunPlugin(PluginInterface):
             metavar="ON|OFF", help=("Enable or disable majority read concern support."
                                     " Defaults to %%default."))
 
-        parser.add_argument("--flowControl", action="store", dest="flow_control", choices=("on", "off"),
+        parser.add_argument("--flowControl", action="store", dest="flow_control", choices=("on",
+                                                                                           "off"),
                             metavar="ON|OFF", help=("Enable or disable flow control."))
 
         parser.add_argument("--flowControlTicketOverride", type=int, action="store",
@@ -803,11 +808,13 @@ class RunPlugin(PluginInterface):
             "--wiredTigerCollectionConfigString", dest="wt_coll_config", metavar="CONFIG",
             help="Sets the WiredTiger collection configuration setting for all mongod's.")
 
-        parser.add_argument("--wiredTigerEngineConfigString", dest="wt_engine_config", metavar="CONFIG",
-                            help="Sets the WiredTiger engine configuration setting for all mongod's.")
+        parser.add_argument(
+            "--wiredTigerEngineConfigString", dest="wt_engine_config", metavar="CONFIG",
+            help="Sets the WiredTiger engine configuration setting for all mongod's.")
 
-        parser.add_argument("--wiredTigerIndexConfigString", dest="wt_index_config", metavar="CONFIG",
-                            help="Sets the WiredTiger index configuration setting for all mongod's.")
+        parser.add_argument(
+            "--wiredTigerIndexConfigString", dest="wt_index_config", metavar="CONFIG",
+            help="Sets the WiredTiger index configuration setting for all mongod's.")
 
         parser.add_argument(
             "--executor", dest="executor_file",
@@ -816,7 +823,8 @@ class RunPlugin(PluginInterface):
 
         parser.add_argument(
             "--mixedBinVersions", type=str, dest="mixed_bin_versions",
-            metavar="version1-version2-..-versionN", help="Runs the test with the provided replica set"
+            metavar="version1-version2-..-versionN",
+            help="Runs the test with the provided replica set"
             " binary version configuration. Specify 'old-new' to configure a replica set with a"
             " 'last-stable' version primary and 'latest' version secondary. For a sharded cluster"
             " with two shards and two replica set nodes each, specify 'old-new-old-new'.")
@@ -827,9 +835,9 @@ class RunPlugin(PluginInterface):
             "ReplicaSetFixture.")
 
         evergreen_options = parser.add_argument_group(
-            title="Evergreen options",
-            description=("Options used to propagate information about the Evergreen task running this"
-                         " script."))
+            title="Evergreen options", description=(
+                "Options used to propagate information about the Evergreen task running this"
+                " script."))
 
         evergreen_options.add_argument("--buildId", dest="build_id", metavar="BUILD_ID",
                                        help="Sets the build ID of the task.")
@@ -870,8 +878,9 @@ class RunPlugin(PluginInterface):
                                        metavar="REVISION_ORDER_ID",
                                        help="Sets the chronological order number of this commit.")
 
-        evergreen_options.add_argument("--taskName", dest="task_name", metavar="TASK_NAME",
-                                       help="Sets the name of the Evergreen task running the tests.")
+        evergreen_options.add_argument(
+            "--taskName", dest="task_name", metavar="TASK_NAME",
+            help="Sets the name of the Evergreen task running the tests.")
 
         evergreen_options.add_argument("--taskId", dest="task_id", metavar="TASK_ID",
                                        help="Sets the Id of the Evergreen task running the tests.")
@@ -912,8 +921,9 @@ class RunPlugin(PluginInterface):
             " By default, each test is run multiple times to provide statistics on the variance"
             " between runs; use --benchmarkMinTimeSecs if you'd like to run a test for a longer or"
             " shorter duration.")
-        benchmark_options.add_argument("--benchmarkRepetitions", type=int, dest="benchmark_repetitions",
-                                       metavar="BENCHMARK_REPETITIONS", help=benchmark_repetitions_help)
+        benchmark_options.add_argument(
+            "--benchmarkRepetitions", type=int, dest="benchmark_repetitions",
+            metavar="BENCHMARK_REPETITIONS", help=benchmark_repetitions_help)
 
     @classmethod
     def _add_list_suites(cls, subparsers):
@@ -932,7 +942,8 @@ class RunPlugin(PluginInterface):
     def _add_find_suites(cls, subparsers):
         """Create and add the parser for the find-suites subcommand."""
         parser = subparsers.add_parser(
-            "find-suites", help="Lists the names of the suites that will execute the specified tests.")
+            "find-suites",
+            help="Lists the names of the suites that will execute the specified tests.")
 
         parser.add_argument("test_files", metavar="TEST_FILES", nargs="*",
                             help="Explicit test files to run")
