@@ -13,8 +13,6 @@ import time
 import pkg_resources
 import requests
 
-from buildscripts.resmokelib.plugin import PluginInterface, Subcommand
-
 try:
     import grpc_tools.protoc
     import grpc
@@ -22,7 +20,8 @@ except ImportError:
     pass
 
 # pylint: disable=wrong-import-position
-from buildscripts.resmokelib import config, configure_resmoke, config as _config
+from buildscripts.resmokelib import config
+from buildscripts.resmokelib import configure_resmoke
 from buildscripts.resmokelib import errors
 from buildscripts.resmokelib import logging
 from buildscripts.resmokelib import reportfile
@@ -30,9 +29,9 @@ from buildscripts.resmokelib import sighandler
 from buildscripts.resmokelib import suitesconfig
 from buildscripts.resmokelib import testing
 from buildscripts.resmokelib import utils
-
 from buildscripts.resmokelib.core import process
 from buildscripts.resmokelib.core import jasper_process
+from buildscripts.resmokelib.plugin import PluginInterface, Subcommand
 
 
 class TestRunner(Subcommand):  # pylint: disable=too-many-instance-attributes
@@ -525,16 +524,32 @@ class TestRunnerEvg(TestRunner):
 
 
 class RunPlugin(PluginInterface):
+    """Interface to parsing."""
+
+    # pylint: disable=missing-docstring
     def add_subcommand(self, subparsers):
+        """
+        Add subcommand parser.
+
+        :param subparsers: argparse subparsers
+        """
         RunPlugin._add_run(subparsers)
         RunPlugin._add_list_suites(subparsers)
         RunPlugin._add_find_suites(subparsers)
-        return None
 
     def parse(self, subcommand, parser, parsed_args, **kwargs):
+        """
+        Return Run Subcommand if command is one we recognize.
+
+        :param subcommand: equivalent to parsed_args.command
+        :param parser: parser used
+        :param parsed_args: output of parsing
+        :param kwargs: additional args
+        :return: None or a Subcommand
+        """
         if subcommand in ('find-suites', 'list-suites', 'run'):
             configure_resmoke.validate_and_update_config(parser, parsed_args)
-            if _config.EVERGREEN_TASK_ID is not None:
+            if config.EVERGREEN_TASK_ID is not None:
                 return TestRunnerEvg(subcommand, **kwargs)
             else:
                 return TestRunner(subcommand, **kwargs)
@@ -608,7 +623,7 @@ class RunPlugin(PluginInterface):
             metavar="TAG1,TAG2",
             help=("Comma separated list of tags. Any jstest that contains any of the"
                   " specified tags will be excluded from any suites that are run."
-                  " The tag '{}' is implicitly part of this list.".format(_config.EXCLUDED_TAG)))
+                  " The tag '{}' is implicitly part of this list.".format(config.EXCLUDED_TAG)))
 
         parser.add_argument("--genny", dest="genny_executable", metavar="PATH",
                             help="The path to the genny executable for resmoke to use.")

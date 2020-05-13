@@ -188,7 +188,10 @@ def _check_dump_quota(quota, ext):
 
 
 class HangAnalyzerPlugin(PluginInterface):
+    """Integration-point for hang-analyzer."""
+
     def parse(self, subcommand, parser, parsed_args, **kwargs):
+        """Parse command-line options."""
         if subcommand == 'hang-analyzer':
             return HangAnalyzer(parsed_args)
         return None

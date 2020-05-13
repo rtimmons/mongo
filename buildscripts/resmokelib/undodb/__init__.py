@@ -38,37 +38,11 @@ Please also refer to William Schultz's intro talk for a getting started primer:
 _COMMAND = "undodb"
 
 
-def add_subcommand(subparsers) -> None:
-    """
-    Add 'undodb' subcommand.
-
-    :param subparsers: argparse parser to add to
-    :return: None
-    """
-    parser = subparsers.add_parser(_COMMAND, help=_HELP)
-    # Accept arbitrary args like 'resmoke.py undodb foobar', but ignore them.
-    parser.add_argument("args", nargs="*")
-
-
-def parse(subcommand, parser, parsed_args, **kwargs) -> Optional[Subcommand]:
-    """
-    Return UndoDb if command is one we recognize.
-
-    :param subcommand: The first arg to resmoke.py (e.g. resmoke.py run => command = run).
-    :param parsed_args: Additional arguments parsed as a result of the `parser.parse` call.
-    :return: Callback if the command is for undodb else none.
-    """
-    if subcommand != _COMMAND:
-        return None
-    return UndoDb(parsed_args)
-
-
 class UndoDb(Subcommand):
     """Interact with UndoDB."""
 
-    def __init__(self, _):
+    def __init__(self):
         """Constructor."""
-        pass
 
     def execute(self) -> None:
         """
@@ -80,8 +54,29 @@ class UndoDb(Subcommand):
 
 
 class UndoDbPlugin(PluginInterface):
+    """Interact with UndoDB."""
+
     def add_subcommand(self, subparsers):
-        return add_subcommand(subparsers)
+        """
+        Add 'undodb' subcommand.
+
+        :param subparsers: argparse parser to add to
+        :return: None
+        """
+        parser = subparsers.add_parser(_COMMAND, help=_HELP)
+        # Accept arbitrary args like 'resmoke.py undodb foobar', but ignore them.
+        parser.add_argument("args", nargs="*")
 
     def parse(self, subcommand, parser, parsed_args, **kwargs):
-        return parse(subcommand, parser, parsed_args, **kwargs)
+        """
+        Return UndoDb if command is one we recognize.
+
+        :param subcommand: equivalent to parsed_args.command
+        :param parser: parser used
+        :param parsed_args: output of parsing
+        :param kwargs: additional args
+        :return: None or a Subcommand
+        """
+        if subcommand != _COMMAND:
+            return None
+        return UndoDb()

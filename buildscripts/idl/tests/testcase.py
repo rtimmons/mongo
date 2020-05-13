@@ -69,7 +69,7 @@ class IDLTestcase(unittest.TestCase):
         """Parse a document and throw a unittest failure if it fails to parse as a valid YAML document."""
 
         try:
-            return idl.parser.parse(doc_str, "unknown", resolver)
+            return idl.parser.parse(doc_str, )
         except:  # pylint: disable=bare-except
             self.fail("Failed to parse document:\n%s" % (doc_str))
 
