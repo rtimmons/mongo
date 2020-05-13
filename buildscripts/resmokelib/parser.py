@@ -582,29 +582,36 @@ def _parse(sys_args):
     return (parser, parsed_args)
 
 
+def _run__parse(subcommand, parser, parsed_args, **kwargs):
+    if subcommand in ('find-suites', 'list-suites', 'run'):
+        configure_resmoke.validate_and_update_config(parser, parsed_args)
+        if _config.EVERGREEN_TASK_ID is not None:
+            return commands.run.TestRunnerEvg(subcommand, **kwargs)
+        else:
+            return commands.run.TestRunner(subcommand, **kwargs)
+    return None
+
+
+def _hang_analyzer__parse(subcommand, parser, parsed_args, **kwargs):
+    if subcommand == 'hang-analyzer':
+        return commands.hang_analyzer.HangAnalyzer(parsed_args)
+    return None
+
+
 def parse_command_line(sys_args, **kwargs):
     """Parse the command line arguments passed to resmoke.py and return the subcommand object to execute."""
     parser, parsed_args = _parse(sys_args)
 
     subcommand = parsed_args.command
-    subcommand_obj = None
-    if subcommand in ('find-suites', 'list-suites', 'run'):
-        configure_resmoke.validate_and_update_config(parser, parsed_args)
-        if _config.EVERGREEN_TASK_ID is not None:
-            subcommand_obj = commands.run.TestRunnerEvg(subcommand, **kwargs)
-        else:
-            subcommand_obj = commands.run.TestRunner(subcommand, **kwargs)
-    elif subcommand == 'hang-analyzer':
-        subcommand_obj = commands.hang_analyzer.HangAnalyzer(parsed_args)
 
-    if subcommand_obj is None:
-        subcommand_obj = undodb.subcommand(subcommand, parsed_args)
+    plugins = [_run__parse, _hang_analyzer__parse, undodb.parse]
+    for plugin in plugins:
+        subcommand_obj = plugin(subcommand, parser, parsed_args, **kwargs)
+        if subcommand_obj is not None:
+            return subcommand_obj
 
-    if subcommand_obj is None:
-        raise RuntimeError(
-            f"Resmoke configuration has invalid subcommand: {subcommand}. Try '--help'")
-
-    return subcommand_obj
+    raise RuntimeError(
+        f"Resmoke configuration has invalid subcommand: {subcommand}. Try '--help'")
 
 
 def set_run_options(argstr=''):

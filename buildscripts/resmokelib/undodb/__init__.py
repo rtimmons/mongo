@@ -50,15 +50,15 @@ def add_subcommand(subparsers) -> None:
     parser.add_argument("args", nargs="*")
 
 
-def subcommand(command: str, parsed_args) -> Optional[interface.Subcommand]:
+def parse(subcommand, parser, parsed_args, **kwargs) -> Optional[interface.Subcommand]:
     """
     Return UndoDb if command is one we recognize.
 
-    :param command: The first arg to resmoke.py (e.g. resmoke.py run => command = run).
+    :param subcommand: The first arg to resmoke.py (e.g. resmoke.py run => command = run).
     :param parsed_args: Additional arguments parsed as a result of the `parser.parse` call.
     :return: Callback if the command is for undodb else none.
     """
-    if command != _COMMAND:
+    if subcommand != _COMMAND:
         return None
     return UndoDb(parsed_args)
 
