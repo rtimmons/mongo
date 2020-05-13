@@ -18,9 +18,7 @@ import logging
 import platform
 import traceback
 
-from buildscripts.resmokelib import commands
-from buildscripts.resmokelib.commands import interface
-from buildscripts.resmokelib.commands.interface import PluginInterface
+from buildscripts.resmokelib.plugin import PluginInterface, Subcommand
 
 from buildscripts.resmokelib.hang_analyzer import extractor
 from buildscripts.resmokelib.hang_analyzer import dumper
@@ -28,7 +26,7 @@ from buildscripts.resmokelib.hang_analyzer import process_list
 from buildscripts.resmokelib.hang_analyzer.process import signal_process, signal_python
 
 
-class HangAnalyzer(interface.Subcommand):
+class HangAnalyzer(Subcommand):
     """Main class for the hang analyzer subcommand."""
 
     def __init__(self, options):
@@ -192,13 +190,13 @@ def _check_dump_quota(quota, ext):
 class HangAnalyzerPlugin(PluginInterface):
     def parse(self, subcommand, parser, parsed_args, **kwargs):
         if subcommand == 'hang-analyzer':
-            return commands.hang_analyzer.HangAnalyzer(parsed_args)
+            return HangAnalyzer(parsed_args)
         return None
 
     def add_subcommand(self, subparsers):
         """Create and add the parser for the hang analyzer subcommand."""
 
-        parser = subparsers.add_parser("hang-analyzer", help=commands.hang_analyzer.__doc__)
+        parser = subparsers.add_parser("hang-analyzer", help=__doc__)
 
         parser.add_argument(
             '-m', '--process-match', dest='process_match', choices=('contains', 'exact'),

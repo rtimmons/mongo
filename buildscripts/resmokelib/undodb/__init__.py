@@ -1,8 +1,7 @@
 """Interactions with the undodb tool-suite."""
 from typing import Optional
 
-from buildscripts.resmokelib.commands import interface
-from buildscripts.resmokelib.commands.interface import PluginInterface
+from buildscripts.resmokelib.plugin import PluginInterface, Subcommand
 
 _HELP = """
 Info on how to install undodb.
@@ -51,7 +50,7 @@ def add_subcommand(subparsers) -> None:
     parser.add_argument("args", nargs="*")
 
 
-def parse(subcommand, parser, parsed_args, **kwargs) -> Optional[interface.Subcommand]:
+def parse(subcommand, parser, parsed_args, **kwargs) -> Optional[Subcommand]:
     """
     Return UndoDb if command is one we recognize.
 
@@ -64,7 +63,7 @@ def parse(subcommand, parser, parsed_args, **kwargs) -> Optional[interface.Subco
     return UndoDb(parsed_args)
 
 
-class UndoDb(interface.Subcommand):
+class UndoDb(Subcommand):
     """Interact with UndoDB."""
 
     def __init__(self, _):

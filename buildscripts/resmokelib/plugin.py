@@ -1,4 +1,5 @@
-"""Interface for creating a resmoke subcommand."""
+"""Interface for creating a resmoke plugin."""
+
 import abc
 
 

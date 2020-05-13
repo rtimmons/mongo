@@ -6,8 +6,8 @@ import argparse
 
 from . import configure_resmoke
 
-from .commands.hang_analyzer import HangAnalyzerPlugin
-from .commands.run import RunPlugin
+from .run import RunPlugin
+from .hang_analyzer import HangAnalyzerPlugin
 from .undodb import UndoDbPlugin
 
 _PLUGINS = [

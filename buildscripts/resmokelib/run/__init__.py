@@ -13,7 +13,7 @@ import time
 import pkg_resources
 import requests
 
-from buildscripts.resmokelib.commands.interface import PluginInterface
+from buildscripts.resmokelib.plugin import PluginInterface, Subcommand
 
 try:
     import grpc_tools.protoc
@@ -22,7 +22,7 @@ except ImportError:
     pass
 
 # pylint: disable=wrong-import-position
-from buildscripts.resmokelib import config, configure_resmoke, config as _config, commands
+from buildscripts.resmokelib import config, configure_resmoke, config as _config
 from buildscripts.resmokelib import errors
 from buildscripts.resmokelib import logging
 from buildscripts.resmokelib import reportfile
@@ -31,13 +31,11 @@ from buildscripts.resmokelib import suitesconfig
 from buildscripts.resmokelib import testing
 from buildscripts.resmokelib import utils
 
-from buildscripts.resmokelib.commands import interface
-
 from buildscripts.resmokelib.core import process
 from buildscripts.resmokelib.core import jasper_process
 
 
-class TestRunner(interface.Subcommand):  # pylint: disable=too-many-instance-attributes
+class TestRunner(Subcommand):  # pylint: disable=too-many-instance-attributes
     """The main class to run tests with resmoke."""
 
     def __init__(self, command, start_time=time.time()):
@@ -537,9 +535,9 @@ class RunPlugin(PluginInterface):
         if subcommand in ('find-suites', 'list-suites', 'run'):
             configure_resmoke.validate_and_update_config(parser, parsed_args)
             if _config.EVERGREEN_TASK_ID is not None:
-                return commands.run.TestRunnerEvg(subcommand, **kwargs)
+                return TestRunnerEvg(subcommand, **kwargs)
             else:
-                return commands.run.TestRunner(subcommand, **kwargs)
+                return TestRunner(subcommand, **kwargs)
         return None
 
     @classmethod
