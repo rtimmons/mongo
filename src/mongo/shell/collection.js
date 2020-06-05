@@ -274,7 +274,7 @@ DBCollection.prototype.insert = function(obj, options) {
     if (!obj)
         throw Error("no object passed to insert!");
 
-    options = typeof(options) === 'undefined' ? {} : options;
+    options = typeof (options) === 'undefined' ? {} : options;
 
     var flags = 0;
 
