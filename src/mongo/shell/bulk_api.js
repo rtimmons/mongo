@@ -908,6 +908,13 @@ var _bulk_api_module = (function() {
             var result = null;
             var cmd = buildBatchCmd(batch);
 
+            // print("executeBatch batch = " + JSON.stringify({batch: batch, cmd: cmd}));
+            // cmd is
+            //     {"insert":"collection",
+            //      "documents":[{"_id":{"$oid":"5eda56e2e97a3ec059be0be4"},"name":"xyz"}],
+            //      "ordered":true,
+            //      "writeConcern":{"w":2}}
+            // print("bulk_api cmd = " + JSON.stringify(cmd));
             // Run the command (may throw)
             result = collection.runCommand(cmd);
 
