@@ -1,6 +1,7 @@
 // Test insert and insertOne with write-concerns other than {w:1}.
 
 const coll = db.testInserts;
+coll.drop();
 
 assert.throws(() => coll.insertOne({a:1}, {w:2}));
 
