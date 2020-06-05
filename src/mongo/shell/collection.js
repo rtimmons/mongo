@@ -300,7 +300,7 @@ DBCollection.prototype.insert = function(obj, options) {
 
     // wc = undefined
     if (!wc)
-        wc = this.getWriteConcern(options);
+        wc = this._createWriteConcern(options);
 
     var result = undefined;
     var startTime =
