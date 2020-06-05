@@ -298,7 +298,6 @@ DBCollection.prototype.insert = function(obj, options) {
     // 1 = continueOnError, which is synonymous with unordered in the write commands/bulk-api
     var ordered = ((flags & 1) == 0);
 
-    // wc = undefined
     if (!wc)
         wc = this._createWriteConcern(options);
 
@@ -311,30 +310,19 @@ DBCollection.prototype.insert = function(obj, options) {
         var bulk = ordered ? this.initializeOrderedBulkOp() : this.initializeUnorderedBulkOp();
         var isMultiInsert = Array.isArray(obj);
 
-        // print("!= legacy with " + JSON.stringify({
-        //     options: options,
-        //     obj: obj,
-        //     flags: flags,
-        //     fullname: this._fullName,
-        //     bulk: bulk,
-        // }));
-
-        if (isMultiInsert) { // false
+        if (isMultiInsert) {
             obj.forEach(function(doc) {
                 bulk.insert(doc);
             });
         } else {
-            // print("Doing bulk.insert(obj) = " + JSON.stringify(obj));
             bulk.insert(obj);
         }
 
         try {
-            // print("wc = " + JSON.stringify(wc));
             result = bulk.execute(wc);
             if (!isMultiInsert)
                 result = result.toSingleResult();
         } catch (ex) {
-            // print("Caught exception " + ex);
             if (ex instanceof BulkWriteError) {
                 result = isMultiInsert ? ex.toResult() : ex.toSingleResult();
             } else {
@@ -1343,7 +1331,6 @@ DBCollection.prototype.setWriteConcern = function(wc) {
 };
 
 DBCollection.prototype.getWriteConcern = function() {
-
     if (this._writeConcern)
         return this._writeConcern;
 
