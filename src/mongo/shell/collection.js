@@ -327,6 +327,8 @@ DBCollection.prototype.insert = function(obj, options) {
         } catch (ex) {
             if (ex instanceof BulkWriteError) {
                 result = isMultiInsert ? ex.toResult() : ex.toSingleResult();
+            } else if (ex instanceof WriteCommandError) {
+                result = ex;
             } else {
                 // Other exceptions rethrown as-is.
                 throw ex;
