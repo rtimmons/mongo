@@ -1342,19 +1342,13 @@ DBCollection.prototype.setWriteConcern = function(wc) {
     }
 };
 
-DBCollection.prototype.getWriteConcern = function(options) {
-    options = typeof(options) === "undefined" ? {} : options;
+DBCollection.prototype.getWriteConcern = function() {
 
     if (this._writeConcern)
         return this._writeConcern;
 
     if (this._db.getWriteConcern())
         return this._db.getWriteConcern();
-
-    // print("Creating writeConcern with options = " + JSON.stringify(options));
-    if (typeof options.w !== "undefined") {
-        return new WriteConcern(options.w);
-    }
 
     return null;
 };

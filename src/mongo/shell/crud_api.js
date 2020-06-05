@@ -252,8 +252,6 @@ DBCollection.prototype.insertOne = function(document, options) {
     // Get the write concern
     var writeConcern = this._createWriteConcern(opts);
 
-    // print("insertOne writeConcern = " + JSON.stringify(writeConcern));
-
     // Result
     var result = {acknowledged: (writeConcern && writeConcern.w == 0) ? false : true};
 
