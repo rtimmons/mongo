@@ -110,6 +110,8 @@ class MockTestFileExplorer(object):
 
     NUM_JS_FILES = 4  # Total number of JS files in self.files.
 
+    BINARY = "dbtest"
+
     def __init__(self):
         self.files = [
             "dir/subdir1/test11.js", "dir/subdir1/test12.js", "dir/subdir2/test21.js",
@@ -120,7 +122,7 @@ class MockTestFileExplorer(object):
             "dir/subdir1/test11.js": ["tag1", "tag2"], "dir/subdir1/test12.js": ["tag3"],
             "dir/subdir2/test21.js": ["tag2", "tag4"], "dir/subdir3/a/test3a1.js": ["tag4", "tag5"]
         }
-        self.binary = "dbtest"
+        self.binary = MockTestFileExplorer.BINARY
         self.jstest_tag_file = {"dir/subdir1/test11.js": "tagA", "dir/subdir3/a/test3a1.js": "tagB"}
 
     def is_glob_pattern(self, pattern):  # pylint: disable=no-self-use
@@ -587,6 +589,8 @@ class TestFilterTests(unittest.TestCase):
             ["dir/subdir1/test11.js", "dir/subdir1/test12.js", "dir/subdir3/a/test3a1.js"],
             excluded)
 
+    @unittest.skipUnless(os.path.exists(MockTestFileExplorer.BINARY),
+                         "{} not built".format(MockTestFileExplorer.BINARY))
     def test_db_tests_all(self):
         config = {"binary": self.test_file_explorer.binary}
         selected, excluded = selector.filter_tests("db_test", config, self.test_file_explorer)
@@ -604,6 +608,8 @@ class TestFilterTests(unittest.TestCase):
         self.assertEqual(["dbtestOverride"], selected)
         self.assertEqual([], excluded)
 
+    @unittest.skipUnless(os.path.exists(MockTestFileExplorer.BINARY),
+                         "{} not built".format(MockTestFileExplorer.BINARY))
     def test_db_tests_include_suites(self):
         config = {"binary": self.test_file_explorer.binary, "include_suites": ["dbtestB"]}
         selected, excluded = selector.filter_tests("db_test", config, self.test_file_explorer)
