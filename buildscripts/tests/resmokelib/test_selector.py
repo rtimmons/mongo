@@ -582,8 +582,9 @@ class TestFilterTests(unittest.TestCase):
             ["dir/subdir1/test11.js", "dir/subdir1/test12.js", "dir/subdir3/a/test3a1.js"],
             excluded)
 
-    @unittest.skipUnless(os.path.exists(MockTestFileExplorer.BINARY),
-                         "{} not built".format(MockTestFileExplorer.BINARY))
+    @unittest.skipUnless(
+        os.path.exists(MockTestFileExplorer.BINARY),
+        "{} not built".format(MockTestFileExplorer.BINARY))
     def test_db_tests_all(self):
         config = {"binary": self.test_file_explorer.binary}
         selected, excluded = selector.filter_tests("db_test", config, self.test_file_explorer)
@@ -601,8 +602,9 @@ class TestFilterTests(unittest.TestCase):
         self.assertEqual(["dbtestOverride"], selected)
         self.assertEqual([], excluded)
 
-    @unittest.skipUnless(os.path.exists(MockTestFileExplorer.BINARY),
-                         "{} not built".format(MockTestFileExplorer.BINARY))
+    @unittest.skipUnless(
+        os.path.exists(MockTestFileExplorer.BINARY),
+        "{} not built".format(MockTestFileExplorer.BINARY))
     def test_db_tests_include_suites(self):
         config = {"binary": self.test_file_explorer.binary, "include_suites": ["dbtestB"]}
         selected, excluded = selector.filter_tests("db_test", config, self.test_file_explorer)
