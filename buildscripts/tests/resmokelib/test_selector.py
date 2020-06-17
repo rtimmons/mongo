@@ -431,13 +431,6 @@ class TestMultiJSSelector(unittest.TestCase):
         self.assertEqual(len(selected), 1)
         self.assertEqual(len(selected[0]), num_files)
 
-    @unittest.skip("Known Broken")
-    def test_multi_js_test_selector_group_too_large(self):
-        config = selector._MultiJSTestSelectorConfig(roots=["dir/**/*.js"], group_size=9999999,
-                                                     group_count_multiplier=3)
-        with self.assertRaises(ValueError):
-            self.selector.select(config)
-
 
 class TestFilterTests(unittest.TestCase):
     @classmethod
