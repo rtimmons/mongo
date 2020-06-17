@@ -56,10 +56,10 @@ class TestRunner(Subcommand):  # pylint: disable=too-many-instance-attributes
         self._exit_code = 0
 
     def _setup_logging(self):
-        logging.loggers.configure_loggers(config.LOGGING_CONFIG)
+        logging.loggers.configure_loggers()
         logging.flush.start_thread()
         self._exec_logger = logging.loggers.EXECUTOR_LOGGER
-        self._resmoke_logger = self._exec_logger.new_resmoke_logger()
+        self._resmoke_logger = logging.loggers.new_resmoke_logger()
 
     def _exit_logging(self):
         if self._interrupted:
@@ -166,12 +166,11 @@ class TestRunner(Subcommand):  # pylint: disable=too-many-instance-attributes
         self._resmoke_logger.info("verbatim resmoke.py invocation: %s",
                                   " ".join([shlex.quote(arg) for arg in sys.argv]))
 
-        # TODO: SERVER-47611
-        # if config.EVERGREEN_TASK_ID:
-        #     local_args = parser.to_local_args()
-        #     self._resmoke_logger.info("resmoke.py invocation for local usage: %s %s",
-        #                               os.path.join("buildscripts", "resmoke.py"),
-        #                               " ".join(local_args))
+        if config.EVERGREEN_TASK_ID:
+            local_args = to_local_args()
+            self._resmoke_logger.info("resmoke.py invocation for local usage: %s %s",
+                                      os.path.join("buildscripts", "resmoke.py"),
+                                      " ".join(local_args))
 
         suites = None
         try:
@@ -636,6 +635,11 @@ class RunPlugin(PluginInterface):
         parser.add_argument("-n", action="store_const", const="tests", dest="dry_run",
                             help="Outputs the tests that would be run.")
 
+        parser.add_argument(
+            "--recordWith", dest="undo_recorder_path", metavar="PATH",
+            help="Record execution of mongo, mongod and mongos processes;"
+            "specify the path to UndoDB's 'live-record' binary")
+
         # TODO: add support for --dryRun=commands
         parser.add_argument(
             "--dryRun", action="store", dest="dry_run", choices=("off", "tests"), metavar="MODE",
@@ -811,6 +815,12 @@ class RunPlugin(PluginInterface):
             "--linearChain", action="store", dest="linear_chain", choices=("on", "off"),
             metavar="ON|OFF", help="Enable or disable linear chaining for tests using "
             "ReplicaSetFixture.")
+
+        parser.add_argument(
+            "--backupOnRestartDir", action="store", type=str, dest="backup_on_restart_dir",
+            metavar="DIRECTORY", help=
+            "Every time a mongod restarts on existing data files, the data files will be backed up underneath the input directory."
+        )
 
         internal_options = parser.add_argument_group(
             title=_INTERNAL_OPTIONS_TITLE,

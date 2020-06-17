@@ -56,7 +56,6 @@
 #include "mongo/db/repl/isself.h"
 #include "mongo/db/repl/member_data.h"
 #include "mongo/db/repl/repl_server_parameters_gen.h"
-#include "mongo/db/repl/rslog.h"
 #include "mongo/logv2/log.h"
 #include "mongo/rpc/metadata/oplog_query_metadata.h"
 #include "mongo/rpc/metadata/repl_set_metadata.h"
@@ -211,6 +210,7 @@ TopologyCoordinator::TopologyCoordinator(Options options)
       _term(OpTime::kUninitializedTerm),
       _currentPrimaryIndex(-1),
       _forceSyncSourceIndex(-1),
+      _syncSourceCurrentlyForced(false),
       _options(std::move(options)),
       _selfIndex(-1),
       _maintenanceModeCalls(0),
@@ -238,26 +238,36 @@ HostAndPort TopologyCoordinator::getSyncSourceAddress() const {
     return _syncSource;
 }
 
+void TopologyCoordinator::_clearSyncSource() {
+    _syncSource = HostAndPort();
+    _syncSourceCurrentlyForced = false;
+}
+
+void TopologyCoordinator::_setSyncSource(HostAndPort newSyncSource, Date_t now, bool forced) {
+    _syncSource = newSyncSource;
+    _syncSourceCurrentlyForced = forced;
+
+    // If we chose another node rather than clearing the sync source, update the recent sync source
+    // changes.
+    if (!_syncSource.empty()) {
+        _recentSyncSourceChanges.addNewEntry(now);
+    }
+}
+
 HostAndPort TopologyCoordinator::chooseNewSyncSource(Date_t now,
                                                      const OpTime& lastOpTimeFetched,
                                                      ReadPreference readPreference) {
-    ON_BLOCK_EXIT([&]() {
-        // If we chose another sync source, update the recent sync source changes.
-        if (!_syncSource.empty()) {
-            _recentSyncSourceChanges.addNewEntry(now);
-        }
-    });
-    // Check to make sure we can choose a sync source, and choose a forced one if
-    // set.
+    // Check to make sure we can choose a sync source, and choose a forced one if set.
     auto maybeSyncSource = _chooseSyncSourceInitialStep(now);
     if (maybeSyncSource) {
-        _syncSource = *maybeSyncSource;
+        bool forced = !maybeSyncSource->empty();
+        _setSyncSource(*maybeSyncSource, now, forced);
         return _syncSource;
     }
 
     // If we are only allowed to sync from the primary, use it as the sync source if possible.
     if (readPreference == ReadPreference::PrimaryOnly) {
-        _syncSource = _choosePrimaryAsSyncSource(now, lastOpTimeFetched);
+        _setSyncSource(_choosePrimaryAsSyncSource(now, lastOpTimeFetched), now);
         if (_syncSource.empty()) {
             if (readPreference == ReadPreference::PrimaryOnly) {
                 LOGV2_DEBUG(3873104,
@@ -274,12 +284,12 @@ HostAndPort TopologyCoordinator::chooseNewSyncSource(Date_t now,
         return _syncSource;
     } else if (readPreference == ReadPreference::PrimaryPreferred) {
         // If we prefer the primary, try it first.
-        _syncSource = _choosePrimaryAsSyncSource(now, lastOpTimeFetched);
+        _setSyncSource(_choosePrimaryAsSyncSource(now, lastOpTimeFetched), now);
         if (!_syncSource.empty()) {
             return _syncSource;
         }
     }
-    _syncSource = _chooseNearbySyncSource(now, lastOpTimeFetched, readPreference);
+    _setSyncSource(_chooseNearbySyncSource(now, lastOpTimeFetched, readPreference), now);
     return _syncSource;
 }
 
@@ -341,7 +351,7 @@ HostAndPort TopologyCoordinator::_chooseNearbySyncSource(Date_t now,
         // Only log when we had a valid sync source before
         static constexpr char message[] = "Could not find member to sync from";
         if (!_syncSource.empty()) {
-            LOGV2_OPTIONS(21798, {logv2::LogTag::kRS}, message);
+            LOGV2(21798, message);
         }
         setMyHeartbeatMessage(now, message);
 
@@ -553,15 +563,15 @@ boost::optional<HostAndPort> TopologyCoordinator::_chooseSyncSourceInitialStep(D
     }
 
     // wait for 2N pings (not counting ourselves) before choosing a sync target
-    int needMorePings = (_memberData.size() - 1) * 2 - pingsInConfig;
+    int numPingsNeeded = (_memberData.size() - 1) * 2 - pingsInConfig;
 
-    if (needMorePings > 0) {
+    if (numPingsNeeded > 0) {
         static Occasionally sampler;
         if (sampler.tick()) {
             LOGV2(21783,
                   "waiting for {pingsNeeded} pings from other members before syncing",
                   "Waiting for pings from other members before syncing",
-                  "pingsNeeded"_attr = needMorePings);
+                  "pingsNeeded"_attr = numPingsNeeded);
         }
         return HostAndPort();
     }
@@ -868,7 +878,10 @@ std::pair<ReplSetHeartbeatArgsV1, Milliseconds> TopologyCoordinator::prepareHear
         if (_rsConfig.getConfigTerm() != OpTime::kUninitializedTerm) {
             hbArgs.setConfigTerm(_rsConfig.getConfigTerm());
         }
-
+        if (_currentPrimaryIndex >= 0) {
+            // Send primary member id if one exists.
+            hbArgs.setPrimaryId(_memberData.at(_currentPrimaryIndex).getMemberId().getData());
+        }
         if (_selfIndex >= 0) {
             const MemberConfig& me = _selfConfig();
             hbArgs.setSenderId(me.getId().getData());
@@ -2186,7 +2199,7 @@ void TopologyCoordinator::_updateHeartbeatDataForReconfig(const ReplSetConfig& n
         // We don't need data for the other nodes (which no longer know about us, or soon won't)
         _memberData.clear();
         // We're not in the config, we can't sync any more.
-        _syncSource = HostAndPort();
+        _clearSyncSource();
         // We shouldn't get a sync source until we've received pings for our new config.
         pingsInConfig = 0;
         MemberData newHeartbeatData;
@@ -2527,7 +2540,7 @@ void TopologyCoordinator::processWinElection(OID electionId, Timestamp electionO
     _setLeaderMode(LeaderMode::kLeaderElect);
     setElectionInfo(electionId, electionOpTime);
     _currentPrimaryIndex = _selfIndex;
-    _syncSource = HostAndPort();
+    _clearSyncSource();
     _forceSyncSourceIndex = -1;
     // Prevent last committed optime from updating until we finish draining.
     _firstOpTimeOfMyTerm =
@@ -3030,15 +3043,13 @@ bool TopologyCoordinator::shouldChangeSyncSource(const HostAndPort& currentSourc
     return false;
 }
 
-bool TopologyCoordinator::shouldChangeSyncSourceDueToPingTime(
-    const HostAndPort& currentSource,
-    const MemberState& memberState,
-    const OpTime& lastOpTimeFetched,
-    Date_t now,
-    const ReadPreference readPreference) const {
-    // If the ping time for currentSource is longer than 'changeSyncSourceThresholdMillis' and we
-    // find an eligible sync source that has a ping time shorter than
-    // 'changeSyncSourceThresholdMillis', return true.
+bool TopologyCoordinator::shouldChangeSyncSourceDueToPingTime(const HostAndPort& currentSource,
+                                                              const MemberState& memberState,
+                                                              const OpTime& lastOpTimeFetched,
+                                                              Date_t now,
+                                                              const ReadPreference readPreference) {
+    // If we find an eligible sync source that is significantly closer than our current sync source,
+    // return true.
 
     // If we are in initial sync, do not re-evaluate our sync source.
     const bool nodeInInitialSync = (memberState.startup() || memberState.startup2());
@@ -3048,6 +3059,18 @@ bool TopologyCoordinator::shouldChangeSyncSourceDueToPingTime(
 
     // If we are configured with slaveDelay, do not re-evaluate our sync source.
     if (_selfIndex == -1 || _selfConfig().getSlaveDelay() > Seconds(0)) {
+        return false;
+    }
+
+    // If we have already changed sync sources more than 'maxNumSyncSourceChangesPerHour' in the
+    // past hour, do not re-evaluate our sync source.
+    if (_recentSyncSourceChanges.changedTooOftenRecently(now)) {
+        return false;
+    }
+
+    // Do not re-evaluate our sync source if it was set via the replSetSyncFrom command or the
+    // forceSyncSourceCandidate failpoint.
+    if (_syncSourceCurrentlyForced) {
         return false;
     }
 
@@ -3066,6 +3089,14 @@ bool TopologyCoordinator::shouldChangeSyncSourceDueToPingTime(
         return false;
     }
 
+    // If we have not yet received 5N pings (not counting ourselves), do not re-evaluate our sync
+    // source.
+    int numPingsNeeded = (_memberData.size() - 1) * 5 - pingsInConfig;
+    if (numPingsNeeded > 0) {
+        return false;
+    }
+
+
     if (_pings.count(currentSource) == 0) {
         // Ping data for our current sync source could not be found.
         return false;
@@ -3073,35 +3104,33 @@ bool TopologyCoordinator::shouldChangeSyncSourceDueToPingTime(
 
     const auto syncSourcePingTime =
         durationCount<Milliseconds>(_pings.at(currentSource).getMillis());
-    if (syncSourcePingTime <= changeSyncSourceThreshold) {
-        return false;
-    }
 
-    // Look for another viable sync source that has ping times under the threshold.
+    // Use ping times to look for another viable sync source that is significantly closer.
     for (size_t candidateIndex = 0; candidateIndex < _memberData.size(); candidateIndex++) {
         const auto candidateNode = _memberData[candidateIndex].getHostAndPort();
         if (_pings.count(candidateNode) == 0) {
-            // Ping data for the candidateNode could not be found. Continue to the next node.
+            // Either we are the candidate node or ping data for the candidateNode could not be
+            // found. Continue to the next node.
             continue;
         }
 
+        // Only choose a new sync source if ping times indicate that the candidate is significantly
+        // closer than our current sync source and it is an eligible sync source.
         const auto candidateSyncSourcePingTime =
             durationCount<Milliseconds>(_pings.at(candidateNode).getMillis());
-        if (candidateSyncSourcePingTime > changeSyncSourceThreshold) {
-            // No need to proceed with verifying that the candidate node is eligible to be our
-            // sync source, since the node's ping time is also over the threshold.
+        if (syncSourcePingTime - candidateSyncSourcePingTime <= changeSyncSourceThreshold) {
             continue;
         }
 
         if (_isEligibleSyncSource(
                 candidateIndex, now, lastOpTimeFetched, readPreference, true /* firstAttempt */)) {
             LOGV2(4744901,
-                  "Choosing new sync source because the ping time of our sync source is longer "
-                  "than our accepted threshold and we have found another potential sync source "
-                  "with a ping time under the threshold",
+                  "Choosing new sync source because we have found another potential sync "
+                  "source that is significantly closer than our current sync source",
                   "syncSourcePingTime"_attr = syncSourcePingTime,
                   "changeSyncSourceThreshold"_attr = changeSyncSourceThreshold,
-                  "candidateNode"_attr = candidateNode);
+                  "candidateNode"_attr = candidateNode,
+                  "candidatePingTime"_attr = candidateSyncSourcePingTime);
             return true;
         }
     }

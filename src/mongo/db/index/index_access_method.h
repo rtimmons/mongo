@@ -85,12 +85,14 @@ public:
      * The behavior of the insertion can be specified through 'options'.
      */
     virtual Status insert(OperationContext* opCtx,
+                          const Collection* coll,
                           const BSONObj& obj,
                           const RecordId& loc,
                           const InsertDeleteOptions& options,
                           InsertResult* result) = 0;
 
     virtual Status insertKeys(OperationContext* opCtx,
+                              const Collection* coll,
                               const KeyStringSet& keys,
                               const KeyStringSet& multikeyMetadataKeys,
                               const MultikeyPaths& multikeyPaths,
@@ -132,6 +134,7 @@ public:
      * 'numDeleted' will be set to the number of keys removed from the index for the document.
      */
     virtual Status update(OperationContext* opCtx,
+                          Collection* coll,
                           const UpdateTicket& ticket,
                           int64_t* numInserted,
                           int64_t* numDeleted) = 0;
@@ -190,7 +193,9 @@ public:
     /**
      * Sets this index as multikey with the provided paths.
      */
-    virtual void setIndexIsMultikey(OperationContext* opCtx, MultikeyPaths paths) = 0;
+    virtual void setIndexIsMultikey(OperationContext* opCtx,
+                                    Collection* collection,
+                                    MultikeyPaths paths) = 0;
 
     //
     // Bulk operations support
@@ -199,6 +204,13 @@ public:
     class BulkBuilder {
     public:
         using Sorter = mongo::Sorter<KeyString::Value, mongo::NullValue>;
+
+        struct State {
+            boost::optional<RecordId> lastRecordIdInserted;
+            std::string tempDir;
+            std::string fileName;
+            std::vector<SorterRangeInfo> ranges;
+        };
 
         virtual ~BulkBuilder() = default;
 
@@ -224,6 +236,11 @@ public:
          * Returns number of keys inserted using this BulkBuilder.
          */
         virtual int64_t getKeysInserted() const = 0;
+
+        /**
+         * Returns the current state of this BulkBuilder and its underlying Sorter.
+         */
+        virtual State getState() const = 0;
     };
 
     /**
@@ -450,12 +467,14 @@ public:
                               std::unique_ptr<SortedDataInterface> btree);
 
     Status insert(OperationContext* opCtx,
+                  const Collection* coll,
                   const BSONObj& obj,
                   const RecordId& loc,
                   const InsertDeleteOptions& options,
                   InsertResult* result) final;
 
     Status insertKeys(OperationContext* opCtx,
+                      const Collection* coll,
                       const KeyStringSet& keys,
                       const KeyStringSet& multikeyMetadataKeys,
                       const MultikeyPaths& multikeyPaths,
@@ -478,6 +497,7 @@ public:
                        UpdateTicket* ticket) const final;
 
     Status update(OperationContext* opCtx,
+                  Collection* coll,
                   const UpdateTicket& ticket,
                   int64_t* numInserted,
                   int64_t* numDeleted) final;
@@ -502,7 +522,9 @@ public:
 
     Status compact(OperationContext* opCtx) final;
 
-    void setIndexIsMultikey(OperationContext* opCtx, MultikeyPaths paths) final;
+    void setIndexIsMultikey(OperationContext* opCtx,
+                            Collection* collection,
+                            MultikeyPaths paths) final;
 
     std::unique_ptr<BulkBuilder> initiateBulk(size_t maxMemoryUsageBytes) final;
 

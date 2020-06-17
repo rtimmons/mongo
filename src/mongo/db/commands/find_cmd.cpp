@@ -114,7 +114,7 @@ boost::intrusive_ptr<ExpressionContext> makeExpressionContext(
                                           nullptr,  // mongoProcessInterface
                                           StringMap<ExpressionContext::ResolvedNamespace>{},
                                           boost::none,                             // uuid
-                                          boost::none,                             // let
+                                          queryRequest.getLetParameters(),         // let
                                           CurOp::get(opCtx)->dbProfileLevel() > 0  // mayDbProfile
         );
     expCtx->tempDir = storageGlobalParams.dbpath + "/_tmp";
@@ -354,9 +354,20 @@ public:
                     !qr->getReadAtClusterTime() || storageEngine->supportsDocLocking());
 
             // Validate term before acquiring locks, if provided.
-            if (auto term = qr->getReplicationTerm()) {
+            auto term = qr->getReplicationTerm();
+            if (term) {
                 // Note: updateTerm returns ok if term stayed the same.
                 uassertStatusOK(replCoord->updateTerm(opCtx, *term));
+            }
+
+            // The presence of a term in the request indicates that this is an internal replication
+            // oplog read request.
+            if (term && parsedNss == NamespaceString::kRsOplogNamespace) {
+                // We do not want to take tickets for internal (replication) oplog reads. Stalling
+                // on ticket acquisition can cause complicated deadlocks. Primaries may depend on
+                // data reaching secondaries in order to proceed; and secondaries may get stalled
+                // replicating because of an inability to acquire a read ticket.
+                opCtx->lockState()->skipAcquireTicket();
             }
 
             // We call RecoveryUnit::setTimestampReadSource() before acquiring a lock on the
@@ -367,6 +378,19 @@ public:
                         str::stream() << "$_internalReadAtClusterTime value must not be a null"
                                          " timestamp.",
                         !targetClusterTime->isNull());
+
+                // It is contradictory to read at a timestamp before a specified afterClusterTime,
+                // and would break read causality.
+                auto afterClusterTime = repl::ReadConcernArgs::get(opCtx).getArgsAfterClusterTime();
+                if (afterClusterTime) {
+                    uassert(ErrorCodes::InvalidOptions,
+                            str::stream()
+                                << "$_internalReadAtClusterTime value must not be less than "
+                                   "the provided afterClusterTime value. Requested clusterTime: "
+                                << targetClusterTime->toString()
+                                << "; afterClusterTime: " << afterClusterTime->toString(),
+                            targetClusterTime >= afterClusterTime->asTimestamp());
+                }
 
                 // We aren't holding the global lock in intent mode, so it is possible after
                 // comparing 'targetClusterTime' to 'lastAppliedOpTime' for the last applied opTime
@@ -502,51 +526,49 @@ public:
             // Stream query results, adding them to a BSONArray as we go.
             CursorResponseBuilder::Options options;
             options.isInitialResponse = true;
-            options.atClusterTime = repl::ReadConcernArgs::get(opCtx).getArgsAtClusterTime();
+            if (!opCtx->inMultiDocumentTransaction()) {
+                options.atClusterTime = repl::ReadConcernArgs::get(opCtx).getArgsAtClusterTime();
+            }
             CursorResponseBuilder firstBatch(result, options);
             Document doc;
             PlanExecutor::ExecState state = PlanExecutor::ADVANCED;
             std::uint64_t numResults = 0;
-            while (!FindCommon::enoughForFirstBatch(originalQR, numResults) &&
-                   PlanExecutor::ADVANCED == (state = exec->getNext(&doc, nullptr))) {
-                // If we can't fit this result inside the current batch, then we stash it for later.
-                BSONObj obj = doc.toBson();
-                if (!FindCommon::haveSpaceForNext(obj, numResults, firstBatch.bytesUsed())) {
-                    exec->enqueue(obj);
-                    break;
+
+            try {
+                while (!FindCommon::enoughForFirstBatch(originalQR, numResults) &&
+                       PlanExecutor::ADVANCED == (state = exec->getNext(&doc, nullptr))) {
+                    // If we can't fit this result inside the current batch, then we stash it for
+                    // later.
+                    BSONObj obj = doc.toBson();
+                    if (!FindCommon::haveSpaceForNext(obj, numResults, firstBatch.bytesUsed())) {
+                        exec->enqueue(obj);
+                        break;
+                    }
+
+                    // If this executor produces a postBatchResumeToken, add it to the response.
+                    firstBatch.setPostBatchResumeToken(exec->getPostBatchResumeToken());
+
+                    // Add result to output buffer.
+                    firstBatch.append(obj);
+                    numResults++;
                 }
-
-                // If this executor produces a postBatchResumeToken, add it to the response.
-                firstBatch.setPostBatchResumeToken(exec->getPostBatchResumeToken());
-
-                // Add result to output buffer.
-                firstBatch.append(obj);
-                numResults++;
-            }
-
-            // Throw an assertion if query execution fails for any reason.
-            if (PlanExecutor::FAILURE == state) {
+            } catch (DBException& exception) {
                 firstBatch.abandon();
 
-                // We should always have a valid status member object at this point.
-                auto status = WorkingSetCommon::getMemberObjectStatus(doc);
-                invariant(!status.isOK());
                 LOGV2_WARNING(23798,
-                              "Plan executor error during find command: {state}, status: {error}, "
+                              "Plan executor error during find command: {error}, "
                               "stats: {stats}",
                               "Plan executor error during find command",
-                              "state"_attr = PlanExecutor::statestr(state),
-                              "error"_attr = status,
+                              "error"_attr = exception.toStatus(),
                               "stats"_attr = redact(Explain::getWinningPlanStats(exec.get())));
 
-                uassertStatusOK(status.withContext("Executor error during find command"));
+                exception.addContext("Executor error during find command");
+                throw;
             }
 
             // Set up the cursor for getMore.
             CursorId cursorId = 0;
             if (shouldSaveCursor(opCtx, collection, state, exec.get())) {
-                // Create a ClientCursor containing this plan executor and register it with the
-                // cursor manager.
                 ClientCursorPin pinnedCursor = CursorManager::get(opCtx)->registerCursor(
                     opCtx,
                     {std::move(exec),
@@ -555,7 +577,6 @@ public:
                      opCtx->getWriteConcern(),
                      repl::ReadConcernArgs::get(opCtx),
                      _request.body,
-                     ClientCursorParams::LockPolicy::kLockExternally,
                      {Privilege(ResourcePattern::forExactNamespace(nss), ActionType::find)},
                      expCtx->needsMerge});
                 cursorId = pinnedCursor.getCursor()->cursorid();
