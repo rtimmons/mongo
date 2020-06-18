@@ -77,7 +77,7 @@ class ArchivalTestCase(unittest.TestCase):
 
 
 class ArchivalFileTests(ArchivalTestCase):
-    @unittest.skip("Known Broken")
+    @unittest.skip("Known broken. SERVER-48969 tracks re-enabling.")
     def test_nofile(self):
         # Invalid input_files
         display_name = "Unittest invalid file"
@@ -160,7 +160,7 @@ class ArchivalLimitSizeTests(ArchivalTestCase):
     def create_archival(cls):
         return archival.Archival(cls.logger, limit_size_mb=5, s3_client=cls.s3_client)
 
-    @unittest.skip("Known Broken")
+    @unittest.skip("Known broken. SERVER-48969 tracks re-enabling.")
     def test_limit_size(self):
 
         # Files within limit size
@@ -218,7 +218,7 @@ class ArchivalLimitTests(ArchivalTestCase):
         return archival.Archival(cls.logger, limit_size_mb=3, limit_files=3,
                                  s3_client=cls.s3_client)
 
-    @unittest.skip("Known Broken")
+    @unittest.skip("Known broken. SERVER-48969 tracks re-enabling.")
     def test_limits(self):
 
         # Files within limits
