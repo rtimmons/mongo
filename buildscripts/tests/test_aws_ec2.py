@@ -12,7 +12,7 @@ _INSTANCE_TYPE = "t1.micro"
 
 
 class AwsEc2TestCase(unittest.TestCase):  # pylint: disable=too-many-instance-attributes
-    @unittest.skip("Known Broken")
+    @unittest.skip("Known broken. SERVER-48969 tracks re-enabling.")
     def setUp(self):
         self.aws_ec2 = aws_ec2.AwsEc2()
         self.launched_instances = []
@@ -31,13 +31,13 @@ class AwsEc2TestCase(unittest.TestCase):  # pylint: disable=too-many-instance-at
 
 
 class AwsEc2Connect(AwsEc2TestCase):
-    @unittest.skip("Known Broken")
+    @unittest.skip("Known broken. SERVER-48969 tracks re-enabling.")
     def runTest(self):
         self.assertIsNotNone(self.aws_ec2)
 
 
 class AwsEc2Launch(AwsEc2TestCase):
-    @unittest.skip("Known Broken")
+    @unittest.skip("Known broken. SERVER-48969 tracks re-enabling.")
     def runTest(self):
         code, ret = self.aws_ec2.launch_instance(
             ami=self.ami, instance_type=self.instance_type, key_name=self.key_name,
@@ -134,7 +134,7 @@ class AwsEc2ControlStatus(AwsEc2TestCase):
 
 
 class AwsEc2ControlStart(AwsEc2TestCase):
-    @unittest.skip("Known Broken")
+    @unittest.skip("Known broken. SERVER-48969 tracks re-enabling.")
     def runTest(self):
         code, ret = self.aws_ec2.launch_instance(
             ami=self.ami, instance_type=self.instance_type, key_name=self.key_name,
@@ -148,7 +148,7 @@ class AwsEc2ControlStart(AwsEc2TestCase):
 
 
 class AwsEc2ControlStartReboot(AwsEc2TestCase):
-    @unittest.skip("Known Broken")
+    @unittest.skip("Known broken. SERVER-48969 tracks re-enabling.")
     def runTest(self):
         code, ret = self.aws_ec2.launch_instance(
             ami=self.ami, instance_type=self.instance_type, key_name=self.key_name,

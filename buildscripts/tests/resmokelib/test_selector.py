@@ -222,7 +222,7 @@ class TestTestList(unittest.TestCase):
         self.assertEqual(["dir/subdir1/test11.js", "dir/subdir1/test12.js"], selected)
         self.assertEqual(["dir/subdir2/test21.js"], excluded)
 
-    @unittest.skip("Known Broken")
+    @unittest.skip("Known broken. SERVER-48969 tracks re-enabling.")
     def test_exclude_files_no_match(self):
         roots = ["dir/subdir1/*.js", "dir/subdir2/test21.*"]
         test_list = selector._TestList(self.test_file_explorer, roots)
@@ -401,7 +401,7 @@ class TestMultiJSSelector(unittest.TestCase):
     def setUpClass(cls):
         cls.selector = selector._MultiJSTestSelector(MockTestFileExplorer())
 
-    @unittest.skip("Known Broken")
+    @unittest.skip("Known broken. SERVER-48969 tracks re-enabling.")
     def test_multi_js_test_selector_normal(self):
         config = selector._MultiJSTestSelectorConfig(roots=["dir/**/*.js"], group_size=3,
                                                      group_count_multiplier=2)
@@ -421,7 +421,7 @@ class TestMultiJSSelector(unittest.TestCase):
         self.assertEqual(total, MockTestFileExplorer.NUM_JS_FILES * config.group_count_multiplier,
                          "The total number of workloads is incorrect")
 
-    @unittest.skip("Known Broken")
+    @unittest.skip("Known broken. SERVER-48969 tracks re-enabling.")
     def test_multi_js_test_selector_one_group(self):
         """Test we return only one group if the group size equals number of files"""
         num_files = MockTestFileExplorer.NUM_JS_FILES
@@ -513,7 +513,7 @@ class TestFilterTests(unittest.TestCase):
         self.assertEqual(["dir/subdir1/test11.js", "dir/subdir2/test21.js"], excluded)
         self.assertEqual(["dir/subdir1/test12.js", "dir/subdir3/a/test3a1.js"], selected)
 
-    @unittest.skip("Known Broken")
+    @unittest.skip("Known broken. SERVER-48969 tracks re-enabling.")
     def test_filter_temporarily_disabled_tests(self):
         parser.parse_command_line(sys.argv[1:])
         test_file_explorer = MockTestFileExplorer()
