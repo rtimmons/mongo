@@ -11,7 +11,7 @@ post:
         working_dir: work
         script: |
           source ./dsienv.sh
-          if [ -e /data/infrastructure_provisioning/terraform/provisioned.${cluster} ]; then
+          if [ -e /data/infrastructure_provisioning/terraform/provisioned.${infrastructure_provisioning} ]; then
             mark_idle.sh
           fi
     - command: shell.exec
@@ -69,21 +69,7 @@ post:
           fi
 
 functions:
-  "git get project": &git_get_project
-    command: git.get_project
-    params:
-      directory: src
-      revisions:  # for each module include revision as <module_name> : ${<module_name>_rev}
-        dsi: ${dsi_rev}
-        enterprise: ${enterprise_rev}
-        linkbench: ${linkbench_rev}
-        linkbench2: ${linkbench2_rev}
-        genny: ${genny_rev}
-        workloads: ${workloads_rev}
-        wtdevelop: ${wtdevelop_rev}
-        mongo-tools: ${mongo-tools_rev}
-        signal-processing: ${signal-processing_rev}
-
+  ##  COMPILE  ##
   "compile mongodb":
     # We create a virtual environment with the Python dependencies for compiling the server
     # installed.
@@ -194,171 +180,50 @@ functions:
         content_type: ${content_type|application/x-gzip}
         display_name: mongodb${compile-variant|}.tar.gz
 
-  "use WiredTiger develop":
-    command: shell.exec
-    params:
-      working_dir: src
-      script: |
-        set -o errexit
-        set -o verbose
-        if [ "${compile-variant|}" = "-wtdevelop" ]; then
-          cd src/third_party
-          for wtdir in dist examples ext lang src test tools ; do
-            rm -rf wiredtiger/$wtdir
-            mv wtdevelop/$wtdir wiredtiger/
-          done
-        fi
+  ## /COMPILE ##
 
-  "write yml config": &write_yml_config
-    command: shell.exec
-    params:
-      working_dir: work
-      script: |
-        cat > bootstrap.yml <<EOF
-        auto_genny_workload: ${auto_workload_path}
-        infrastructure_provisioning: ${cluster}
-        platform: ${platform}
-        mongodb_setup: ${setup}
-        storageEngine: ${storageEngine}
-        test_control: ${test}
-        test_name: ${test}
-        production: true
-        authentication: ${authentication}
-        overrides:
-          infrastructure_provisioning:
-            tfvars:
-              # This is currently only used by initialsync-logkeeper. It is empty and not used for other tests.
-              mongod_seeded_ebs_snapshot_id: ${snapshotId}
-              # Initially used by sb_large_scale to override expire-on-delta to allow longer runtime on otherwise standard variants
-              ${additional_tfvars|}
-          workload_setup:
-            local_repos:
-              workloads: ../src/workloads/workloads
-              ycsb: ../src/YCSB/YCSB
-              linkbench: ../src/linkbench/linkbench
-              linkbench2: ../src/linkbench2/linkbench2
-              tpcc: ../src/tpcc/tpcc
-              genny: ../src/genny/genny
-          mongodb_setup:
-            # This is currently only used by initialsync-logkeeper-short. It is empty and not used for other tests.
-            mongodb_dataset: ${dataset}
-            mongodb_binary_archive: "https://s3.amazonaws.com/mciuploads/${project_dir}/${version_id}/${revision}/${platform}/mongodb${compile-variant|}-${version_id}.tar.gz"
-        EOF
-
-        cat > runtime.yml <<EOF
-        # evergreen default expansions
-        branch_name: ${branch_name}
-        build_id: ${build_id}
-        build_variant: ${build_variant}
-        execution: ${execution}
-        is_patch: ${is_patch|false}
-        order: ${revision_order_id}
-        project: ${project}
-        project_dir: ${project_dir}
-        revision: ${revision}
-        task_id: ${task_id}
-        task_name: ${task_name}
-        version_id: ${version_id}
-        workdir: ${workdir}
-
-        # sys-perf expansions
-        dsi_rev: ${dsi_rev}
-        enterprise_rev: ${enterprise_rev}
-        ext: ${ext}
-        script_flags : ${script_flags}
-        workloads_rev: ${workloads_rev}
-        EOF
-
-  "prepare environment":
+  "f_run_dsi_workload":
     - command: shell.exec
       params:
         script: |
           rm -rf ./*
           mkdir src
-          mkdir work
     - command: manifest.load
-    # Calling the git.get_project command here will clone the mongodb/mongo repository, as well as
-    # the repositories defined in the build variant's "modules" section.
-    - *git_get_project
-    - *write_yml_config
+    - command: git.get_project
+      params:
+        directory: src/mongo
+        revisions:
+          dsi: ${dsi_rev}
+          linkbench: ${linkbench_rev}
+          linkbench2: ${linkbench2_rev}
+          genny: ${genny_rev}
+          workloads: ${workloads_rev}
+          signal-processing: ${signal-processing_rev}
     - command: shell.exec
       params:
-        silent: true
-        working_dir: work
-        script: |
-          # AWS ssh secret key
-          echo "${ec2_pem}" > aws_ssh_key.pem
-          chmod 400 aws_ssh_key.pem
-
-          cat > runtime_secret.yml <<EOF
-          # Note that inside system_perf.yml we have ${aws_key} & ${aws_secret}, which are used for
-          # Evergreen resources. The below are used for dsi resources, and are NOT the same!
-          aws_access_key: "${terraform_key}"
-          aws_secret_key: "${terraform_secret}"
-          perf_jira_user: "${perf_jira_user}"
-          perf_jira_pw: "${perf_jira_pw}"
-          cedar_api_user: ${cedar_api_user}
-          cedar_api_key: ${cedar_api_key}
-          dsi_analysis_atlas_user: "${dsi_analysis_atlas_user}"
-          dsi_analysis_atlas_pw: "${dsi_analysis_atlas_pw}"
-          EOF
-          chmod 400 runtime_secret.yml
+        script: find .
     - command: expansions.write
       params:
-        file: work/expansions.yml
+        file: ./expansions.yml
     - command: shell.exec
       params:
-        working_dir: work
-        # setup execution environment
-        # configure environment, has private information, no logging
-        script: |
-          set -e
-          ../src/dsi/dsi/run-dsi python ../src/dsi/dsi/bin/bootstrap.py
+        script: ./src/dsi/run-dsi bootstrap
     - command: shell.exec
       params:
-        script: |
-          set -v
-          set -e
-          source work/dsienv.sh
-          setup-dsi-env.sh
-          ls -a work
-
-  "deploy cluster":
-    - command: shell.exec
-      params:
-        working_dir: work
-        script: |
-          set -e
-          set -v
-          source ./dsienv.sh
-          ../src/dsi/dsi/run-dsi infrastructure_provisioning.py
-          ../src/dsi/dsi/run-dsi workload_setup.py
-          ../src/dsi/dsi/run-dsi mongodb_setup.py
-
-  "run test":
+        script: ./src/dsi/run-dsi deploy_cluster
     - command: shell.exec
       type: test
       params:
-        working_dir: work
-        script: |
-          set -e
-          set -v
-          source ./dsienv.sh
-          ../src/dsi/dsi/run-dsi test_control.py
-    - command: "json.send"
+        script: ./src/dsi/run-dsi test_control
+    - command: json.send
       params:
-         name: "perf"
-         file: "work/perf.json"
-
-  "analyze":
+        name: "perf"
+        file: "./build/LegacyPerfJson/perf.json"
     - command: shell.exec
       type: test
       params:
-        working_dir: work
         script: |
-          set -o verbose
-          source ./dsienv.sh
-          ../src/dsi/dsi/run-dsi analysis.py
+          ./src/dsi/run-dsi analysis
           # detect outliers needs to run, so defer the post_run_check exit status to later
           echo $? > post_run_check.status
     - command: shell.exec
@@ -430,418 +295,323 @@ tasks:
 - name: compile
   commands:
     - command: manifest.load
-    - func: "git get project"
-    - func: "use WiredTiger develop" # noop if ${compile-variant|} is not "-wtdevelop"
+    - command: git.get_project
+      params:
+        directory: src
+        revisions:
+          enterprise: ${enterprise_rev}
+          wtdevelop: ${wtdevelop_rev}
+          mongo-tools: ${mongo-tools_rev}
+    - command: shell.exec
+      params:
+        working_dir: src
+        script: |
+          set -o errexit
+          set -o verbose
+          if [ "${compile-variant|}" = "-wtdevelop" ]; then
+            cd src/third_party
+            for wtdir in dist examples ext lang src test tools ; do
+              rm -rf wiredtiger/$wtdir
+              mv wtdevelop/$wtdir wiredtiger/
+            done
+          fi
     - func: "compile mongodb"
 
 - name: linkbench
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "linkbench"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "linkbench"
 
 - name: linkbench_stepdowns
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "linkbench_stepdowns"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "linkbench_stepdowns"
 
 - name: linkbench_rolling_restarts
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "linkbench_rolling_restarts"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "linkbench_rolling_restarts"
 
 - name: linkbench2
   priority: 5
   exec_timeout_secs: 43200 # 12 hours
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "linkbench2"
+        test_control: "linkbench2"
         additional_tfvars: "tags: {expire-on-delta: 12}"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
 
 - name: tpcc
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "tpcc"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "tpcc"
+
 
 - name: industry_benchmarks
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "ycsb"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
-      vars:
-        script_flags: --ycsb-throughput-analysis reports
+        test_control: "ycsb"
 
 - name: ycsb_60GB
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "ycsb-60GB"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
-      vars:
-        script_flags: --ycsb-throughput-analysis reports
+        test_control: "ycsb-60GB"
+
 - name: industry_benchmarks_secondary_reads
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "ycsb-secondary-reads"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
-      vars:
-        script_flags: --ycsb-throughput-analysis reports
+        test_control: "ycsb-secondary-reads"
 
 - name: industry_benchmarks_wmajority
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "ycsb-wmajority"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
-      vars:
-        script_flags: --ycsb-throughput-analysis reports
+        test_control: "ycsb-wmajority"
 
 - name: industry_benchmarks_stepdowns
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "ycsb_stepdowns"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
-      vars:
-        script_flags: --ycsb-throughput-analysis reports
+        test_control: "ycsb_stepdowns"
 
 - name: industry_benchmarks_rolling_restarts
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "ycsb_rolling_restarts"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
-      vars:
-        script_flags: --ycsb-throughput-analysis reports
+        test_control: "ycsb_rolling_restarts"
 
 - name: crud_workloads
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "crud_workloads"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "crud_workloads"
+
 
 - name: crud_workloads_majority
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "crud_workloads_majority"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "crud_workloads_majority"
 
 - name: cursor_manager
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "cursor_manager"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "cursor_manager"
 
 - name: mixed_workloads
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "mixed_workloads"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "mixed_workloads"
 
 - name: misc_workloads
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "misc_workloads"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "misc_workloads"
+
 
 - name: map_reduce_workloads
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "map_reduce_workloads"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "map_reduce_workloads"
 
 - name: smoke_test
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "short"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "short"
 
 - name: genny_canaries
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "genny_canaries"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "genny_canaries"
 
 - name: retryable_writes_workloads
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "retryable_writes"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "retryable_writes"
 
 - name: snapshot_reads
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "snapshot_reads"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "snapshot_reads"
 
 - name: secondary_reads
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "secondary_reads"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "secondary_reads"
 
 - name: bestbuy_agg
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "bestbuy_agg"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "bestbuy_agg"
 
 - name: bestbuy_agg_merge_same_db
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "bestbuy_agg_merge_same_db"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "bestbuy_agg_merge_same_db"
 
 - name: bestbuy_agg_merge_different_db
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "bestbuy_agg_merge_different_db"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "bestbuy_agg_merge_different_db"
 
 - name: bestbuy_agg_merge_target_hashed
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "bestbuy_agg_merge_target_hashed"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "bestbuy_agg_merge_target_hashed"
 
 - name: bestbuy_agg_merge_wordcount
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "bestbuy_agg_merge_wordcount"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "bestbuy_agg_merge_wordcount"
 
 - name: bestbuy_query
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "bestbuy_query"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "bestbuy_query"
+
 
 - name: non_sharded_workloads
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "non_sharded"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "non_sharded"
+
 
 - name: mongos_workloads
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "mongos"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "mongos"
+
 
 - name: mongos_large_catalog_workloads
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "mongos_large_catalog"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "mongos_large_catalog"
+
 
 - name: move_chunk_workloads
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "move_chunk"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "move_chunk"
+
 
 - name: move_chunk_waiting_workloads
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "move_chunk_waiting"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "move_chunk_waiting"
+
 
 - name: move_chunk_large_chunk_map_workloads
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "move_chunk_large_chunk_map"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "move_chunk_large_chunk_map"
+
 
 - name: refine_shard_key_transaction_stress
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "refine_shard_key_transaction_stress"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "refine_shard_key_transaction_stress"
+
 
 - name: secondary_performance
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
         # Unfortunately the dash/underscore style is different for mongodb_setup and test_control
-        test: "secondary_performance"
-        setup: "secondary-performance"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "secondary_performance"
+        mongodb_setup: "secondary-performance"
+
 
 - name: initialsync
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "initialsync"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "initialsync"
+
 
 - name: initialsync-logkeeper-short
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "initialsync-logkeeper"
-        setup: "initialsync-logkeeper-short"
+        test_control: "initialsync-logkeeper"
+        mongodb_setup: "initialsync-logkeeper-short"
         # Logkeeper dataset with FCV set to 4.4
         dataset: "https://s3-us-west-2.amazonaws.com/dsi-donot-remove/InitialSyncLogKeeper/logkeeper-slice-data-mongodb-4.4.tgz"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+
 
 - name: initialsync-logkeeper
   priority: 5
   exec_timeout_secs: 216000 # 2.5 days
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "initialsync-logkeeper"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "initialsync-logkeeper"
+
 
 # The following two initial sync logkeeper automation tasks are only used in the commented-out
 # "Linux ReplSet Initial Sync LogKeeper Snapshot Update" variant below and are only intended to be
@@ -849,141 +619,133 @@ tasks:
 - name: initialsync-logkeeper-short-s3-update
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "initialsync-logkeeper-short-s3-update"
-        setup: "initialsync-logkeeper-short-s3-update"
+        test_control: "initialsync-logkeeper-short-s3-update"
+        mongodb_setup: "initialsync-logkeeper-short-s3-update"
         # Update this to Logkeeper dataset with FCV set to latest after each LTS release.
         dataset: "https://s3-us-west-2.amazonaws.com/dsi-donot-remove/InitialSyncLogKeeper/logkeeper-slice-data-mongodb-4.4.tgz"
-    - func: "deploy cluster"
-    - func: "run test"
 
 - name: initialsync-logkeeper-snapshot-update
   priority: 5
   exec_timeout_secs: 216000 # 2.5 days
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "initialsync-logkeeper-snapshot-update"
-    - func: "deploy cluster"
-    - func: "run test"
+        test_control: "initialsync-logkeeper-snapshot-update"
 
 - name: initialsync-large
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "initialsync-large"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "initialsync-large"
 
 - name: change_streams_throughput
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "change_streams_throughput"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "change_streams_throughput"
 
 - name: change_streams_latency
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "change_streams_latency"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "change_streams_latency"
 
 - name: change_streams_multi_mongos
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "change_streams_multi_mongos"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
-
-- name: genny_generate_all_tasks
-  priority: 5
-  commands:
-    - func: "git get project"
-    - command: shell.exec
-      params:
-        working_dir: src
-        script: |
-          genny/genny/scripts/genny_auto_tasks.sh --generate-all-tasks --output build/all_tasks.json
-          cat ../src/genny/genny/build/all_tasks.json
-    - command: generate.tasks
-      params:
-        files:
-          - src/genny/genny/build/all_tasks.json
-
-- name: genny_auto_tasks
-  priority: 5
-  commands:
-    - func: "git get project"
-    - command: shell.exec
-      params:
-        script: |
-          mkdir work
-    - *write_yml_config
-    - command: shell.exec
-      params:
-        working_dir: work
-        script: |
-          ../src/genny/genny/scripts/genny_auto_tasks.sh --output build/auto_tasks.json --variants "${build_variant}" --autorun
-          cat ../src/genny/genny/build/auto_tasks.json
-    - command: generate.tasks
-      params:
-        files:
-          - src/genny/genny/build/auto_tasks.json
-
-- name: genny_patch_tasks
-  patch_only: true
-  priority: 5
-  commands:
-    - func: "git get project"
-    - command: shell.exec
-      params:
-        working_dir: src
-        script: |
-          # add --forced-workloads to run specific workloads in addition, i.e. adding the following to the end of the command below:
-          # --forced-workloads scale/BigUpdate.yml execution/CreateIndex.yml
-          # will run all locally added/modified workloads, plus big_update and create_index
-
-          genny/genny/scripts/genny_auto_tasks.sh --output build/patch_tasks.json --variants "${build_variant}" --modified
-          cat genny/genny/build/patch_tasks.json
-    - command: generate.tasks
-      params:
-        files:
-          - src/genny/genny/build/patch_tasks.json
+        test_control: "change_streams_multi_mongos"
 
 - name: sb_large_scale
   priority: 5
   exec_timeout_secs: 43200 # 12 hours
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "sb_large_scale"
+        test_control: "sb_large_scale"
         additional_tfvars: "tags: {expire-on-delta: 12}"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
 
 - name: sb_timeseries
   priority: 5
   commands:
-    - func: "prepare environment"
+    - func: f_run_dsi_workload
       vars:
-        test: "sb_timeseries"
-    - func: "deploy cluster"
-    - func: "run test"
-    - func: "analyze"
+        test_control: "sb_timeseries"
+
+- name: genny_generate_all_tasks
+  commands:
+    - command: git.get_project
+      params:
+        directory: src/mongo
+        revisions:
+          dsi: ${dsi_rev}
+          linkbench: ${linkbench_rev}
+          linkbench2: ${linkbench2_rev}
+          genny: ${genny_rev}
+          workloads: ${workloads_rev}
+          signal-processing: ${signal-processing_rev}
+    - command: expansions.write
+      params:
+        file: ./expansions.yml
+    - command: shell.exec
+      params:
+        script: ./src/genny/scripts/genny_auto_tasks.sh all_tasks
+    - command: generate.tasks
+      params:
+        files:
+          - build/TaskJSON/Tasks.json
+
+- name: genny_auto_tasks
+  commands:
+    - command: git.get_project
+      params:
+        directory: src/mongo
+        revisions:
+          dsi: ${dsi_rev}
+          linkbench: ${linkbench_rev}
+          linkbench2: ${linkbench2_rev}
+          genny: ${genny_rev}
+          workloads: ${workloads_rev}
+          signal-processing: ${signal-processing_rev}
+    - command: expansions.write
+      params:
+        file: ./expansions.yml
+    - command: shell.exec
+      params:
+        script: ./src/genny/scripts/genny_auto_tasks.sh variant_tasks
+    - command: generate.tasks
+      params:
+        files:
+          - build/TaskJSON/Tasks.json
+
+- name: genny_patch_tasks
+  commands:
+    - command: git.get_project
+      params:
+        directory: src/mongo
+        revisions:
+          dsi: ${dsi_rev}
+          linkbench: ${linkbench_rev}
+          linkbench2: ${linkbench2_rev}
+          genny: ${genny_rev}
+          workloads: ${workloads_rev}
+          signal-processing: ${signal-processing_rev}
+    - command: expansions.write
+      params:
+        file: ./expansions.yml
+    - command: shell.exec
+      params:
+        script: ./src/genny/scripts/genny_auto_tasks.sh patch_tasks
+    - command: generate.tasks
+      params:
+        files:
+          - build/TaskJSON/Tasks.json
 
 #######################################
 #               Modules               #
@@ -991,14 +753,25 @@ tasks:
 # if a module is added and to be added to the manifest
 # be sure to add the module to git.get_project revisions parameter
 modules:
+  # COMPILE
+- name: enterprise
+  repo: git@github.com:10gen/mongo-enterprise-modules.git
+  prefix: src/mongo/db/modules
+  branch: master
+- name: mongo-tools
+  repo: git@github.com:mongodb/mongo-tools.git
+  prefix: mongo-tools/src/github.com/mongodb
+  branch: master
+  # /COMPILE
+
 - name: dsi
   repo: git@github.com:10gen/dsi.git
-  prefix: dsi
+  prefix: ../../src
   branch: master
 
 - name: genny
   repo: git@github.com:10gen/genny.git
-  prefix: genny
+  prefix: ../../src
   branch: master
 
 - name: workloads
@@ -1021,16 +794,6 @@ modules:
   prefix: linkbench2
   branch: master
   ref: 63207190657737b32eb0e81c5b81ad1b8bad0e5a
-
-- name: enterprise
-  repo: git@github.com:10gen/mongo-enterprise-modules.git
-  prefix: src/mongo/db/modules
-  branch: master
-
-- name: mongo-tools
-  repo: git@github.com:mongodb/mongo-tools.git
-  prefix: mongo-tools/src/github.com/mongodb
-  branch: master
 
 - name: signal-processing
   repo: git@github.com:10gen/signal-processing.git
@@ -1120,8 +883,8 @@ buildvariants:
     - linkbench2
     - signal-processing
   expansions:
-    setup: single-replica
-    cluster: single
+    mongodb_setup: single-replica
+    infrastructure_provisioning: single
     platform: linux
     project_dir: *project_dir
     authentication: enabled
@@ -1165,8 +928,8 @@ buildvariants:
   batchtime: 1440  # 24 hours
   modules: *modules
   expansions:
-    setup: standalone
-    cluster: single
+    mongodb_setup: standalone
+    infrastructure_provisioning: single
     platform: linux
     project_dir: *project_dir
     authentication: enabled
@@ -1202,8 +965,8 @@ buildvariants:
   batchtime: 10080 # 7 days
   modules: *modules
   expansions:
-    setup: standalone-audit
-    cluster: single
+    mongodb_setup: standalone-audit
+    infrastructure_provisioning: single
     platform: linux
     project_dir: *project_dir
     authentication: enabled
@@ -1227,8 +990,8 @@ buildvariants:
   batchtime: 2880  # 48 hours
   modules: *modules
   expansions:
-    setup: single-replica-fle
-    cluster: single
+    mongodb_setup: single-replica-fle
+    infrastructure_provisioning: single
     platform: linux
     project_dir: *project_dir
     authentication: enabled
@@ -1252,8 +1015,8 @@ buildvariants:
   batchtime: 2880  # 48 hours
   modules: *modules
   expansions:
-    setup: single-replica-cwrwc
-    cluster: single
+    mongodb_setup: single-replica-cwrwc
+    infrastructure_provisioning: single
     platform: linux
     project_dir: *project_dir
     authentication: enabled
@@ -1276,8 +1039,8 @@ buildvariants:
   batchtime: 2880  # 48 hours
   modules: *modules
   expansions:
-    setup: single-replica-ese-cbc
-    cluster: single
+    mongodb_setup: single-replica-ese-cbc
+    infrastructure_provisioning: single
     platform: linux
     project_dir: *project_dir
     authentication: enabled
@@ -1301,8 +1064,8 @@ buildvariants:
   batchtime: 2880  # 48 hours
   modules: *modules
   expansions:
-    setup: single-replica-ese-gcm
-    cluster: single
+    mongodb_setup: single-replica-ese-gcm
+    infrastructure_provisioning: single
     platform: linux
     project_dir: *project_dir
     authentication: enabled
@@ -1326,8 +1089,8 @@ buildvariants:
   batchtime: 1440  # 24 hours
   modules: *modules
   expansions:
-    setup: single-replica-15gbwtcache
-    cluster: replica
+    mongodb_setup: single-replica-15gbwtcache
+    infrastructure_provisioning: replica
     platform: linux
     project_dir: *project_dir
     authentication: enabled
@@ -1350,8 +1113,8 @@ buildvariants:
   batchtime: 2880  # 48 hours
   modules: *modules
   expansions:
-    setup: replica-1dayhistory-15gbwtcache
-    cluster: replica
+    mongodb_setup: replica-1dayhistory-15gbwtcache
+    infrastructure_provisioning: replica
     platform: linux
     project_dir: *project_dir
     authentication: enabled
@@ -1375,8 +1138,8 @@ buildvariants:
   batchtime: 10080 # 7 days
   modules: *modules
   expansions:
-    setup: shard
-    cluster: shard
+    mongodb_setup: shard
+    infrastructure_provisioning: shard
     platform: linux
     project_dir: *project_dir
     authentication: enabled
@@ -1409,8 +1172,8 @@ buildvariants:
   batchtime: 2880  # 48 hours
   modules: *modules
   expansions:
-    setup: shard-lite
-    cluster: shard-lite
+    mongodb_setup: shard-lite
+    infrastructure_provisioning: shard-lite
     platform: linux
     project_dir: *project_dir
     authentication: enabled
@@ -1450,8 +1213,8 @@ buildvariants:
   batchtime: 10080 # 7 days
   modules: *modules
   expansions:
-    setup: shard-lite-cwrwc
-    cluster: shard-lite
+    mongodb_setup: shard-lite-cwrwc
+    infrastructure_provisioning: shard-lite
     platform: linux
     project_dir: *project_dir
     authentication: enabled
@@ -1475,8 +1238,8 @@ buildvariants:
   batchtime: 1440  # 24 hours
   modules: *modules
   expansions:
-    setup: replica
-    cluster: replica
+    mongodb_setup: replica
+    infrastructure_provisioning: replica
     platform: linux
     project_dir: *project_dir
     authentication: enabled
@@ -1525,8 +1288,8 @@ buildvariants:
   batchtime: 10080  # 7 days
   modules: *modules
   expansions:
-    setup: replica-noflowcontrol
-    cluster: replica
+    mongodb_setup: replica-noflowcontrol
+    infrastructure_provisioning: replica
     platform: linux
     project_dir: *project_dir
     authentication: enabled
@@ -1559,8 +1322,8 @@ buildvariants:
   batchtime: 10080 # 7 days
   modules: *modules
   expansions:
-    setup: replica-ssl
-    cluster: replica
+    mongodb_setup: replica-ssl
+    infrastructure_provisioning: replica
     platform: linux
     project_dir: *project_dir
     authentication: enabled
@@ -1583,8 +1346,8 @@ buildvariants:
   batchtime: 2880  # 48 hours
   modules: *modules
   expansions:
-    setup: replica-maintenance-events
-    cluster: replica
+    mongodb_setup: replica-maintenance-events
+    infrastructure_provisioning: replica
     platform: linux
     project_dir: *project_dir
     authentication: enabled
@@ -1607,8 +1370,8 @@ buildvariants:
   batchtime: 1440  # 24 hours
   modules: *modules
   expansions:
-    setup: replica-2node
-    cluster: replica
+    mongodb_setup: replica-2node
+    infrastructure_provisioning: replica
     platform: linux
     authentication: disabled
     storageEngine: wiredTiger
@@ -1632,8 +1395,8 @@ buildvariants:
   batchtime: 10080 # 7 days
   modules: *modules
   expansions:
-    setup: initialsync-logkeeper
-    cluster: initialsync-logkeeper
+    mongodb_setup: initialsync-logkeeper
+    infrastructure_provisioning: initialsync-logkeeper
     # EBS logkeeper snapshot with FCV set to 4.4
     snapshotId: snap-0b0b8b2ad16e8f14e
     platform: linux
@@ -1659,8 +1422,8 @@ buildvariants:
 #  batchtime: 10080 # 7 days
 #  modules: *modules
 #  expansions:
-#    setup: initialsync-logkeeper
-#    cluster: initialsync-logkeeper-snapshot-update
+#    mongodb_setup: initialsync-logkeeper
+#    infrastructure_provisioning: initialsync-logkeeper-snapshot-update
 #    # Update this to latest snapshot after each LTS release.
 #    snapshotId: snap-0b0b8b2ad16e8f14e
 #    platform: linux
@@ -1683,8 +1446,8 @@ buildvariants:
   batchtime: 10080 # 7 days
   modules: *modules
   expansions:
-    setup: replica-auth-cluster-delay
-    cluster: replica
+    mongodb_setup: replica-auth-cluster-delay
+    infrastructure_provisioning: replica
     platform: linux
     project_dir: *project_dir
     authentication: enabled
@@ -1707,8 +1470,8 @@ buildvariants:
   batchtime: 2880  # 48 hours
   modules: *modules
   expansions:
-    setup: atlas-like-replica
-    cluster: M60-like-replica
+    mongodb_setup: atlas-like-replica
+    infrastructure_provisioning: M60-like-replica
     platform: linux
     project_dir: *project_dir
     authentication: enabled
@@ -1757,8 +1520,8 @@ buildvariants:
   batchtime: 10080 # 7 days
   modules: *modules
   expansions:
-    setup: single-replica
-    cluster: single
+    mongodb_setup: single-replica
+    infrastructure_provisioning: single
     platform: linux
     project_dir: *project_dir
     compile-variant: -wtdevelop
@@ -1778,8 +1541,8 @@ buildvariants:
   batchtime: 10080 # 7 days
   modules: *modules
   expansions:
-    setup: standalone
-    cluster: single
+    mongodb_setup: standalone
+    infrastructure_provisioning: single
     platform: linux
     project_dir: *project_dir
     compile-variant: -wtdevelop
@@ -1799,8 +1562,8 @@ buildvariants:
   batchtime: 10080 # 7 days
   modules: *modules
   expansions:
-    setup: replica
-    cluster: replica
+    mongodb_setup: replica
+    infrastructure_provisioning: replica
     platform: linux
     project_dir: *project_dir
     compile-variant: -wtdevelop
@@ -1821,8 +1584,8 @@ buildvariants:
 #  batchtime: 10080 # 7 days
 #  modules: *modules
 #  expansions:
-#    setup: shard-lite
-#    cluster: shard-lite
+#    mongodb_setup: shard-lite
+#    infrastructure_provisioning: shard-lite
 #    platform: linux
 #    project_dir: *project_dir
 #    compile-variant: -wtdevelop
