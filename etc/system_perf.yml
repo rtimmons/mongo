@@ -219,7 +219,6 @@ functions:
           echo $? > post_run_check.status
     - command: shell.exec
       params:
-        silent: true
         script: |
           set -o errexit
           is_patch=${is_patch}
@@ -230,6 +229,7 @@ functions:
           analysis_password=${dsi_analysis_atlas_pw}
           evergreen_api_key=${evergreen_api_key}
           evergreen_api_user=${evergreen_api_user}
+          cat ./src/dsi/src/signal_processing_setup.sh
           source ./src/dsi/src/signal_processing_setup.sh
     - command: shell.exec
       params:
