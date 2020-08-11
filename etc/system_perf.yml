@@ -194,7 +194,7 @@ functions:
       params:
         updates:
         - key: mongodb_binary_archive
-          value: "https://dsi-donot-remove.s3-us-west-2.amazonaws.com/compile_artifacts/mongodb-sys_perf_4.4_cfd8b754618b14ec90d1c8196e78e6928fcee707.tar.gz"
+          value: "https://dsi-donot-remove.s3-us-west-2.amazonaws.com/compile_artifacts/mongodb-sys_perf_4.4_78207ca380688c73b1a217f23d5b7c8803bef9cd.tar.gz"
     # /TODO
     - command: expansions.write
       params:
