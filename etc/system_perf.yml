@@ -192,6 +192,13 @@ functions:
     - command: shell.exec
       params:
         script: find .
+    # TODO: document this is how to bypass compile
+    - command: expansions.update
+      params:
+        updates:
+        - key: mongodb_binary_archive
+          value: "https://dsi-donot-remove.s3-us-west-2.amazonaws.com/compile_artifacts/mongodb-sys_perf_4.4_cfd8b754618b14ec90d1c8196e78e6928fcee707.tar.gz"
+    # /TODO
     - command: expansions.write
       params:
         file: ./expansions.yml
@@ -922,8 +929,8 @@ buildvariants:
   run_on:
       - "rhel70-perf-single"
   depends_on:
-      - name: compile
-        variant: compile-amazon2
+      # - name: compile
+      #   variant: compile-amazon2
       - name: genny_generate_all_tasks
         variant: compile-amazon2
   tasks: &standalonetasks
