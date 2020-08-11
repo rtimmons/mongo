@@ -14,10 +14,7 @@ post:
           fi
     - command: shell.exec
       params:
-        script: ./src/dsi/dsi/run-dsi infrastructure_teardown.py
-    - command: shell.exec
-      params:
-        script: ./src/dsi/dsi/run-dsi infrastructure_teardown.py
+        script: ./src/dsi/run-dsi infrastructure_teardown
     - command: s3.put
       params:
         aws_key: ${aws_key}
