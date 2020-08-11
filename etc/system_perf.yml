@@ -186,9 +186,6 @@ functions:
           genny: ${genny_rev}
           workloads: ${workloads_rev}
           signal-processing: ${signal-processing_rev}
-    - command: shell.exec
-      params:
-        script: find .
     # TODO: document this is how to bypass compile
     - command: expansions.update
       params:
@@ -667,6 +664,13 @@ tasks:
       vars:
         test_control: "sb_timeseries"
 
+- name: dsi_integ_test_run_command_simple
+  priority: 5
+  commands:
+    - func: f_run_dsi_workload
+      vars:
+        test_control: "run_command_simple"
+
 - name: genny_generate_all_tasks
   commands:
     - command: git.get_project
@@ -931,6 +935,7 @@ buildvariants:
       - name: genny_generate_all_tasks
         variant: compile-amazon2
   tasks: &standalonetasks
+    - name: dsi_integ_test_run_command_simple
     - name: industry_benchmarks
     - name: ycsb_60GB
     - name: crud_workloads
