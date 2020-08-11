@@ -14,9 +14,6 @@ post:
           fi
     - command: shell.exec
       params:
-        script: find .
-    - command: shell.exec
-      params:
         script: ./src/dsi/run-dsi infrastructure_teardown
     - command: s3.put
       params:
@@ -810,6 +807,7 @@ buildvariants:
   modules:
     - mongo-tools
     - enterprise
+    - dsi
     - genny
   batchtime: 1440 # 24 hours
   expansions: &compile-expansions
@@ -838,6 +836,7 @@ buildvariants:
   - mongo-tools
   - wtdevelop
   - enterprise
+  - dsi
   - genny # needed for genny_generate_all_tasks
   expansions:
     <<: *compile-expansions
