@@ -29,7 +29,7 @@ post:
       params:
         aws_key: ${aws_key}
         aws_secret: ${aws_secret}
-        local_file: src/workloads/workloads/jsdoc/jsdocs-redirect.html
+        local_file: src/mongo/workloads/workloads/jsdoc/jsdocs-redirect.html
         remote_file: ${project_dir}/${build_variant}/${revision}/${task_id}/${version_id}/logs/workloads-${task_name}-${build_id}.html
         bucket: mciuploads
         permissions: public-read
@@ -664,6 +664,7 @@ tasks:
       vars:
         test_control: "sb_timeseries"
 
+# TODO: doc this is for bypass compile
 - name: dsi_integ_test_run_command_simple
   priority: 5
   commands:
@@ -935,6 +936,7 @@ buildvariants:
       - name: genny_generate_all_tasks
         variant: compile-amazon2
   tasks: &standalonetasks
+    # TODO: doc that this is for bypass compile
     - name: dsi_integ_test_run_command_simple
     - name: industry_benchmarks
     - name: ycsb_60GB
