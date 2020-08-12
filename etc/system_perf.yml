@@ -771,6 +771,11 @@ modules:
   prefix: ../../src
   branch: master
 
+- name: signal-processing
+  repo: git@github.com:10gen/signal-processing.git
+  prefix: ../../src
+  branch: master
+
 - name: workloads
   repo: git@github.com:10gen/workloads.git
   prefix: workloads
@@ -791,11 +796,6 @@ modules:
   prefix: linkbench2
   branch: master
   ref: 63207190657737b32eb0e81c5b81ad1b8bad0e5a
-
-- name: signal-processing
-  repo: git@github.com:10gen/signal-processing.git
-  prefix: signal_processing
-  branch: master
 
 #######################################
 #         Buildvariants               #
