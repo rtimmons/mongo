@@ -27,7 +27,7 @@ pre:
 post:
     - command: attach.results
       params:
-        file_location: src/report.json
+        file_location: report.json
     - command: s3.put
       params:
             aws_key: ${aws_key}
@@ -64,37 +64,38 @@ post:
 modules:
 - name: enterprise
   repo: git@github.com:10gen/mongo-enterprise-modules.git
-  prefix: src/mongo/db/modules
+  prefix: ../../src/mongo/db/modules
   branch: master
 
 - name: genny
   repo: git@github.com:mongodb/genny.git
+  prefix: ../../src
   branch: master
-
 - name: dsi
   repo: git@github.com:10gen/dsi.git
   branch: master
-
+  prefix: ../../src
+  branch: master
 - name: mongo-perf
   repo: git@github.com:mongodb/mongo-perf.git
+  prefix: ../../src
   branch: master
-
 - name: signal-processing
   repo: git@github.com:10gen/signal-processing.git
-  prefix: signal_processing
+  prefix: ../../src
   branch: master
 
 functions:
   "git get project": &git_get_project
     command: git.get_project
     params:
-      directory: src
-      revisions:  # for each module include revision as <module_name> : ${<module_name>_rev}
-        enterprise: ${enterprise_rev}
+      directory: src/mongo
+      revisions:
         genny: ${genny_rev}
         dsi: ${dsi_rev}
         mongo-perf: ${mongo-perf_rev}
         signal-processing: ${signal-processing_rev}
+
   "start server":
     - command: s3.get
       params:
@@ -102,30 +103,22 @@ functions:
         aws_secret: ${aws_secret}
         remote_file: *_remote_file
         bucket: mciuploads
-        local_file: src/mongodb.tar.gz
+        local_file: mongodb.tar.gz
     - command: shell.exec
       params:
-        working_dir: src
-        script: |
-          set -e
-          set -v
-          tar xvf mongodb.tar.gz
+        script: tar xvf mongodb.tar.gz
     - command: shell.exec
       params:
         background: true
-        working_dir: src
         script: |
           set -e
           set -o verbose
           mkdir -p ./dbdata
-          echo -e "my secret key" > "${workdir}/key"
-          chmod 600 "${workdir}/key"
-          # We provide the key file for mongod here, rather than in mongod_flags next to the --auth
-          # option, because the path to key file requires expanding the {workdir} variable.
-          ${mongod_exec_wrapper} ./bin/mongod --dbpath ./dbdata ${mongod_flags} --keyFile "${workdir}/key" --logpath "${workdir}/mongod.log"
+          echo -e "my secret key" > key
+          chmod 600 key
+          ${mongod_exec_wrapper} ./bin/mongod --dbpath ./dbdata ${mongod_flags} --keyFile key --logpath "mongod.log"
     - command: shell.exec
       params:
-        working_dir: src
         script: |
           set -e
           set -o verbose
@@ -156,7 +149,6 @@ functions:
   "analyze":
     - command: shell.exec
       params:
-        working_dir: src
         silent: true
         script: |
           set -o errexit
@@ -168,17 +160,15 @@ functions:
           analysis_password=${dsi_analysis_atlas_pw}
           evergreen_api_key=${evergreen_api_key}
           evergreen_api_user=${evergreen_api_user}
-          source ./buildscripts/signal_processing_setup.sh
+          source ./src/mongo/buildscripts/signal_processing_setup.sh
     - command: shell.exec
       params:
-        working_dir: src
         script: |
           set -o verbose
           source ./signal_processing_venv/bin/activate
-          detect-changes --config .signal-processing.yml
+          detect-changes --config .signal-processing.yml --mongo-repo ./src/mongo
     - command: shell.exec
       params:
-        working_dir: src
         script: |
           set -o errexit
           set -o verbose
@@ -193,10 +183,9 @@ functions:
             task_id: ${task_id}
           EOF
 
-          cp ./dsi/configurations/analysis/analysis.microbenchmarks.yml  analysis.yml
+          cp ./src/dsi/configurations/analysis/analysis.microbenchmarks.yml  analysis.yml
     - command: shell.exec
       params:
-        working_dir: src
         silent: true
         script: |
           cat > runtime_secret.yml <<EOF
@@ -207,8 +196,7 @@ functions:
     - command: shell.exec
       type: test
       params:
-        working_dir: src
-        script: ./dsi/run-dsi analysis
+        script: ./src/dsi/run-dsi analysis
 
   # Params:
   #   workload: the path relative to genny/src/workloads to run e.g.
@@ -220,46 +208,37 @@ functions:
     - *git_get_project
     - command: shell.exec
       params:
-        working_dir: src/genny
         script: |
           set -eo pipefail
-          ./scripts/lamp --linux-distro rhel62
-          ./scripts/genny run -w "./dist/etc/genny/workloads/${workload}" -u 'mongodb://admin:password@localhost:27017'
-          genny-metrics-legacy-report --report-file "${workdir}/src/perf.json" build/genny-metrics.csv
+          pushd ./src/genny
+              ./scripts/lamp --linux-distro rhel62
+              ./scripts/genny run -w "./dist/etc/genny/workloads/${workload}" -u 'mongodb://admin:password@localhost:27017'
+              genny-metrics-legacy-report --report-file ../../perf.json build/genny-metrics.csv
+          popd
     - command: "json.send"
       params:
         name: "perf"
-        file: "src/perf.json"
+        file: "perf.json"
 
   "run perf tests":
     - command: shell.exec
       params:
-        working_dir: src
         script: |
           set -e
           set -v
           virtualenv ./venv
           source ./venv/bin/activate
           pip install argparse
-    - command: shell.exec
-      type: test
-      params:
-        working_dir: src
-        script: |
-          set -e
-          set -v
-          source ./venv/bin/activate
-          cd mongo-perf
-          mkdir -p ../perf
+
           #  give mongod a few seconds to start up so that we can connect.
           sleep 5
-          ${perf_exec_wrapper} python benchrun.py --shell ../bin/mongo -t ${threads} --trialCount 5 -f testcases/*.js --readCmd ${readCmd} --includeFilter ${includeFilter1}  --includeFilter ${includeFilter2} --excludeFilter ${excludeFilter} --out ../perf/perf.json --exclude-testbed --username admin --password password
+          ${perf_exec_wrapper} python ./src/mongo-perf/benchrun.py --shell ./bin/mongo -t ${threads} --trialCount 5 -f testcases/*.js --readCmd ${readCmd} --includeFilter ${includeFilter1}  --includeFilter ${includeFilter2} --excludeFilter ${excludeFilter} --out perf.json --exclude-testbed --username admin --password password
           echo "Oplog size at end of tests..."
-          ../bin/mongo --username admin --password password --eval "db.getSiblingDB('local').oplog.rs.totalSize()/1024/1024" admin
+          ./src/bin/mongo --username admin --password password --eval "db.getSiblingDB('local').oplog.rs.totalSize()/1024/1024" admin
     - command: "json.send"
       params:
         name: "perf"
-        file: "src/perf/perf.json"
+        file: "perf.json"
 
   "upload pip requirements":
     command: s3.put
@@ -300,19 +279,17 @@ tasks:
     # installed.
     - command: shell.exec
       params:
-        working_dir: src
         script: |
           set -o errexit
           set -o verbose
 
-          /opt/mongodbtoolchain/v3/bin/virtualenv --python /opt/mongodbtoolchain/v3/bin/python3 "${workdir}/compile_venv"
-          /opt/mongodbtoolchain/v3/bin/virtualenv --python /opt/mongodbtoolchain/v3/bin/python2 "${workdir}/venv"
-          source "${workdir}/compile_venv/bin/activate"
+          /opt/mongodbtoolchain/v3/bin/virtualenv --python /opt/mongodbtoolchain/v3/bin/python3 "compile_venv"
+          /opt/mongodbtoolchain/v3/bin/virtualenv --python /opt/mongodbtoolchain/v3/bin/python2 "venv"
+          source "compile_venv/bin/activate"
 
           python -m pip install -r etc/pip/compile-requirements.txt
     - command: shell.exec
       params:
-        working_dir: src
         script: |
           set -o errexit
           set -o verbose
@@ -327,27 +304,28 @@ tasks:
 
           # This script converts the generated version string into a sanitized version string for
           # use by scons and uploading artifacts as well as information about for the scons cache.
-          source "${workdir}/compile_venv/bin/activate"
-          MONGO_VERSION=$MONGO_VERSION USE_SCONS_CACHE=${use_scons_cache|false} python buildscripts/generate_compile_expansions.py --out compile_expansions.yml
+          source "compile_venv/bin/activate"
+          MONGO_VERSION=$MONGO_VERSION USE_SCONS_CACHE=${use_scons_cache|false} python ./src/mongo/buildscripts/generate_compile_expansions.py --out compile_expansions.yml
     # Then we load the generated version data into the agent so we can use it in task definitions
     - command: expansions.update
       params:
-        file: src/compile_expansions.yml
+        file: compile_expansions.yml
     - command: shell.exec
       params:
-        working_dir: src
         script: |
           set -o errexit
           set -o verbose
 
-          source "${workdir}/compile_venv/bin/activate"
-          python ./buildscripts/scons.py ${compile_flags|} ${scons_cache_args|} install-mongo{,d} DESTDIR=$(pwd)/mongodb
+          source "compile_venv/bin/activate"
+          pushd src/mongo
+              python ./buildscripts/scons.py ${compile_flags|} ${scons_cache_args|} install-mongo{,d} DESTDIR=$(pwd)/mongodb
+          popd
           tar czf mongodb${compile-variant|}.tar.gz -C mongodb .
     - command: s3.put
       params:
         aws_key: ${aws_key}
         aws_secret: ${aws_secret}
-        local_file: src/mongodb${compile-variant|}.tar.gz
+        local_file: src/mongo/mongodb${compile-variant|}.tar.gz
         remote_file: ${project}/${version_id}/${revision}/mongodb${compile-variant|}-${version_id}.tar.gz
         bucket: mciuploads
         permissions: public-read
