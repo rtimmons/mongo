@@ -1,8 +1,42 @@
 stepback: false
 command_type: system
 
-pre:
+variables:
+  # _real_compile_amazon2: &_compile_amazon2
+  #     - name: compile
+  #       variant: compile-amazon2
+  #     - name: genny_generate_all_tasks
+  #       variant: compile-amazon2
+  # _real_compile_amazon2: &_compile_rhel70
+  #     - name: compile
+  #       variant: compile-rhel70
+  #     - name: genny_generate_all_tasks
+  #       variant: compile-amazon2
+  # _real_compile_amazon2: &_compile_wtdevelop_amazon2
+  #     - name: compile
+  #       variant: wtdevelop-compile-amazon2
+  #     - name: genny_generate_all_tasks
+  #       variant: compile-amazon2
+  # _real_expansions: &_expansion_updates
+  #   []
 
+  _skip_compile_amazon2: &_compile_amazon2
+      - name: genny_generate_all_tasks
+        variant: compile-amazon2
+  _skip_compile_rhel70: &_compile_rhel70
+      - name: genny_generate_all_tasks
+        variant: compile-amazon2
+  _skip_compile_wtdevelop_amazon2: &_compile_wtdevelop_amazon2
+      - name: genny_generate_all_tasks
+        variant: compile-amazon2
+  _skip_expansions: &_expansion_updates
+    - key: mongodb_binary_archive
+      value: https://dsi-donot-remove.s3-us-west-2.amazonaws.com/compile_artifacts/mongodb-sys_perf_4.4_78207ca380688c73b1a217f23d5b7c8803bef9cd.tar.gz
+
+pre:
+    - command: expansions.update
+      params:
+        updates: *_expansion_updates
 post:
     # Do cluster teardown first to ensure runtime is below Evergreen's post timeout. Other post tasks
     # will not have been run if the timeout is exceeded.
@@ -890,11 +924,7 @@ buildvariants:
     storageEngine: wiredTiger
   run_on:
       - "rhel70-perf-single"
-  depends_on:
-      - name: compile
-        variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_amazon2
   tasks: &1nodetasks
     - name: industry_benchmarks
     - name: ycsb_60GB
@@ -935,11 +965,7 @@ buildvariants:
     storageEngine: wiredTiger
   run_on:
       - "rhel70-perf-single"
-  depends_on:
-      # - name: compile
-      #   variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_amazon2
   tasks: &standalonetasks
     # TODO: doc that this is for bypass compile
     - name: dsi_integ_test_run_command_simple
@@ -974,11 +1000,7 @@ buildvariants:
     storageEngine: wiredTiger
   run_on:
       - "rhel70-perf-single"
-  depends_on:
-      - name: compile
-        variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_amazon2
   tasks:
     - name: industry_benchmarks
     - name: crud_workloads
@@ -1000,11 +1022,7 @@ buildvariants:
     storageEngine: wiredTiger
   run_on:
       - "rhel70-perf-single"
-  depends_on:
-      - name: compile
-        variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_amazon2
   tasks:
     - name: industry_benchmarks
     - name: linkbench
@@ -1024,11 +1042,7 @@ buildvariants:
     storageEngine: wiredTiger
   run_on:
       - "rhel70-perf-single"
-  depends_on:
-      - name: compile
-        variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_amazon2
   tasks:
     - name: industry_benchmarks
     - name: linkbench
@@ -1048,11 +1062,7 @@ buildvariants:
     storageEngine: wiredTiger
   run_on:
       - "rhel70-perf-single"
-  depends_on:
-      - name: compile
-        variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_amazon2
   tasks:
     - name: industry_benchmarks
     - name: smoke_test
@@ -1073,11 +1083,7 @@ buildvariants:
     storageEngine: wiredTiger
   run_on:
       - "rhel70-perf-single"
-  depends_on:
-      - name: compile
-        variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_amazon2
   tasks:
     - name: industry_benchmarks
     - name: smoke_test
@@ -1098,11 +1104,7 @@ buildvariants:
     storageEngine: wiredTiger
   run_on:
       - "rhel70-perf-single"
-  depends_on:
-      - name: compile
-        variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_amazon2
   tasks:
     - name: industry_benchmarks
     - name: smoke_test
@@ -1122,11 +1124,7 @@ buildvariants:
     storageEngine: wiredTiger
   run_on:
     - "rhel70-perf-replset"
-  depends_on:
-    - name: compile
-      variant: compile-amazon2
-    - name: genny_generate_all_tasks
-      variant: compile-amazon2
+  depends_on: *_compile_amazon2
   tasks:
     - name: crud_workloads
     - name: crud_workloads_majority
@@ -1148,10 +1146,7 @@ buildvariants:
   run_on:
       - "rhel70-perf-shard"
   depends_on:
-      - name: compile
-        variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_amazon2
   tasks:
     - name: industry_benchmarks
     - name: crud_workloads
@@ -1182,10 +1177,7 @@ buildvariants:
   run_on:
       - "rhel70-perf-shard-lite"
   depends_on:
-      - name: compile
-        variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_amazon2
   tasks: &shardlitetasks
     - name: bestbuy_agg
     - name: bestbuy_agg_merge_different_db
@@ -1222,11 +1214,7 @@ buildvariants:
     storageEngine: wiredTiger
   run_on:
       - "rhel70-perf-shard-lite"
-  depends_on:
-      - name: compile
-        variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_amazon2
   tasks:
     - name: industry_benchmarks
     - name: linkbench
@@ -1247,11 +1235,7 @@ buildvariants:
     storageEngine: wiredTiger
   run_on:
       - "rhel70-perf-replset"
-  depends_on:
-      - name: compile
-        variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_amazon2
   tasks: &3nodetasks
     - name: industry_benchmarks
     - name: ycsb_60GB
@@ -1297,11 +1281,7 @@ buildvariants:
     storageEngine: wiredTiger
   run_on:
       - "rhel70-perf-replset"
-  depends_on:
-      - name: compile
-        variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_amazon2
   tasks:
     - name: industry_benchmarks
     - name: industry_benchmarks_secondary_reads
@@ -1331,11 +1311,7 @@ buildvariants:
     storageEngine: wiredTiger
   run_on:
       - "rhel70-perf-replset"
-  depends_on:
-      - name: compile
-        variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_amazon2
   tasks:
     - name: industry_benchmarks
     - name: mixed_workloads
@@ -1355,11 +1331,7 @@ buildvariants:
     storageEngine: wiredTiger
   run_on:
       - "rhel70-perf-replset"
-  depends_on:
-      - name: compile
-        variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_amazon2
   tasks:
     - name: industry_benchmarks_stepdowns
     - name: linkbench_stepdowns
@@ -1377,11 +1349,7 @@ buildvariants:
     authentication: disabled
     storageEngine: wiredTiger
     project_dir: *project_dir
-  depends_on:
-      - name: compile
-        variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_amazon2
   run_on:
       - "rhel70-perf-replset"
   tasks:
@@ -1406,11 +1374,7 @@ buildvariants:
     project_dir: *project_dir
   run_on:
       - "rhel70-perf-initialsync-logkeeper"
-  depends_on:
-      - name: compile
-        variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_amazon2
   tasks:
     - name: initialsync-logkeeper
     - name: genny_patch_tasks
@@ -1433,11 +1397,7 @@ buildvariants:
 #    project_dir: *project_dir
 #  run_on:
 #    - "rhel70-perf-initialsync-logkeeper"
-#  depends_on:
-#    - name: compile
-#      variant: compile-amazon2
-#    - name: genny_generate_all_tasks
-#      variant: compile-amazon2
+#  depends_on: *_compile_amazon2
 #  tasks:
 #    - name: initialsync-logkeeper-snapshot-update
 #    - name: initialsync-logkeeper-short-s3-update
@@ -1456,10 +1416,7 @@ buildvariants:
   run_on:
       - "rhel70-perf-replset"
   depends_on:
-      - name: compile
-        variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_amazon2
   tasks:
     - name: genny_auto_tasks
 
@@ -1480,11 +1437,7 @@ buildvariants:
     compile-variant: -rhel70
   run_on:
       - "rhel70-perf-M60-like"
-  depends_on:
-      - name: compile
-        variant: compile-rhel70
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_rhel70
   tasks:  # Cannot use *3nodetasks because secondary_performance uses a special mongodb setup.
     - name: industry_benchmarks
     - name: ycsb_60GB
@@ -1530,11 +1483,7 @@ buildvariants:
     storageEngine: wiredTiger
   run_on:
       - "rhel70-perf-single"
-  depends_on:
-      - name: compile
-        variant: wtdevelop-compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_wtdevelop_amazon2
   tasks: *1nodetasks
 
 - name: wtdevelop-standalone
@@ -1551,11 +1500,7 @@ buildvariants:
     storageEngine: wiredTiger
   run_on:
       - "rhel70-perf-single"
-  depends_on:
-      - name: compile
-        variant: wtdevelop-compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_wtdevelop_amazon2
   tasks: *standalonetasks
 
 - name: wtdevelop-3-node-replSet
@@ -1573,10 +1518,7 @@ buildvariants:
   run_on:
       - "rhel70-perf-replset"
   depends_on:
-      - name: compile
-        variant: wtdevelop-compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_wtdevelop_amazon2
   tasks: *3nodetasks
 
 # Disabled: SERVER-35586
@@ -1594,7 +1536,5 @@ buildvariants:
 #    storageEngine: wiredTiger
 #  run_on:
 #      - "rhel70-perf-shard-lite"
-#  depends_on:
-#      - name: compile
-#        variant: wtdevelop-compile-amazon2
+#  depends_on: *_compile_wtdevelop_amazon2
 #  tasks: *shardlitetasks
