@@ -7,8 +7,9 @@ pre:
       params:
         silent: true
         script: |
-          ${killall_mci|pkill -9 mongod; pkill -9 mongos; pkill -9 mongo; pkill -9 bsondump; pkill -9 mongoimport; pkill -9 mongoexport; pkill -9 mongodump; pkill -9 mongorestore; pkill -9 mongostat; pkill -9 mongofiles; pkill -9 mongotop; pkill -9 mongobridge; pkill -9 mongod-2.6; pkill -9 mongos-2.6; pkill -9 mongo-2.6; pkill -9 bsondump-2.6; pkill -9 mongoimport-2.6; pkill -9 mongoexport-2.6; pkill -9 mongodump-2.6; pkill -9 mongorestore-2.6; pkill -9 mongostat-2.6; pkill -9 mongofiles-2.6; pkill -9 mongotop-2.6; pkill -9 mongobridge-2.6; pkill -9 mongod-2.4; pkill -9 mongos-2.4; pkill -9 mongo-2.4; pkill -9 bsondump-2.4; pkill -9 mongoimport-2.4; pkill -9 mongoexport-2.4; pkill -9 mongodump-2.4; pkill -9 mongorestore-2.4; pkill -9 mongostat-2.4; pkill -9 mongofiles-2.4; pkill -9 mongotop-2.4; pkill -9 resmoke.py; pkill -9 python; pkill -9 python2; pkill -9 lldb; pkill -9 _test} >/dev/null 2>&1
-          exit 0
+          for PS in mongo{,d,s,import,export,dump,restore,stat,files,top,bridge} resmoke.py python{,2} lldb _test; do
+              pkill -9 "$PS"
+          done
 
 post:
     - command: attach.results
@@ -28,8 +29,9 @@ post:
       params:
         silent: true
         script: |
-          ${killall_mci|pkill -9 mongod; pkill -9 mongos; pkill -9 mongo; pkill -9 bsondump; pkill -9 mongoimport; pkill -9 mongoexport; pkill -9 mongodump; pkill -9 mongorestore; pkill -9 mongostat; pkill -9 mongofiles; pkill -9 mongotop; pkill -9 mongobridge; pkill -9 mongod-2.6; pkill -9 mongos-2.6; pkill -9 mongo-2.6; pkill -9 bsondump-2.6; pkill -9 mongoimport-2.6; pkill -9 mongoexport-2.6; pkill -9 mongodump-2.6; pkill -9 mongorestore-2.6; pkill -9 mongostat-2.6; pkill -9 mongofiles-2.6; pkill -9 mongotop-2.6; pkill -9 mongobridge-2.6; pkill -9 mongod-2.4; pkill -9 mongos-2.4; pkill -9 mongo-2.4; pkill -9 bsondump-2.4; pkill -9 mongoimport-2.4; pkill -9 mongoexport-2.4; pkill -9 mongodump-2.4; pkill -9 mongorestore-2.4; pkill -9 mongostat-2.4; pkill -9 mongofiles-2.4; pkill -9 mongotop-2.4; pkill -9 resmoke.py; pkill -9 python; pkill -9 python2; pkill -9 lldb; pkill -9 _test} >/dev/null 2>&1
-          exit 0
+          for PS in mongo{,d,s,import,export,dump,restore,stat,files,top,bridge} resmoke.py python{,2} lldb _test; do
+              pkill -9 "$PS"
+          done
     - command: shell.exec
       params:
         working_dir: src
@@ -193,12 +195,7 @@ functions:
       type: test
       params:
         working_dir: src
-        script: |
-          set -o errexit
-          set -o verbose
-          ./dsi/run-dsi setup
-          source ./dsi/dsi_venv/bin/activate
-          ./dsi/bin/analysis.py
+        script: ./dsi/run-dsi analysis
 
   # Params:
   #   workload: the path relative to genny/src/workloads to run e.g.
@@ -213,12 +210,6 @@ functions:
         working_dir: src/genny
         script: |
           set -eo pipefail
-
-          export PATH="/opt/mongodbtoolchain/v3/bin:$PATH"
-          python3 -m virtualenv ./venv
-          source ./venv/bin/activate
-          python -m pip install ./src/python
-
           ./scripts/lamp --linux-distro rhel62
           ./scripts/genny run -w "./dist/etc/genny/workloads/${workload}" -u 'mongodb://admin:password@localhost:27017'
           genny-metrics-legacy-report --report-file "${workdir}/src/perf.json" build/genny-metrics.csv
