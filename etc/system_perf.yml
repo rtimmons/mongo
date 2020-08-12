@@ -17,7 +17,7 @@ post:
         script: ./src/dsi/run-dsi infrastructure_teardown
     - command: shell.exec
       params:
-        script: ./src/dsi/run-dsi src/dsi/make_artifact.sh
+        script: ./src/dsi/run-dsi ./src/dsi/src/dsi/make_artifact.sh
     - command: s3.put
       params:
         aws_key: ${aws_key}
