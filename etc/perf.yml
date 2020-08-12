@@ -1,6 +1,19 @@
 command_type: system
 stepback: false
 
+variables:
+  # Comment this to skip compile:
+  # _real_remote_file: &_remote_file
+  #     ${project}/${version_id}/${revision}/mongodb${compile-variant|}-${version_id}.tar.gz
+  # _real_compile: &_compile
+  #   - variant: linux-wt-standalone
+  #     name: compile
+  # Uncommented to skip compile
+  _skip_remote_file: &_remote_file
+      perf/performance_996dcdc3d96346d71f012388eccc79c691619340/996dcdc3d96346d71f012388eccc79c691619340/mongodb-performance_996dcdc3d96346d71f012388eccc79c691619340.tar.gz
+  _skip_compile: &_compile
+      []
+
 pre:
     - command: manifest.load
     - command: shell.exec
@@ -87,7 +100,7 @@ functions:
       params:
         aws_key: ${aws_key}
         aws_secret: ${aws_secret}
-        remote_file: ${project}/${version_id}/${revision}/mongodb${compile-variant|}-${version_id}.tar.gz
+        remote_file: *_remote_file
         bucket: mciuploads
         local_file: src/mongodb.tar.gz
     - command: shell.exec
@@ -263,9 +276,7 @@ functions:
 tasks:
 
 - name: genny_scale_InsertRemove
-  depends_on:
-  - variant: linux-wt-standalone
-    name: compile
+  depends_on: *_compile
   commands:
   - func: "start server"
   - func: "run genny workload"
@@ -273,9 +284,7 @@ tasks:
       workload: scale/InsertRemove.yml
 
 - name: genny_execution_UserAcquisition
-  depends_on:
-  - variant: linux-wt-standalone
-    name: compile
+  depends_on: *_compile
   commands:
   - func: "start server"
   - func: "run genny workload"
@@ -347,9 +356,7 @@ tasks:
 
 
 - name: query
-  depends_on:
-  - variant: linux-wt-standalone
-    name: compile
+  depends_on: *_compile
   commands:
     - func: "git get project"
     - func: "start server"
@@ -364,9 +371,7 @@ tasks:
       vars:
         reports_analysis: true
 - name: views-query
-  depends_on:
-  - variant: linux-wt-standalone
-    name: compile
+  depends_on: *_compile
   commands:
     - func: "git get project"
     - func: "start server"
@@ -381,9 +386,7 @@ tasks:
       vars:
         reports_analysis: true
 - name: views-aggregation
-  depends_on:
-  - variant: linux-wt-standalone
-    name: compile
+  depends_on: *_compile
   commands:
     - func: "git get project"
     - func: "start server"
@@ -398,9 +401,7 @@ tasks:
       vars:
         report_analysis: true
 - name: where
-  depends_on:
-  - variant: linux-wt-standalone
-    name: compile
+  depends_on: *_compile
   commands:
     - func: "git get project"
     - func: "start server"
@@ -415,9 +416,7 @@ tasks:
       vars:
         reports_analysis: true
 - name: update
-  depends_on:
-  - variant: linux-wt-standalone
-    name: compile
+  depends_on: *_compile
   commands:
     - func: "git get project"
     - func: "start server"
@@ -432,9 +431,7 @@ tasks:
       vars:
         reports_analysis: true
 - name: insert
-  depends_on:
-  - variant: linux-wt-standalone
-    name: compile
+  depends_on: *_compile
   commands:
     - func: "git get project"
     - func: "start server"
@@ -449,9 +446,7 @@ tasks:
       vars:
         reports_analysis: true
 - name: wildcard-index-read
-  depends_on:
-  - variant: linux-wt-standalone
-    name: compile
+  depends_on: *_compile
   commands:
     - func: "git get project"
     - func: "start server"
@@ -466,9 +461,7 @@ tasks:
       vars:
         reports_analysis: true
 - name: wildcard-index-write
-  depends_on:
-  - variant: linux-wt-standalone
-    name: compile
+  depends_on: *_compile
   commands:
     - func: "git get project"
     - func: "start server"
@@ -483,9 +476,7 @@ tasks:
       vars:
         reports_analysis: true
 - name: geo
-  depends_on:
-  - variant: linux-wt-standalone
-    name: compile
+  depends_on: *_compile
   commands:
     - func: "git get project"
     - func: "start server"
@@ -500,9 +491,7 @@ tasks:
       vars:
         reports_analysis: true
 - name: misc
-  depends_on:
-  - variant: linux-wt-standalone
-    name: compile
+  depends_on: *_compile
   commands:
     - func: "git get project"
     - func: "start server"
@@ -517,9 +506,7 @@ tasks:
       vars:
         reports_analysis: true
 - name: singleThreaded
-  depends_on:
-  - variant: linux-wt-standalone
-    name: compile
+  depends_on: *_compile
   commands:
     - func: "git get project"
     - func: "start server"
@@ -534,9 +521,7 @@ tasks:
       vars:
         reports_analysis: true
 - name: aggregation
-  depends_on:
-  - variant: linux-wt-standalone
-    name: compile
+  depends_on: *_compile
   commands:
     - func: "git get project"
     - func: "start server"
@@ -551,9 +536,7 @@ tasks:
       vars:
         report_analysis: true
 - name: agg-query-comparison
-  depends_on:
-  - variant: linux-wt-standalone
-    name: compile
+  depends_on: *_compile
   commands:
     - func: "git get project"
     - func: "start server"
@@ -568,9 +551,7 @@ tasks:
       vars:
         reports_analysis: true
 - name: pipeline-updates
-  depends_on:
-  - variant: linux-wt-standalone
-    name: compile
+  depends_on: *_compile
   commands:
     - func: "git get project"
     - func: "start server"
@@ -585,9 +566,7 @@ tasks:
       vars:
         reports_analysis: true
 - name: javascript
-  depends_on:
-  - variant: linux-wt-standalone
-    name: compile
+  depends_on: *_compile
   commands:
     - func: "git get project"
     - func: "start server"
