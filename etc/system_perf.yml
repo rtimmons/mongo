@@ -239,7 +239,7 @@ functions:
         script: |
           set -o verbose
           source ./signal_processing_venv/bin/activate
-          detect-changes --config .signal-processing.yml
+          detect-changes --config .signal-processing.yml --mongo-repo=./src/mongo
     - command: shell.exec
       params:
         script: |
