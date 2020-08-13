@@ -2,6 +2,15 @@ stepback: false
 command_type: system
 
 variables:
+  _src_dir: &src_dir src/mongo
+  _modules: &modules
+    - dsi
+    - genny
+    - workloads
+    - linkbench
+    - linkbench2
+    - signal-processing
+
   # _real_compile_amazon2: &_compile_amazon2
   #     - name: compile
   #       variant: compile-amazon2
@@ -215,7 +224,7 @@ functions:
     - command: manifest.load
     - command: git.get_project
       params:
-        directory: src/mongo
+        directory: *src_dir
         revisions:
           dsi: ${dsi_rev}
           linkbench: ${linkbench_rev}
@@ -861,11 +870,7 @@ buildvariants:
 - &compile-amazon2
   name: compile-amazon2
   display_name: Compile
-  modules:
-    - mongo-tools
-    - enterprise
-    - dsi
-    - genny
+  modules: *modules
   batchtime: 2880 # 48 hours
   expansions: &compile-expansions
     platform: linux
@@ -889,12 +894,7 @@ buildvariants:
 - <<: *compile-amazon2
   name: wtdevelop-compile-amazon2
   display_name: WT Develop Compile
-  modules:
-  - mongo-tools
-  - wtdevelop
-  - enterprise
-  - dsi
-  - genny # needed for genny_generate_all_tasks
+  modules: *modules
   expansions:
     <<: *compile-expansions
     compile-variant: -wtdevelop
@@ -903,9 +903,7 @@ buildvariants:
 
 - name: compile-rhel70
   display_name: Compile for Atlas-like
-  modules:
-  - mongo-tools
-  - enterprise
+  modules: *modules
   batchtime: 2880 # 48 hours
   expansions:
     <<: *compile-expansions
@@ -928,13 +926,7 @@ buildvariants:
 - name: linux-1-node-replSet
   display_name: Linux 1-Node ReplSet
   batchtime: 10080 # 7 days
-  modules: &modules
-    - dsi
-    - genny
-    - workloads
-    - linkbench
-    - linkbench2
-    - signal-processing
+  modules: *modules
   expansions:
     mongodb_setup: single-replica
     infrastructure_provisioning: single
