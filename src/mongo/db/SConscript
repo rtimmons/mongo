@@ -904,6 +904,7 @@ env.Library(
         '$BUILD_DIR/mongo/db/repl/repl_coordinator_interface',
         '$BUILD_DIR/mongo/db/repl/timestamp_block',
         '$BUILD_DIR/mongo/db/s/sharding_api_d',
+        '$BUILD_DIR/mongo/db/storage/storage_util',
         '$BUILD_DIR/mongo/util/fail_point',
         "$BUILD_DIR/mongo/executor/task_executor_interface",
     ],
@@ -1050,6 +1051,7 @@ env.Library(
         'catalog/index_key_validate',
         'catalog/multi_index_block',
         'storage/storage_repair_observer',
+        'storage/storage_util',
         'repl/oplog',
     ],
 )
@@ -1628,19 +1630,18 @@ env.Library(
 env.Library(
     target='vector_clock_mongod',
     source=[
-        'vector_clock_persist_command.cpp',
         'vector_clock_mongod.cpp',
     ],
     LIBDEPS=[
         'vector_clock_mutable',
     ],
     LIBDEPS_PRIVATE=[
-        'dbdirectclient',
-        'rw_concern_d',
-        'repl/replica_set_aware_service',
-        'server_options_core',
         '$BUILD_DIR/mongo/db/s/sharding_api_d',
         '$BUILD_DIR/mongo/s/grid',
+        'dbdirectclient',
+        'repl/replica_set_aware_service',
+        'rw_concern_d',
+        'server_options_core',
     ],
 )
 

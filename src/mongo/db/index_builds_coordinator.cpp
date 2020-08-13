@@ -58,6 +58,7 @@
 #include "mongo/db/server_recovery.h"
 #include "mongo/db/service_context.h"
 #include "mongo/db/storage/durable_catalog.h"
+#include "mongo/db/storage/storage_util.h"
 #include "mongo/logv2/log.h"
 #include "mongo/s/shard_key_pattern.h"
 #include "mongo/util/assert_util.h"
@@ -76,6 +77,7 @@ MONGO_FAIL_POINT_DEFINE(failIndexBuildOnCommit);
 MONGO_FAIL_POINT_DEFINE(hangIndexBuildBeforeAbortCleanUp);
 MONGO_FAIL_POINT_DEFINE(hangIndexBuildOnStepUp);
 MONGO_FAIL_POINT_DEFINE(hangAfterSettingUpResumableIndexBuild);
+MONGO_FAIL_POINT_DEFINE(hangIndexBuildBeforeCommit);
 
 namespace {
 
@@ -501,11 +503,11 @@ Status IndexBuildsCoordinator::_startIndexBuildForRecovery(OperationContext* opC
                     return s;
                 }
             } else {
-                Status status = DurableCatalog::get(opCtx)->removeIndex(
-                    opCtx, collection->getCatalogId(), indexNames[i]);
-                if (!status.isOK()) {
-                    return status;
-                }
+                catalog::removeIndex(opCtx,
+                                     indexNames[i],
+                                     collection->getCatalogId(),
+                                     collection->uuid(),
+                                     collection->ns());
             }
         }
 
@@ -726,8 +728,15 @@ void IndexBuildsCoordinator::abortDatabaseIndexBuilds(OperationContext* opCtx,
         return _filterIndexBuilds_inlock(lk, indexBuildFilter);
     }();
     for (auto replState : builds) {
-        abortIndexBuildByBuildUUID(
-            opCtx, replState->buildUUID, IndexBuildAction::kPrimaryAbort, reason);
+        if (!abortIndexBuildByBuildUUID(
+                opCtx, replState->buildUUID, IndexBuildAction::kPrimaryAbort, reason)) {
+            // The index build may already be in the midst of tearing down.
+            LOGV2(5010502,
+                  "Index build: failed to abort index build for database drop",
+                  "buildUUID"_attr = replState->buildUUID,
+                  "database"_attr = db,
+                  "collectionUUID"_attr = replState->collectionUUID);
+        }
     }
 }
 
@@ -741,8 +750,15 @@ void IndexBuildsCoordinator::abortAllIndexBuildsForInitialSync(OperationContext*
         return _filterIndexBuilds_inlock(lk, indexBuildFilter);
     }();
     for (auto replState : builds) {
-        abortIndexBuildByBuildUUID(
-            opCtx, replState->buildUUID, IndexBuildAction::kInitialSyncAbort, reason);
+        if (!abortIndexBuildByBuildUUID(
+                opCtx, replState->buildUUID, IndexBuildAction::kInitialSyncAbort, reason)) {
+            // The index build may already be in the midst of tearing down.
+            LOGV2(5010503,
+                  "Index build: failed to abort index build for initial sync",
+                  "buildUUID"_attr = replState->buildUUID,
+                  "database"_attr = replState->dbName,
+                  "collectionUUID"_attr = replState->collectionUUID);
+        }
     }
 }
 
@@ -921,9 +937,15 @@ void IndexBuildsCoordinator::applyAbortIndexBuild(OperationContext* opCtx,
 
     std::string abortReason(str::stream()
                             << "abortIndexBuild oplog entry encountered: " << *oplogEntry.cause);
-    auto indexBuildsCoord = IndexBuildsCoordinator::get(opCtx);
-    indexBuildsCoord->abortIndexBuildByBuildUUID(
-        opCtx, buildUUID, IndexBuildAction::kOplogAbort, abortReason);
+    if (!abortIndexBuildByBuildUUID(opCtx, buildUUID, IndexBuildAction::kOplogAbort, abortReason)) {
+        // The index build may already be in the midst of tearing down.
+        LOGV2(5010504,
+              "Index build: failed to abort index build while applying abortIndexBuild operation",
+              "buildUUID"_attr = buildUUID,
+              "namespace"_attr = nss,
+              "collectionUUID"_attr = collUUID,
+              "cause"_attr = *oplogEntry.cause);
+    }
 }
 
 boost::optional<UUID> IndexBuildsCoordinator::abortIndexBuildByIndexNames(
@@ -1382,7 +1404,22 @@ IndexBuilds IndexBuildsCoordinator::stopIndexBuildsForRollback(OperationContext*
                   "buildUUID"_attr = replState->buildUUID);
             return;
         }
+
+        // This will unblock the index build and allow it to complete without cleaning up.
+        // Subsequently, the rollback algorithm can decide how to undo the index build depending on
+        // the state of the oplog. Signals the kRollbackAbort and then waits for the thread to join.
         const std::string reason = "rollback";
+        if (!abortIndexBuildByBuildUUID(
+                opCtx, replState->buildUUID, IndexBuildAction::kRollbackAbort, reason)) {
+            // The index build may already be in the midst of tearing down.
+            // Leave this index build out of 'buildsStopped'.
+            LOGV2(5010505,
+                  "Index build: failed to abort index build before rollback",
+                  "buildUUID"_attr = replState->buildUUID,
+                  "database"_attr = replState->dbName,
+                  "collectionUUID"_attr = replState->collectionUUID);
+            return;
+        }
 
         IndexBuildDetails aborted{replState->collectionUUID};
         // Record the index builds aborted due to rollback. This allows any rollback algorithm
@@ -1392,12 +1429,6 @@ IndexBuilds IndexBuildsCoordinator::stopIndexBuildsForRollback(OperationContext*
             aborted.indexSpecs.emplace_back(spec.getOwned());
         }
         buildsStopped.insert({replState->buildUUID, aborted});
-
-        // This will unblock the index build and allow it to complete without cleaning up.
-        // Subsequently, the rollback algorithm can decide how to undo the index build depending on
-        // the state of the oplog. Signals the kRollbackAbort and then waits for the thread to join.
-        abortIndexBuildByBuildUUID(
-            opCtx, replState->buildUUID, IndexBuildAction::kRollbackAbort, reason);
     };
     forEachIndexBuild(
         indexBuilds, "IndexBuildsCoordinator::stopIndexBuildsForRollback"_sd, onIndexBuild);
@@ -2454,7 +2485,7 @@ void IndexBuildsCoordinator::_insertKeysFromSideTablesWithoutBlockingWrites(
 
     if (MONGO_unlikely(hangAfterIndexBuildFirstDrain.shouldFail())) {
         LOGV2(20666, "Hanging after index build first drain");
-        hangAfterIndexBuildFirstDrain.pauseWhileSet();
+        hangAfterIndexBuildFirstDrain.pauseWhileSet(opCtx);
     }
 }
 void IndexBuildsCoordinator::_insertKeysFromSideTablesBlockingWrites(
@@ -2494,6 +2525,11 @@ IndexBuildsCoordinator::CommitResult IndexBuildsCoordinator::_insertKeysFromSide
     IndexBuildAction action,
     const IndexBuildOptions& indexBuildOptions,
     const Timestamp& commitIndexBuildTimestamp) {
+
+    if (MONGO_unlikely(hangIndexBuildBeforeCommit.shouldFail())) {
+        LOGV2(4841706, "Hanging before committing index build");
+        hangIndexBuildBeforeCommit.pauseWhileSet();
+    }
 
     Lock::DBLock autoDb(opCtx, replState->dbName, MODE_IX);
 
@@ -2697,7 +2733,7 @@ StatusWith<std::pair<long long, long long>> IndexBuildsCoordinator::_runIndexReb
 
         std::tie(numRecords, dataSize) =
             uassertStatusOK(_indexBuildsManager.startBuildingIndexForRecovery(
-                opCtx, collection->ns(), buildUUID, repair));
+                opCtx, collection, buildUUID, repair));
 
         // Since we are holding an exclusive collection lock to stop new writes, do not yield locks
         // while draining.

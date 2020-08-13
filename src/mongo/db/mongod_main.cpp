@@ -340,8 +340,10 @@ ExitCode _initAndListen(ServiceContext* serviceContext, int listenPort) {
     auto runner = makePeriodicRunner(serviceContext);
     serviceContext->setPeriodicRunner(std::move(runner));
 
-    OCSPManager::get()->startThreadPool();
+#ifdef MONGO_CONFIG_SSL
+    OCSPManager::start(serviceContext);
     CertificateExpirationMonitor::get()->start(serviceContext);
+#endif
 
     if (!storageGlobalParams.repair) {
         auto tl =
@@ -592,7 +594,7 @@ ExitCode _initAndListen(ServiceContext* serviceContext, int listenPort) {
         uassert(ErrorCodes::BadValue,
                 str::stream() << "Cannot use queryableBackupMode in a replica set",
                 !replCoord->isReplEnabled());
-        replCoord->startup(startupOpCtx.get());
+        replCoord->startup(startupOpCtx.get(), lastStorageEngineShutdownState);
     }
 
     if (!storageGlobalParams.readOnly) {
@@ -643,7 +645,7 @@ ExitCode _initAndListen(ServiceContext* serviceContext, int listenPort) {
             ReplicaSetNodeProcessInterface::getReplicaSetNodeExecutor(serviceContext)->startup();
         }
 
-        replCoord->startup(startupOpCtx.get());
+        replCoord->startup(startupOpCtx.get(), lastStorageEngineShutdownState);
         if (getReplSetMemberInStandaloneMode(serviceContext)) {
             LOGV2_WARNING_OPTIONS(
                 20547,
@@ -1316,6 +1318,9 @@ void shutdownTask(const ShutdownTaskArgs& shutdownArgs) {
 #ifndef MONGO_CONFIG_USE_RAW_LATCHES
     LatchAnalyzer::get(serviceContext).dump();
 #endif
+
+    FlowControl::shutdown(serviceContext);
+    OCSPManager::shutdown(serviceContext);
 }
 
 }  // namespace

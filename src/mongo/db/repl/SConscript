@@ -1008,10 +1008,14 @@ env.Library(
         'base_cloner',
         'cloner_utils',
         'initial_sync_shared_data',
+        'task_runner',
         '$BUILD_DIR/mongo/base',
     ],
     LIBDEPS_PRIVATE=[
+        'repl_server_parameters',
         '$BUILD_DIR/mongo/db/commands/list_collections_filter',
+        '$BUILD_DIR/mongo/rpc/metadata',
+        '$BUILD_DIR/mongo/util/progress_meter',
     ]
 )
 
@@ -1362,7 +1366,6 @@ env.CppUnitTest(
         'repl_set_heartbeat_response_test.cpp',
         'repl_set_tag_test.cpp',
         'repl_set_write_concern_mode_definitions_test.cpp',
-        'replica_set_aware_service_test.cpp',
         'replication_consistency_markers_impl_test.cpp',
         'replication_process_test.cpp',
         'replication_recovery_test.cpp',
@@ -1404,6 +1407,7 @@ env.CppUnitTest(
         '$BUILD_DIR/mongo/db/stats/counters',
         '$BUILD_DIR/mongo/db/storage/ephemeral_for_test/storage_ephemeral_for_test_core',
         '$BUILD_DIR/mongo/db/transaction',
+        '$BUILD_DIR/mongo/db/update/update_test_helpers',
         '$BUILD_DIR/mongo/dbtests/mocklib',
         '$BUILD_DIR/mongo/executor/network_interface_factory',
         '$BUILD_DIR/mongo/executor/network_interface_mock',
@@ -1439,7 +1443,6 @@ env.CppUnitTest(
         'repl_coordinator_impl',
         'repl_server_parameters',
         'replica_set_messages',
-        'replica_set_aware_service',
         'replication_consistency_markers_impl',
         'replication_process',
         'replication_recovery',
@@ -1506,6 +1509,7 @@ env.CppUnitTest(
         'database_cloner_test.cpp',
         'initial_sync_shared_data_test.cpp',
         'tenant_all_database_cloner_test.cpp',
+        'tenant_collection_cloner_test.cpp',
         'tenant_database_cloner_test.cpp'
     ],
     LIBDEPS=[
@@ -1518,6 +1522,19 @@ env.CppUnitTest(
         'initial_sync_cloners',
         'initial_sync_shared_data',
         'tenant_migration_cloners'
+    ],
+)
+
+env.CppUnitTest(
+    target='db_repl_set_aware_service_test',
+    source=[
+        'replica_set_aware_service_test.cpp',
+    ],
+    LIBDEPS=[
+        '$BUILD_DIR/mongo/db/service_context_test_fixture',
+        'repl_coordinator_impl',
+        'repl_coordinator_test_fixture',
+        'replica_set_aware_service',
     ],
 )
 
@@ -1616,7 +1633,8 @@ env.Library(
         '$BUILD_DIR/mongo/executor/network_interface_tl',
         '$BUILD_DIR/mongo/executor/scoped_task_executor',
         '$BUILD_DIR/mongo/executor/thread_pool_task_executor',
-        '$BUILD_DIR/mongo/s/write_ops/batch_write_types',
+        '$BUILD_DIR/mongo/util/concurrency/thread_pool',
+        'repl_coordinator_interface',
         'wait_for_majority_service',
     ],
 )

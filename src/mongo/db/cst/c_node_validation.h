@@ -27,52 +27,21 @@
  *    it in the license file.
  */
 
-#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kCommand
+#pragma once
 
 #include "mongo/platform/basic.h"
 
-#include <set>
-
-#include "mongo/db/commands.h"
-#include "mongo/db/repl/replication_coordinator.h"
-#include "mongo/db/vector_clock.h"
-
-namespace mongo {
-namespace {
+#include "mongo/base/status_with.h"
+#include "mongo/db/cst/c_node.h"
 
 /**
- * Internal sharding command run on shard primaries to persist the vector clock state.
+ * Functions which perform additional validation beyond what a context free grammar can handle.
+ * These return error messages which can be used to cause errors from inside the Bison parser.
  */
-class VectorClockPersistCommand : public BasicCommand {
-public:
-    VectorClockPersistCommand() : BasicCommand("_vectorClockPersist") {}
+namespace mongo::c_node_validation {
 
-    AllowedOnSecondary secondaryAllowed(ServiceContext*) const override {
-        return AllowedOnSecondary::kNever;
-    }
+enum class IsInclusion : bool { no, yes };
 
-    virtual bool supportsWriteConcern(const BSONObj& cmd) const override {
-        return true;
-    }
+StatusWith<IsInclusion> validateProjectionAsInclusionOrExclusion(const CNode& projects);
 
-    std::string help() const override {
-        return "Internal sharding command run on shard primaries to persist the vector clock "
-               "state.";
-    }
-
-    bool run(OperationContext* opCtx,
-             const std::string& dbname_unused,
-             const BSONObj& cmdObj,
-             BSONObjBuilder& result) {
-        auto sc = opCtx->getServiceContext();
-        auto vc = VectorClock::get(sc);
-
-        vc->persist().get(opCtx);
-
-        return true;
-    }
-
-} vectorClockPersistCmd;
-
-}  // namespace
-}  // namespace mongo
+}  // namespace mongo::c_node_validation
