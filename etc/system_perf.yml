@@ -317,6 +317,91 @@ functions:
 #######################################
 
 tasks:
+- name: genny_generate_all_tasks
+  commands:
+    - command: git.get_project
+      params:
+        directory: *src_dir
+        revisions:
+          dsi: ${dsi_rev}
+          linkbench: ${linkbench_rev}
+          linkbench2: ${linkbench2_rev}
+          genny: ${genny_rev}
+          workloads: ${workloads_rev}
+          signal-processing: ${signal-processing_rev}
+    - command: expansions.write
+      params:
+        file: ./expansions.yml
+    - command: shell.exec
+      params:
+        script: ./src/genny/scripts/genny_auto_tasks.sh all_tasks
+    - command: generate.tasks
+      params:
+        files:
+          - build/TaskJSON/Tasks.json
+
+- name: genny_auto_tasks
+  commands:
+    - command: git.get_project
+      params:
+        directory: *src_dir
+        revisions:
+          dsi: ${dsi_rev}
+          linkbench: ${linkbench_rev}
+          linkbench2: ${linkbench2_rev}
+          genny: ${genny_rev}
+          workloads: ${workloads_rev}
+          signal-processing: ${signal-processing_rev}
+    - command: expansions.write
+      params:
+        file: ./expansions.yml
+    - command: shell.exec
+      params:
+        script: ./src/genny/scripts/genny_auto_tasks.sh variant_tasks
+    - command: generate.tasks
+      params:
+        files:
+          - build/TaskJSON/Tasks.json
+
+- name: genny_patch_tasks
+  commands:
+    - command: git.get_project
+      params:
+        directory: *src_dir
+        revisions:
+          dsi: ${dsi_rev}
+          linkbench: ${linkbench_rev}
+          linkbench2: ${linkbench2_rev}
+          genny: ${genny_rev}
+          workloads: ${workloads_rev}
+          signal-processing: ${signal-processing_rev}
+    - command: expansions.write
+      params:
+        file: ./expansions.yml
+    - command: shell.exec
+      params:
+        script: ./src/genny/scripts/genny_auto_tasks.sh patch_tasks
+    - command: generate.tasks
+      params:
+        files:
+          - build/TaskJSON/Tasks.json
+
+- name: smoke_test
+  priority: 5
+  commands:
+    - func: f_run_dsi_workload
+      vars:
+        test_control: "short"
+
+- name: smoke_test_ssl
+  priority: 5
+  commands:
+    - func: f_run_dsi_workload
+      vars:
+          test_control: short
+          mongodb_setup: replica-ssl
+          infrastructure_provisioning: replica
+
 - name: compile
   commands:
     - command: manifest.load
@@ -341,76 +426,6 @@ tasks:
             done
           fi
     - func: "compile mongodb"
-
-
-- name: genny_generate_all_tasks
-  commands:
-    - command: git.get_project
-      params:
-        directory: src/mongo
-        revisions:
-          dsi: ${dsi_rev}
-          linkbench: ${linkbench_rev}
-          linkbench2: ${linkbench2_rev}
-          genny: ${genny_rev}
-          workloads: ${workloads_rev}
-          signal-processing: ${signal-processing_rev}
-    - command: expansions.write
-      params:
-        file: ./expansions.yml
-    - command: shell.exec
-      params:
-        script: ./src/genny/scripts/genny_auto_tasks.sh all_tasks
-    - command: generate.tasks
-      params:
-        files:
-          - build/TaskJSON/Tasks.json
-
-- name: genny_auto_tasks
-  commands:
-    - command: git.get_project
-      params:
-        directory: src/mongo
-        revisions:
-          dsi: ${dsi_rev}
-          linkbench: ${linkbench_rev}
-          linkbench2: ${linkbench2_rev}
-          genny: ${genny_rev}
-          workloads: ${workloads_rev}
-          signal-processing: ${signal-processing_rev}
-    - command: expansions.write
-      params:
-        file: ./expansions.yml
-    - command: shell.exec
-      params:
-        script: ./src/genny/scripts/genny_auto_tasks.sh variant_tasks
-    - command: generate.tasks
-      params:
-        files:
-          - build/TaskJSON/Tasks.json
-
-- name: genny_patch_tasks
-  commands:
-    - command: git.get_project
-      params:
-        directory: src/mongo
-        revisions:
-          dsi: ${dsi_rev}
-          linkbench: ${linkbench_rev}
-          linkbench2: ${linkbench2_rev}
-          genny: ${genny_rev}
-          workloads: ${workloads_rev}
-          signal-processing: ${signal-processing_rev}
-    - command: expansions.write
-      params:
-        file: ./expansions.yml
-    - command: shell.exec
-      params:
-        script: ./src/genny/scripts/genny_auto_tasks.sh patch_tasks
-    - command: generate.tasks
-      params:
-        files:
-          - build/TaskJSON/Tasks.json
 
 - name: linkbench
   priority: 5
@@ -562,13 +577,6 @@ tasks:
     - func: f_run_dsi_workload
       vars:
         test_control: "map_reduce_workloads"
-
-- name: smoke_test
-  priority: 5
-  commands:
-    - func: f_run_dsi_workload
-      vars:
-        test_control: "short"
 
 - name: genny_canaries
   priority: 5
@@ -1157,7 +1165,6 @@ buildvariants:
     storageEngine: wiredTiger
   run_on:
       - "rhel70-perf-shard"
-  depends_on:
   depends_on: *_compile_amazon2
   tasks:
     - name: industry_benchmarks
@@ -1188,7 +1195,6 @@ buildvariants:
     storageEngine: wiredTiger
   run_on:
       - "rhel70-perf-shard-lite"
-  depends_on:
   depends_on: *_compile_amazon2
   tasks: &shardlitetasks
     - name: bestbuy_agg
@@ -1431,7 +1437,6 @@ buildvariants:
     storageEngine: wiredTiger
   run_on:
       - "rhel70-perf-replset"
-  depends_on:
   depends_on: *_compile_amazon2
   tasks:
     - name: genny_auto_tasks
@@ -1533,7 +1538,6 @@ buildvariants:
     storageEngine: wiredTiger
   run_on:
       - "rhel70-perf-replset"
-  depends_on:
   depends_on: *_compile_wtdevelop_amazon2
   tasks: *3nodetasks
 
