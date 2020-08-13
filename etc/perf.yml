@@ -208,7 +208,7 @@ functions:
           pushd ./src/genny
               ./scripts/lamp --linux-distro rhel62
               ./scripts/genny run -w "./dist/etc/genny/workloads/${workload}" -u 'mongodb://admin:password@localhost:27017'
-              genny-metrics-legacy-report --report-file ../../perf.json build/genny-metrics.csv
+              genny-metrics-legacy-report --report-file  ${workdir}/perf.json build/genny-metrics.csv
           popd
     - command: "json.send"
       params:
