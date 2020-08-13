@@ -644,7 +644,7 @@ tasks:
         test_control: "initialsync-logkeeper"
         mongodb_setup: "initialsync-logkeeper-short"
         # Logkeeper dataset with FCV set to 4.4
-        dataset: "https://s3-us-west-2.amazonaws.com/dsi-donot-remove/InitialSyncLogKeeper/logkeeper-slice-data-mongodb-4.4.tgz"
+        mongodb_dataset: "https://s3-us-west-2.amazonaws.com/dsi-donot-remove/InitialSyncLogKeeper/logkeeper-slice-data-mongodb-4.4.tgz"
 
 
 - name: initialsync-logkeeper
@@ -667,7 +667,7 @@ tasks:
         test_control: "initialsync-logkeeper-short-s3-update"
         mongodb_setup: "initialsync-logkeeper-short-s3-update"
         # Update this to Logkeeper dataset with FCV set to latest after each LTS release.
-        dataset: "https://s3-us-west-2.amazonaws.com/dsi-donot-remove/InitialSyncLogKeeper/logkeeper-slice-data-mongodb-4.4.tgz"
+        mongodb_dataset: "https://s3-us-west-2.amazonaws.com/dsi-donot-remove/InitialSyncLogKeeper/logkeeper-slice-data-mongodb-4.4.tgz"
 
 - name: initialsync-logkeeper-snapshot-update
   priority: 5
