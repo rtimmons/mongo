@@ -101,22 +101,30 @@ functions:
         aws_secret: ${aws_secret}
         remote_file: *_remote_file
         bucket: mciuploads
-        local_file: mongodb.tar.gz
+        local_file: src/mongodb.tar.gz
     - command: shell.exec
       params:
-        script: tar xvf mongodb.tar.gz
+        working_dir: src
+        script: |
+          set -e
+          set -v
+          tar xvf mongodb.tar.gz
     - command: shell.exec
       params:
         background: true
+        working_dir: src
         script: |
           set -e
           set -o verbose
           mkdir -p ./dbdata
-          echo -e "my secret key" > key
-          chmod 600 key
-          ${mongod_exec_wrapper} ./bin/mongod --dbpath ./dbdata ${mongod_flags} --keyFile key --logpath "mongod.log"
+          echo -e "my secret key" > "${workdir}/key"
+          chmod 600 "${workdir}/key"
+          # We provide the key file for mongod here, rather than in mongod_flags next to the --auth
+          # option, because the path to key file requires expanding the {workdir} variable.
+          ${mongod_exec_wrapper} ./bin/mongod --dbpath ./dbdata ${mongod_flags} --keyFile "${workdir}/key" --logpath "${workdir}/mongod.log"
     - command: shell.exec
       params:
+        working_dir: src
         script: |
           set -e
           set -o verbose
@@ -208,7 +216,7 @@ functions:
           pushd ./src/genny
               ./scripts/lamp --linux-distro rhel62
               ./scripts/genny run -w "./dist/etc/genny/workloads/${workload}" -u 'mongodb://admin:password@localhost:27017'
-              genny-metrics-legacy-report --report-file  ${workdir}/perf.json build/genny-metrics.csv
+              genny-metrics-legacy-report --report-file "${workdir}/perf.json" build/genny-metrics.csv
           popd
     - command: "json.send"
       params:
@@ -218,22 +226,32 @@ functions:
   "run perf tests":
     - command: shell.exec
       params:
+        working_dir: src
         script: |
           set -e
           set -v
           virtualenv ./venv
           source ./venv/bin/activate
           pip install argparse
-
+    - command: shell.exec
+      type: test
+      params:
+        working_dir: src
+        script: |
+          set -e
+          set -v
+          source ./venv/bin/activate
+          cd mongo-perf
+          mkdir -p ../perf
           #  give mongod a few seconds to start up so that we can connect.
           sleep 5
-          ${perf_exec_wrapper} python ./src/mongo-perf/benchrun.py --shell ./bin/mongo -t ${threads} --trialCount 5 -f testcases/*.js --readCmd ${readCmd} --includeFilter ${includeFilter1}  --includeFilter ${includeFilter2} --excludeFilter ${excludeFilter} --out perf.json --exclude-testbed --username admin --password password
+          ${perf_exec_wrapper} python benchrun.py --shell ../bin/mongo -t ${threads} --trialCount 5 -f testcases/*.js --readCmd ${readCmd} --includeFilter ${includeFilter1}  --includeFilter ${includeFilter2} --excludeFilter ${excludeFilter} --out ../perf/perf.json --exclude-testbed --username admin --password password
           echo "Oplog size at end of tests..."
-          ./src/bin/mongo --username admin --password password --eval "db.getSiblingDB('local').oplog.rs.totalSize()/1024/1024" admin
+          ../bin/mongo --username admin --password password --eval "db.getSiblingDB('local').oplog.rs.totalSize()/1024/1024" admin
     - command: "json.send"
       params:
         name: "perf"
-        file: "perf.json"
+        file: "src/perf/perf.json"
 
   "upload pip requirements":
     command: s3.put
