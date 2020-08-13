@@ -74,13 +74,12 @@ modules:
   branch: master
   prefix: ../../src
   branch: master
-- name: mongo-perf
-  repo: git@github.com:mongodb/mongo-perf.git
-  prefix: ../../src
-  branch: master
 - name: signal-processing
   repo: git@github.com:10gen/signal-processing.git
   prefix: ../../src
+  branch: master
+- name: mongo-perf
+  repo: git@github.com:mongodb/mongo-perf.git
   branch: master
 
 functions:
@@ -245,13 +244,13 @@ functions:
           mkdir -p ../perf
           #  give mongod a few seconds to start up so that we can connect.
           sleep 5
-          ${perf_exec_wrapper} python benchrun.py --shell ../bin/mongo -t ${threads} --trialCount 5 -f testcases/*.js --readCmd ${readCmd} --includeFilter ${includeFilter1}  --includeFilter ${includeFilter2} --excludeFilter ${excludeFilter} --out ../perf/perf.json --exclude-testbed --username admin --password password
+          ${perf_exec_wrapper} python benchrun.py --shell ../bin/mongo -t ${threads} --trialCount 5 -f testcases/*.js --readCmd ${readCmd} --includeFilter ${includeFilter1}  --includeFilter ${includeFilter2} --excludeFilter ${excludeFilter} --out ${workdir}/perf.json --exclude-testbed --username admin --password password
           echo "Oplog size at end of tests..."
           ../bin/mongo --username admin --password password --eval "db.getSiblingDB('local').oplog.rs.totalSize()/1024/1024" admin
     - command: "json.send"
       params:
         name: "perf"
-        file: "src/perf/perf.json"
+        file: "perf.json"
 
   "upload pip requirements":
     command: s3.put
