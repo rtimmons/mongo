@@ -4,12 +4,16 @@ command_type: system
 variables:
   _src_dir: &src_dir src/mongo
   _modules: &modules
+    - enterprise
+    - mongo-tools
+    - wtdevelop
+
     - dsi
+    - signal-processing
     - genny
-    - workloads
     - linkbench
     - linkbench2
-    - signal-processing
+    - workloads
 
   ###
   # Leave this section uncommented to enable compile.
@@ -48,67 +52,21 @@ variables:
   #     value: https://dsi-donot-remove.s3-us-west-2.amazonaws.com/compile_artifacts/mongodb-sys_perf_4.4_78207ca380688c73b1a217f23d5b7c8803bef9cd.tar.gz
   ##
 
+
+###
+# Same in every DSI project (1)
 pre:
     - command: expansions.update
       params:
         updates: *_expansion_updates
 post:
-    # Do cluster teardown first to ensure runtime is below Evergreen's post timeout. Other post tasks
-    # will not have been run if the timeout is exceeded.
-    - command: shell.exec
-      params:
-        script: |
-          if [ -e /data/infrastructure_provisioning/terraform/provisioned.${infrastructure_provisioning} ]; then
-            mark_idle.sh
-          fi
-    - command: shell.exec
-      params:
-        script: ./src/dsi/run-dsi infrastructure_teardown
-    - command: shell.exec
-      params:
-        script: ./src/dsi/run-dsi ./src/dsi/src/dsi/make_artifact.sh
-    - command: s3.put
-      params:
-        aws_key: ${aws_key}
-        aws_secret: ${aws_secret}
-        local_file: dsi-artifacts.tgz
-        remote_file: ${project_dir}/${build_variant}/${revision}/${task_id}/${version_id}/logs/dsi-artifacts-${task_name}-${build_id}-${execution}.${ext|tgz}
-        bucket: mciuploads
-        permissions: public-read
-        content_type: ${content_type|application/x-gzip}
-        display_name: Dsi Artifacts - Execution ${execution}
-    - command: s3.put
-      params:
-        aws_key: ${aws_key}
-        aws_secret: ${aws_secret}
-        local_file: src/mongo/workloads/workloads/jsdoc/jsdocs-redirect.html
-        remote_file: ${project_dir}/${build_variant}/${revision}/${task_id}/${version_id}/logs/workloads-${task_name}-${build_id}.html
-        bucket: mciuploads
-        permissions: public-read
-        content_type: text/html
-        display_name: workloads documentation
-    - command: attach.results
-      params:
-        file_location: report.json
-    - command: json.send
-      params:
-        name: "perf"
-        file: "./build/LegacyPerfJson/perf.json"
-    - func: "upload pip requirements"
-    - command: shell.exec
-      params:
-        working_dir: src
-        script: |
-          # removes files from the (local) scons cache when it's over a
-          # threshold, to the $prune_ratio percentage. Ideally override
-          # these default values in the distro config in evergreen.
+    - func: "f_dsi_post_run"
+    - func: "f_other_post_ops"
+### (1)
 
-          if [ -d "${scons_cache_path}" ]; then
-              /opt/mongodbtoolchain/v3/bin/python3 buildscripts/scons_cache_prune.py --cache-dir ${scons_cache_path} --cache-size ${scons_cache_size|200} --prune-ratio ${scons_prune_ratio|0.8}
-          fi
 
 functions:
-  ##
+  ###
   # Compile
   "compile mongodb":
     # We create a virtual environment with the Python dependencies for compiling the server
@@ -154,7 +112,6 @@ functions:
           # use by scons and uploading artifacts as well as information about for the scons cache.
           source "${workdir}/compile_venv/bin/activate"
           MONGO_VERSION=$MONGO_VERSION USE_SCONS_CACHE=${use_scons_cache|false} python buildscripts/generate_compile_expansions.py --out compile_expansions.yml
-    # Then we load the generated version data into the agent so we can use it in task definitions
     - command: expansions.update
       params:
         file: src/compile_expansions.yml
@@ -217,9 +174,22 @@ functions:
         permissions: public-read
         content_type: ${content_type|application/x-gzip}
         display_name: mongodb${compile-variant|}.tar.gz
+  "f_other_post_ops":
+      - command: shell.exec
+        params:
+          working_dir: src
+          script: |
+            # removes files from the (local) scons cache when it's over a
+            # threshold, to the $prune_ratio percentage. Ideally override
+            # these default values in the distro config in evergreen.
+
+            if [ -d "${scons_cache_path}" ]; then
+                /opt/mongodbtoolchain/v3/bin/python3 buildscripts/scons_cache_prune.py --cache-dir ${scons_cache_path} --cache-size ${scons_cache_size|200} --prune-ratio ${scons_prune_ratio|0.8}
+            fi
   ###
 
-
+  ###
+  # Same in every DSI project (2)
   "f_run_dsi_workload":
     - command: shell.exec
       params:
@@ -304,24 +274,60 @@ functions:
         script: |
           set -o verbose
           exit $(cat post_run_check.status)
-
-  "upload pip requirements":
-    command: s3.put
-    params:
-      aws_key: ${aws_key}
-      aws_secret: ${aws_secret}
-      local_file: pip-requirements.txt
-      remote_file: ${project}/${build_variant}/${revision}/pip-requirements-${task_id}-${execution}.txt
-      bucket: mciuploads
-      permissions: public-read
-      content_type: atext-plain
-      display_name: Pip Requirements
+  "f_dsi_post_run":
+      - command: shell.exec
+        params:
+          script: ./src/dsi/run-dsi infrastructure_teardown
+      - command: shell.exec
+        params:
+          script: ./src/dsi/run-dsi ./src/dsi/src/dsi/make_artifact.sh
+      - command: s3.put
+        params:
+          aws_key: ${aws_key}
+          aws_secret: ${aws_secret}
+          local_file: dsi-artifacts.tgz
+          remote_file: ${project_dir}/${build_variant}/${revision}/${task_id}/${version_id}/logs/dsi-artifacts-${task_name}-${build_id}-${execution}.${ext|tgz}
+          bucket: mciuploads
+          permissions: public-read
+          content_type: ${content_type|application/x-gzip}
+          display_name: Dsi Artifacts - Execution ${execution}
+      - command: s3.put
+        params:
+          aws_key: ${aws_key}
+          aws_secret: ${aws_secret}
+          local_file: src/mongo/workloads/workloads/jsdoc/jsdocs-redirect.html
+          remote_file: ${project_dir}/${build_variant}/${revision}/${task_id}/${version_id}/logs/workloads-${task_name}-${build_id}.html
+          bucket: mciuploads
+          permissions: public-read
+          content_type: text/html
+          display_name: workloads documentation
+      - command: attach.results
+        params:
+          file_location: report.json
+      - command: json.send
+        params:
+          name: "perf"
+          file: "./build/LegacyPerfJson/perf.json"
+      - command: s3.put
+        params:
+          aws_key: ${aws_key}
+          aws_secret: ${aws_secret}
+          local_file: pip-requirements.txt
+          remote_file: ${project}/${build_variant}/${revision}/pip-requirements-${task_id}-${execution}.txt
+          bucket: mciuploads
+          permissions: public-read
+          content_type: atext-plain
+          display_name: Pip Requirements
+  ### (2)
 
 #######################################
 #               Tasks                 #
 #######################################
 
 tasks:
+
+###
+# Same in every DSI project (3)
 - name: genny_generate_all_tasks
   commands:
     - command: git.get_project
@@ -344,7 +350,6 @@ tasks:
       params:
         files:
           - build/TaskJSON/Tasks.json
-
 - name: genny_auto_tasks
   commands:
     - command: git.get_project
@@ -367,7 +372,6 @@ tasks:
       params:
         files:
           - build/TaskJSON/Tasks.json
-
 - name: genny_patch_tasks
   commands:
     - command: git.get_project
@@ -390,14 +394,12 @@ tasks:
       params:
         files:
           - build/TaskJSON/Tasks.json
-
 - name: smoke_test
   priority: 5
   commands:
     - func: f_run_dsi_workload
       vars:
         test_control: "short"
-
 - name: smoke_test_ssl
   priority: 5
   commands:
@@ -406,6 +408,7 @@ tasks:
           test_control: short
           mongodb_setup: replica-ssl
           infrastructure_provisioning: replica
+### (3)
 
 - name: compile
   commands:
@@ -482,7 +485,6 @@ tasks:
     - func: f_run_dsi_workload
       vars:
         test_control: "tpcc"
-
 
 - name: industry_benchmarks
   priority: 5
@@ -653,14 +655,12 @@ tasks:
       vars:
         test_control: "bestbuy_query"
 
-
 - name: non_sharded_workloads
   priority: 5
   commands:
     - func: f_run_dsi_workload
       vars:
         test_control: "non_sharded"
-
 
 - name: mongos_workloads
   priority: 5
@@ -669,14 +669,12 @@ tasks:
       vars:
         test_control: "mongos"
 
-
 - name: mongos_large_catalog_workloads
   priority: 5
   commands:
     - func: f_run_dsi_workload
       vars:
         test_control: "mongos_large_catalog"
-
 
 - name: move_chunk_workloads
   priority: 5
@@ -685,14 +683,12 @@ tasks:
       vars:
         test_control: "move_chunk"
 
-
 - name: move_chunk_waiting_workloads
   priority: 5
   commands:
     - func: f_run_dsi_workload
       vars:
         test_control: "move_chunk_waiting"
-
 
 - name: move_chunk_large_chunk_map_workloads
   priority: 5
@@ -701,14 +697,12 @@ tasks:
       vars:
         test_control: "move_chunk_large_chunk_map"
 
-
 - name: refine_shard_key_transaction_stress
   priority: 5
   commands:
     - func: f_run_dsi_workload
       vars:
         test_control: "refine_shard_key_transaction_stress"
-
 
 - name: secondary_performance
   priority: 5
@@ -719,14 +713,12 @@ tasks:
         test_control: "secondary_performance"
         mongodb_setup: "secondary-performance"
 
-
 - name: initialsync
   priority: 5
   commands:
     - func: f_run_dsi_workload
       vars:
         test_control: "initialsync"
-
 
 - name: initialsync-logkeeper-short
   priority: 5
@@ -738,7 +730,6 @@ tasks:
         # Logkeeper dataset with FCV set to 4.4
         mongodb_dataset: "https://s3-us-west-2.amazonaws.com/dsi-donot-remove/InitialSyncLogKeeper/logkeeper-slice-data-mongodb-4.4.tgz"
 
-
 - name: initialsync-logkeeper
   priority: 5
   exec_timeout_secs: 216000 # 2.5 days
@@ -746,7 +737,6 @@ tasks:
     - func: f_run_dsi_workload
       vars:
         test_control: "initialsync-logkeeper"
-
 
 # The following two initial sync logkeeper automation tasks are only used in the commented-out
 # "Linux ReplSet Initial Sync LogKeeper Snapshot Update" variant below and are only intended to be
@@ -820,13 +810,42 @@ tasks:
       vars:
         test_control: "run_command_simple"
 
-#######################################
-#               Modules               #
-#######################################
-# if a module is added and to be added to the manifest
-# be sure to add the module to git.get_project revisions parameter
+
+
 modules:
-  # COMPILE
+###
+# Same in every DSI project (4)
+- name: dsi
+  repo: git@github.com:10gen/dsi.git
+  prefix: ../../src
+  branch: master
+- name: genny
+  repo: git@github.com:10gen/genny.git
+  prefix: ../../src
+  branch: master
+- name: signal-processing
+  repo: git@github.com:10gen/signal-processing.git
+  prefix: ../../src
+  branch: master
+- name: workloads
+  repo: git@github.com:10gen/workloads.git
+  prefix: workloads
+  branch: master
+- name: wtdevelop
+  repo: git@github.com:wiredtiger/wiredtiger.git
+  prefix: src/third_party
+  branch: develop
+- name: linkbench
+  repo: git@github.com:10gen/linkbench.git
+  prefix: linkbench
+  branch: master
+- name: linkbench2
+  repo: git@github.com:mdcallag/linkbench.git
+  prefix: linkbench2
+  branch: master
+  ref: 63207190657737b32eb0e81c5b81ad1b8bad0e5a
+### (4)
+
 - name: enterprise
   repo: git@github.com:10gen/mongo-enterprise-modules.git
   prefix: src/mongo/db/modules
@@ -835,51 +854,12 @@ modules:
   repo: git@github.com:mongodb/mongo-tools.git
   prefix: mongo-tools/src/github.com/mongodb
   branch: master
-  # /COMPILE
 
-- name: dsi
-  repo: git@github.com:10gen/dsi.git
-  prefix: ../../src
-  branch: master
 
-- name: genny
-  repo: git@github.com:10gen/genny.git
-  prefix: ../../src
-  branch: master
 
-- name: signal-processing
-  repo: git@github.com:10gen/signal-processing.git
-  prefix: ../../src
-  branch: master
-
-- name: workloads
-  repo: git@github.com:10gen/workloads.git
-  prefix: workloads
-  branch: master
-
-- name: wtdevelop
-  repo: git@github.com:wiredtiger/wiredtiger.git
-  prefix: src/third_party
-  branch: develop
-
-- name: linkbench
-  repo: git@github.com:10gen/linkbench.git
-  prefix: linkbench
-  branch: master
-
-- name: linkbench2
-  repo: git@github.com:mdcallag/linkbench.git
-  prefix: linkbench2
-  branch: master
-  ref: 63207190657737b32eb0e81c5b81ad1b8bad0e5a
-
-#######################################
-#         Buildvariants               #
-#######################################
 buildvariants:
-
-# We are explicitly tracking the Amazon Linux 2 variant compile options from etc/evergreen.yml.  If we can get
-# proper artifacts directly from that project, we should do that and remove these tasks.
+###
+# Same in every DSI project (5)
 - &compile-amazon2
   name: compile-amazon2
   display_name: Compile
@@ -903,6 +883,7 @@ buildvariants:
   tasks:
     - name: compile
     - name: genny_generate_all_tasks
+### (5)
 
 - <<: *compile-amazon2
   name: wtdevelop-compile-amazon2
@@ -933,9 +914,6 @@ buildvariants:
   tasks:
   - name: compile
 
-#######################################
-#         Linux Buildvariants         #
-#######################################
 - name: linux-1-node-replSet
   display_name: Linux 1-Node ReplSet
   batchtime: 10080 # 7 days
@@ -1446,9 +1424,6 @@ buildvariants:
   tasks:
     - name: genny_auto_tasks
 
-#######################################
-#  Atlas Like Buildvariants           #
-#######################################
 - name: atlas-like-M60
   display_name: M60-Like 3-Node ReplSet
   batchtime: 5760  # 4 days
@@ -1486,15 +1461,10 @@ buildvariants:
     - name: change_streams_latency
     - name: snapshot_reads
     - name: secondary_reads
-    # - name: tpcc # TPCC with SSL currently broken https://jira.mongodb.org/browse/TIG-1681
     - name: linkbench
     - name: genny_patch_tasks
     - name: genny_auto_tasks
 
-
-#######################################
-#  WT Develop Linux Buildvariants     #
-#######################################
 - name: wtdevelop-1-node-replSet
   display_name: WT Develop 1-Node ReplSet
   batchtime: 10080 # 7 days
@@ -1545,21 +1515,3 @@ buildvariants:
       - "rhel70-perf-replset"
   depends_on: *_compile_wtdevelop_amazon2
   tasks: *3nodetasks
-
-# Disabled: SERVER-35586
-#- name: wtdevelop-shard-lite
-#  display_name: WT Develop Shard Lite Cluster
-#  batchtime: 10080 # 7 days
-#  modules: *modules
-#  expansions:
-#    mongodb_setup: shard-lite
-#    infrastructure_provisioning: shard-lite
-#    platform: linux
-#    project_dir: *project_dir
-#    compile-variant: -wtdevelop
-#    authentication: enabled
-#    storageEngine: wiredTiger
-#  run_on:
-#      - "rhel70-perf-shard-lite"
-#  depends_on: *_compile_wtdevelop_amazon2
-#  tasks: *shardlitetasks
