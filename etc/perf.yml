@@ -10,6 +10,8 @@ variables:
   _real_compile: &_compile
     - variant: linux-wt-standalone
       name: compile
+  _real_expansions: &_expansion_updates
+    []
   ###
 
   ###
@@ -18,6 +20,8 @@ variables:
   #     perf/performance_996dcdc3d96346d71f012388eccc79c691619340/996dcdc3d96346d71f012388eccc79c691619340/mongodb-performance_996dcdc3d96346d71f012388eccc79c691619340.tar.gz
   # _skip_compile: &_compile
   #     []
+  # _skip_expansions: &_expansion_updates
+  #   []
   ###
 
 
