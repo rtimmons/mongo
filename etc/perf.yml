@@ -2,7 +2,6 @@ command_type: system
 stepback: false
 
 variables:
-
   ###
   # Leave this section uncommented to enable compile.
   _real_remote_file: &_remote_file
@@ -26,6 +25,30 @@ variables:
 
 
 
+modules:
+- name: enterprise
+  repo: git@github.com:10gen/mongo-enterprise-modules.git
+  prefix: src/mongo/db/modules
+  branch: master
+
+- name: genny
+  repo: git@github.com:mongodb/genny.git
+  prefix: ../../src
+  branch: master
+- name: dsi
+  repo: git@github.com:10gen/dsi.git
+  branch: master
+  prefix: ../../src
+  branch: master
+- name: signal-processing
+  repo: git@github.com:10gen/signal-processing.git
+  prefix: ../../src
+  branch: master
+- name: mongo-perf
+  repo: git@github.com:mongodb/mongo-perf.git
+  branch: master
+
+
 pre:
     - command: manifest.load
     - command: shell.exec
@@ -35,7 +58,6 @@ pre:
           for PS in mongo{,d,s,import,export,dump,restore,stat,files,top,bridge} resmoke.py python{,2} lldb _test; do
               pkill -9 "$PS"
           done
-
 post:
     - command: attach.results
       params:
@@ -71,28 +93,6 @@ post:
     - func: "upload pip requirements"
 
 
-modules:
-- name: enterprise
-  repo: git@github.com:10gen/mongo-enterprise-modules.git
-  prefix: src/mongo/db/modules
-  branch: master
-
-- name: genny
-  repo: git@github.com:mongodb/genny.git
-  prefix: ../../src
-  branch: master
-- name: dsi
-  repo: git@github.com:10gen/dsi.git
-  branch: master
-  prefix: ../../src
-  branch: master
-- name: signal-processing
-  repo: git@github.com:10gen/signal-processing.git
-  prefix: ../../src
-  branch: master
-- name: mongo-perf
-  repo: git@github.com:mongodb/mongo-perf.git
-  branch: master
 
 functions:
   "git get project": &git_get_project
@@ -276,8 +276,8 @@ functions:
       content_type: atext-plain
       display_name: Pip Requirements
 
-tasks:
 
+tasks:
 - name: genny_scale_InsertRemove
   depends_on: *_compile
   commands:
@@ -579,6 +579,9 @@ tasks:
     - func: "analyze"
       vars:
         reports_analysis: true
+
+
+
 buildvariants:
 - name: linux-wt-standalone
   display_name: Standalone Linux inMemory
