@@ -112,131 +112,6 @@ post:
 
 functions:
   ###
-  # Compile
-  "compile mongodb":
-    # We create a virtual environment with the Python dependencies for compiling the server
-    # installed.
-    - command: shell.exec
-      params:
-        working_dir: src
-        script: |
-          set -o errexit
-          set -o verbose
-
-          /opt/mongodbtoolchain/v3/bin/virtualenv --python /opt/mongodbtoolchain/v3/bin/python3 "${workdir}/compile_venv"
-          /opt/mongodbtoolchain/v3/bin/virtualenv --python /opt/mongodbtoolchain/v3/bin/python2 "${workdir}/venv"
-          source "${workdir}/compile_venv/bin/activate"
-
-          python -m pip install -r etc/pip/compile-requirements.txt
-
-    - command: shell.exec
-      params:
-        working_dir: src
-        script: |
-          set -o errexit
-          set -o verbose
-
-          mkdir -p mongodb/bin
-
-          # We get the raw version string (r1.2.3-45-gabcdef) from git
-          MONGO_VERSION=$(git describe --abbrev=7)
-
-          # If we're going to compile the upstream wtdevelop repository for wiredtiger, add
-          # that githash to version string.
-          if [ "${compile-variant|}" = "-wtdevelop" ]; then
-            WT_VERSION=$(cd src/third_party/wtdevelop; git describe --abbrev=7 | cut -c 9-)
-            MONGO_VERSION="$MONGO_VERSION-wtdevelop-$WT_VERSION"
-          fi
-          # If this is a patch build, we add the patch version id to the version string so we know
-          # this build was a patch, and which evergreen task it came from
-          if [ "${is_patch|false}" = "true" ]; then
-            MONGO_VERSION="$MONGO_VERSION-patch-${version_id}"
-          fi
-
-          # This script converts the generated version string into a sanitized version string for
-          # use by scons and uploading artifacts as well as information about for the scons cache.
-          source "${workdir}/compile_venv/bin/activate"
-          MONGO_VERSION=$MONGO_VERSION USE_SCONS_CACHE=${use_scons_cache|false} python buildscripts/generate_compile_expansions.py --out compile_expansions.yml
-    - command: expansions.update
-      params:
-        file: src/compile_expansions.yml
-    - command: shell.exec
-      params:
-        working_dir: src/mongo-tools/src/github.com/mongodb/mongo-tools
-        script: |
-          set -o verbose
-          set -o errexit
-
-          # make sure newlines in the scripts are handled correctly by windows
-          if [ "Windows_NT" = "$OS" ]; then
-            set -o igncr
-          fi;
-
-          # set_goenv provides set_goenv(), print_ldflags() and print_tags() used below
-          . ./set_goenv.sh
-          GOROOT="" set_goenv || exit
-          go version
-
-          build_tools="bsondump mongostat mongofiles mongoexport mongoimport mongorestore mongodump mongotop"
-          if [ "${build_mongoreplay}" = "true" ]; then
-              build_tools="$build_tools mongoreplay"
-          fi
-          for i in $build_tools; do
-              go build -ldflags "$(print_ldflags)" ${args} -tags "$(print_tags ${tooltags})" -o "../../../../../mongodb/bin/$i${exe|}" $i/main/$i.go
-              "../../../../../mongodb/bin/$i${exe|}" --version
-          done
-    - command: shell.exec
-      params:
-        working_dir: src
-        script: |
-          set -o errexit
-          set -o verbose
-          source "${workdir}/compile_venv/bin/activate"
-          python ./buildscripts/scons.py ${compile_flags|} ${scons_cache_args|} install-core MONGO_VERSION=${version} DESTDIR=$(pwd)/mongodb
-          mkdir -p mongodb/jstests/hooks
-          if [ -d jstests/hooks ]
-          then
-            echo "Fetching JS test DB correctness checks from directory jstests"
-            cp -a jstests/* mongodb/jstests
-
-            echo "Now adding our own special run_validate_collections.js wrapper"
-            mv mongodb/jstests/hooks/run_validate_collections.js mongodb/jstests/hooks/run_validate_collections.actual.js
-
-            cat << EOF > mongodb/jstests/hooks/run_validate_collections.js
-            print("NOTE: run_validate_collections.js will skip the oplog!");
-            TestData = { skipValidationNamespaces: ['local.oplog.rs'] };
-            load('jstests/hooks/run_validate_collections.actual.js');
-          EOF
-          fi
-          tar czf mongodb${compile-variant|}.tar.gz mongodb
-    - command: s3.put
-      params:
-        aws_key: ${aws_key}
-        aws_secret: ${aws_secret}
-        local_file: src/mongodb${compile-variant|}.tar.gz
-        remote_file: ${project_dir}/${version_id}/${revision}/${platform}/mongodb${compile-variant|}-${version_id}.tar.gz
-        bucket: mciuploads
-        permissions: public-read
-        content_type: ${content_type|application/x-gzip}
-        display_name: mongodb${compile-variant|}.tar.gz
-  "f_other_post_ops":
-      - command: shell.exec
-        params:
-          working_dir: src
-          script: |
-            # removes files from the (local) scons cache when it's over a
-            # threshold, to the $prune_ratio percentage. Ideally override
-            # these default values in the distro config in evergreen.
-
-            if [ -d "${scons_cache_path}" ]; then
-                /opt/mongodbtoolchain/v3/bin/python3 buildscripts/scons_cache_prune.py --cache-dir ${scons_cache_path} --cache-size ${scons_cache_size|200} --prune-ratio ${scons_prune_ratio|0.8}
-            fi
-  "f_other_pre_ops":
-    - command: shell.exec
-      params: {script: "ls"}
-  ###
-
-  ###
   # Same in every DSI project
   "f_dsi_pre_run":
     - command: manifest.load
@@ -373,6 +248,130 @@ functions:
   ###
 
 
+  ###
+  # Compile
+  "compile mongodb":
+    # We create a virtual environment with the Python dependencies for compiling the server
+    # installed.
+    - command: shell.exec
+      params:
+        working_dir: src
+        script: |
+          set -o errexit
+          set -o verbose
+
+          /opt/mongodbtoolchain/v3/bin/virtualenv --python /opt/mongodbtoolchain/v3/bin/python3 "${workdir}/compile_venv"
+          /opt/mongodbtoolchain/v3/bin/virtualenv --python /opt/mongodbtoolchain/v3/bin/python2 "${workdir}/venv"
+          source "${workdir}/compile_venv/bin/activate"
+
+          python -m pip install -r etc/pip/compile-requirements.txt
+
+    - command: shell.exec
+      params:
+        working_dir: src
+        script: |
+          set -o errexit
+          set -o verbose
+
+          mkdir -p mongodb/bin
+
+          # We get the raw version string (r1.2.3-45-gabcdef) from git
+          MONGO_VERSION=$(git describe --abbrev=7)
+
+          # If we're going to compile the upstream wtdevelop repository for wiredtiger, add
+          # that githash to version string.
+          if [ "${compile-variant|}" = "-wtdevelop" ]; then
+            WT_VERSION=$(cd src/third_party/wtdevelop; git describe --abbrev=7 | cut -c 9-)
+            MONGO_VERSION="$MONGO_VERSION-wtdevelop-$WT_VERSION"
+          fi
+          # If this is a patch build, we add the patch version id to the version string so we know
+          # this build was a patch, and which evergreen task it came from
+          if [ "${is_patch|false}" = "true" ]; then
+            MONGO_VERSION="$MONGO_VERSION-patch-${version_id}"
+          fi
+
+          # This script converts the generated version string into a sanitized version string for
+          # use by scons and uploading artifacts as well as information about for the scons cache.
+          source "${workdir}/compile_venv/bin/activate"
+          MONGO_VERSION=$MONGO_VERSION USE_SCONS_CACHE=${use_scons_cache|false} python buildscripts/generate_compile_expansions.py --out compile_expansions.yml
+    - command: expansions.update
+      params:
+        file: src/compile_expansions.yml
+    - command: shell.exec
+      params:
+        working_dir: src/mongo-tools/src/github.com/mongodb/mongo-tools
+        script: |
+          set -o verbose
+          set -o errexit
+
+          # make sure newlines in the scripts are handled correctly by windows
+          if [ "Windows_NT" = "$OS" ]; then
+            set -o igncr
+          fi;
+
+          # set_goenv provides set_goenv(), print_ldflags() and print_tags() used below
+          . ./set_goenv.sh
+          GOROOT="" set_goenv || exit
+          go version
+
+          build_tools="bsondump mongostat mongofiles mongoexport mongoimport mongorestore mongodump mongotop"
+          if [ "${build_mongoreplay}" = "true" ]; then
+              build_tools="$build_tools mongoreplay"
+          fi
+          for i in $build_tools; do
+              go build -ldflags "$(print_ldflags)" ${args} -tags "$(print_tags ${tooltags})" -o "../../../../../mongodb/bin/$i${exe|}" $i/main/$i.go
+              "../../../../../mongodb/bin/$i${exe|}" --version
+          done
+    - command: shell.exec
+      params:
+        working_dir: src
+        script: |
+          set -o errexit
+          set -o verbose
+          source "${workdir}/compile_venv/bin/activate"
+          python ./buildscripts/scons.py ${compile_flags|} ${scons_cache_args|} install-core MONGO_VERSION=${version} DESTDIR=$(pwd)/mongodb
+          mkdir -p mongodb/jstests/hooks
+          if [ -d jstests/hooks ]
+          then
+            echo "Fetching JS test DB correctness checks from directory jstests"
+            cp -a jstests/* mongodb/jstests
+
+            echo "Now adding our own special run_validate_collections.js wrapper"
+            mv mongodb/jstests/hooks/run_validate_collections.js mongodb/jstests/hooks/run_validate_collections.actual.js
+
+            cat << EOF > mongodb/jstests/hooks/run_validate_collections.js
+            print("NOTE: run_validate_collections.js will skip the oplog!");
+            TestData = { skipValidationNamespaces: ['local.oplog.rs'] };
+            load('jstests/hooks/run_validate_collections.actual.js');
+          EOF
+          fi
+          tar czf mongodb${compile-variant|}.tar.gz mongodb
+    - command: s3.put
+      params:
+        aws_key: ${aws_key}
+        aws_secret: ${aws_secret}
+        local_file: src/mongodb${compile-variant|}.tar.gz
+        remote_file: ${project_dir}/${version_id}/${revision}/${platform}/mongodb${compile-variant|}-${version_id}.tar.gz
+        bucket: mciuploads
+        permissions: public-read
+        content_type: ${content_type|application/x-gzip}
+        display_name: mongodb${compile-variant|}.tar.gz
+  "f_other_post_ops":
+      - command: shell.exec
+        params:
+          working_dir: src
+          script: |
+            # removes files from the (local) scons cache when it's over a
+            # threshold, to the $prune_ratio percentage. Ideally override
+            # these default values in the distro config in evergreen.
+
+            if [ -d "${scons_cache_path}" ]; then
+                /opt/mongodbtoolchain/v3/bin/python3 buildscripts/scons_cache_prune.py --cache-dir ${scons_cache_path} --cache-size ${scons_cache_size|200} --prune-ratio ${scons_prune_ratio|0.8}
+            fi
+  "f_other_pre_ops":
+    - command: shell.exec
+      params: {script: "ls"}
+  ###
 
 tasks:
 ###
