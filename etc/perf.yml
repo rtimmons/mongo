@@ -2,17 +2,25 @@ command_type: system
 stepback: false
 
 variables:
-  # Comment this to skip compile:
-  # _real_remote_file: &_remote_file
-  #     ${project}/${version_id}/${revision}/mongodb${compile-variant|}-${version_id}.tar.gz
-  # _real_compile: &_compile
-  #   - variant: linux-wt-standalone
-  #     name: compile
-  # Uncommented to skip compile
-  _skip_remote_file: &_remote_file
-      perf/performance_996dcdc3d96346d71f012388eccc79c691619340/996dcdc3d96346d71f012388eccc79c691619340/mongodb-performance_996dcdc3d96346d71f012388eccc79c691619340.tar.gz
-  _skip_compile: &_compile
-      []
+
+  ###
+  # Leave this section uncommented to enable compile.
+  _real_remote_file: &_remote_file
+      ${project}/${version_id}/${revision}/mongodb${compile-variant|}-${version_id}.tar.gz
+  _real_compile: &_compile
+    - variant: linux-wt-standalone
+      name: compile
+  ###
+
+  ###
+  # **Or**: Leave this section uncommented to bypass/skip compile.
+  # _skip_remote_file: &_remote_file
+  #     perf/performance_996dcdc3d96346d71f012388eccc79c691619340/996dcdc3d96346d71f012388eccc79c691619340/mongodb-performance_996dcdc3d96346d71f012388eccc79c691619340.tar.gz
+  # _skip_compile: &_compile
+  #     []
+  ###
+
+
 
 pre:
     - command: manifest.load
