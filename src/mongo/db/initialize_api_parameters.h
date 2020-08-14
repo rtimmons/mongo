@@ -76,10 +76,19 @@ public:
         _apiDeprecationErrors = apiDeprecationErrors;
     }
 
+    const bool getParamsPassed() const {
+        return _paramsPassed;
+    }
+
+    void setParamsPassed(bool noParamsPassed) {
+        _paramsPassed = noParamsPassed;
+    }
+
 private:
     StringData _apiVersion;
     bool _apiStrict;
     bool _apiDeprecationErrors;
+    bool _paramsPassed;
 };
 
 }  // namespace mongo
