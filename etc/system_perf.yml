@@ -51,8 +51,7 @@ variables:
     - linkbench
     - linkbench2
     - workloads
-
-
+    - mongo-perf
 
 modules:
 ###
@@ -86,6 +85,9 @@ modules:
   prefix: linkbench2
   branch: master
   ref: 63207190657737b32eb0e81c5b81ad1b8bad0e5a
+- name: mongo-perf
+  repo: git@github.com:mongodb/mongo-perf.git
+  branch: master
 ###
 
 - name: enterprise
@@ -294,7 +296,6 @@ functions:
           analysis_password=${dsi_analysis_atlas_pw}
           evergreen_api_key=${evergreen_api_key}
           evergreen_api_user=${evergreen_api_user}
-          cat ./src/dsi/src/signal_processing_setup.sh
           source ./src/dsi/src/signal_processing_setup.sh
     - command: shell.exec
       params:
