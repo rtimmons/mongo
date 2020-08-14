@@ -884,6 +884,41 @@ buildvariants:
     - name: compile
     - name: genny_generate_all_tasks
 
+- name: linux-standalone
+  display_name: Linux Standalone
+  batchtime: 2880  # 48 hours
+  modules: *modules
+  expansions:
+    mongodb_setup: standalone
+    infrastructure_provisioning: single
+    platform: linux
+    project_dir: *project_dir
+    authentication: enabled
+    storageEngine: wiredTiger
+  run_on:
+      - "rhel70-perf-single"
+  depends_on: *_compile_amazon2
+  tasks: &standalonetasks
+    - name: genny_patch_tasks
+    - name: genny_auto_tasks
+    - name: dsi_integ_test_run_command_simple
+    - name: industry_benchmarks
+    - name: ycsb_60GB
+    - name: crud_workloads
+    - name: genny_canaries
+    - name: cursor_manager
+    - name: mixed_workloads
+    - name: misc_workloads
+    - name: map_reduce_workloads
+    - name: smoke_test
+    - name: non_sharded_workloads
+    - name: bestbuy_agg
+    - name: bestbuy_agg_merge_different_db
+    - name: bestbuy_agg_merge_same_db
+    - name: bestbuy_agg_merge_wordcount
+    - name: bestbuy_query
+
+
 - <<: *compile-amazon2
   name: wtdevelop-compile-amazon2
   display_name: WT Develop Compile
@@ -953,41 +988,6 @@ buildvariants:
     - name: industry_benchmarks_wmajority
     - name: sb_large_scale
     - name: sb_timeseries
-
-- name: linux-standalone
-  display_name: Linux Standalone
-  batchtime: 2880  # 48 hours
-  modules: *modules
-  expansions:
-    mongodb_setup: standalone
-    infrastructure_provisioning: single
-    platform: linux
-    project_dir: *project_dir
-    authentication: enabled
-    storageEngine: wiredTiger
-  run_on:
-      - "rhel70-perf-single"
-  depends_on: *_compile_amazon2
-  tasks: &standalonetasks
-    # TODO: doc that this is for bypass compile
-    - name: dsi_integ_test_run_command_simple
-    - name: industry_benchmarks
-    - name: ycsb_60GB
-    - name: crud_workloads
-    - name: genny_canaries
-    - name: cursor_manager
-    - name: mixed_workloads
-    - name: misc_workloads
-    - name: map_reduce_workloads
-    - name: smoke_test
-    - name: non_sharded_workloads
-    - name: bestbuy_agg
-    - name: bestbuy_agg_merge_different_db
-    - name: bestbuy_agg_merge_same_db
-    - name: bestbuy_agg_merge_wordcount
-    - name: bestbuy_query
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
 
 - name: linux-standalone-audit
   display_name: Linux Standalone Audit
