@@ -902,6 +902,8 @@ buildvariants:
     - name: genny_patch_tasks
     - name: genny_auto_tasks
     - name: dsi_integ_test_run_command_simple
+    - name: smoke_test
+    - name: smoke_test_ssl
     - name: industry_benchmarks
     - name: ycsb_60GB
     - name: crud_workloads
@@ -910,7 +912,6 @@ buildvariants:
     - name: mixed_workloads
     - name: misc_workloads
     - name: map_reduce_workloads
-    - name: smoke_test
     - name: non_sharded_workloads
     - name: bestbuy_agg
     - name: bestbuy_agg_merge_different_db
