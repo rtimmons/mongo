@@ -415,16 +415,15 @@ functions:
           signal-processing: ${signal-processing_rev}
     - command: shell.exec
       params:
-        working_dir: src
         script: |
           set -ev
           virtualenv ./venv
           source ./venv/bin/activate
           pip install argparse
 
-          cd mongo-perf
           sleep 5
           find . -type d
+          find . -name '*.py'
           ${perf_exec_wrapper} python benchrun.py \
               --shell ../bin/mongo                \
               -t ${threads}                       \
