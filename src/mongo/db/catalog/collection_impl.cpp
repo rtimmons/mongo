@@ -206,6 +206,12 @@ Status checkValidatorCanBeUsedOnNs(const BSONObj& validator,
     if (validator.isEmpty())
         return Status::OK();
 
+    if (nss.isTemporaryReshardingCollection()) {
+        // In resharding, if the user's original collection has a validator, then the temporary
+        // resharding collection is created with it as well.
+        return Status::OK();
+    }
+
     if (nss.isSystem() && !nss.isDropPendingNamespace()) {
         return {ErrorCodes::InvalidOptions,
                 str::stream() << "Document validators not allowed on system collection " << nss
@@ -383,6 +389,13 @@ Status CollectionImpl::checkValidation(OperationContext* opCtx, const BSONObj& d
 
     if (documentValidationDisabled(opCtx))
         return Status::OK();
+
+    if (ns().isTemporaryReshardingCollection()) {
+        // In resharding, the donor shard primary is responsible for performing document validation
+        // and the recipient should not perform validation on documents inserted into the temporary
+        // resharding collection.
+        return Status::OK();
+    }
 
     if (validatorMatchExpr->matchesBSON(document))
         return Status::OK();
@@ -639,11 +652,8 @@ Status CollectionImpl::_insertDocuments(OperationContext* opCtx,
         const auto& doc = it->doc;
 
         if (MONGO_unlikely(corruptDocumentOnInsert.shouldFail())) {
-            std::string copyBuffer(doc.objdata(), doc.objsize());
-            copyBuffer.data()[5] = char(0x90);
-
-            records.emplace_back(
-                Record{RecordId(), RecordData(copyBuffer.c_str(), copyBuffer.size())});
+            // Insert a truncated record that is half the expected size of the source document.
+            records.emplace_back(Record{RecordId(), RecordData(doc.objdata(), doc.objsize() / 2)});
             timestamps.emplace_back(it->oplogSlot.getTimestamp());
             continue;
         }
