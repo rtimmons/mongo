@@ -422,6 +422,9 @@ functions:
           source ./venv/bin/activate
           pip install argparse
 
+          pwd
+          find .
+
           sleep 5
           ${perf_exec_wrapper} python benchrun.py \
               --shell ../bin/mongo                \
