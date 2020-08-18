@@ -422,8 +422,6 @@ functions:
           source ./venv/bin/activate
           pip install argparse
 
-          find ${workdir} -name 'mongo'
-
           sleep 5
           ${perf_exec_wrapper} python benchrun.py \
               --shell ../bin/mongo                \
@@ -753,6 +751,7 @@ tasks:
 - name: singleThreaded
   depends_on: *_compile
   commands:
+    - func: f_start_server
     - func: f_run_perf_tests
       vars:
         includeFilter1: "single_threaded"
