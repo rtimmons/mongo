@@ -15,6 +15,9 @@ variables:
 
   ###
   # **Or**: Leave this section uncommented to bypass/skip compile.
+  # # This file ↓ came from a microbenchmarks waterfall run.
+  # # https://evergreen.mongodb.com/version/performance_996dcdc3d96346d71f012388eccc79c691619340
+  # # Artifacts eventually expire. If this fails, grab the compile artifacts url and update this.
   # _skip_remote_file: &_remote_file
   #     perf/performance_996dcdc3d96346d71f012388eccc79c691619340/996dcdc3d96346d71f012388eccc79c691619340/mongodb-performance_996dcdc3d96346d71f012388eccc79c691619340.tar.gz
   # _skip_compile: &_compile
