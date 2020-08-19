@@ -35,6 +35,9 @@ variables:
   #     - name: genny_generate_all_tasks
   #       variant: compile-amazon2
   # _skip_expansions: &_expansion_updates
+  #   # This is the normal (amazon2) "compile" artifact from https://evergreen.mongodb.com/version/sys_perf_4.4_78207ca380688c73b1a217f23d5b7c8803bef9cd
+  #   # It will not work for wtdevelop or rhel7 ("atlas-like") or wtdevelop patches. You can replace
+  #   # this url with a compile artifact from those variants if you wish to skip compile for such tasks.
   #   - key: mongodb_binary_archive
   #     value: https://dsi-donot-remove.s3-us-west-2.amazonaws.com/compile_artifacts/mongodb-sys_perf_4.4_78207ca380688c73b1a217f23d5b7c8803bef9cd.tar.gz
   ##
@@ -51,7 +54,6 @@ variables:
     - linkbench
     - linkbench2
     - workloads
-    - mongo-perf
 
 modules:
 ###
@@ -85,9 +87,6 @@ modules:
   prefix: linkbench2
   branch: master
   ref: 63207190657737b32eb0e81c5b81ad1b8bad0e5a
-- name: mongo-perf
-  repo: git@github.com:mongodb/mongo-perf.git
-  branch: master
 ###
 
 - name: enterprise
@@ -124,7 +123,6 @@ functions:
         script: |
           rm -rf ./*
           mkdir src
-    - command: manifest.load
     - command: git.get_project
       params:
         directory: *src_dir
