@@ -901,7 +901,6 @@ buildvariants:
     - name: genny_auto_tasks
     - name: dsi_integ_test_run_command_simple
     - name: smoke_test
-    - name: smoke_test_ssl
     - name: industry_benchmarks
     - name: ycsb_60GB
     - name: crud_workloads
