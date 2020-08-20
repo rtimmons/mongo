@@ -80,6 +80,7 @@ MONGO_FAIL_POINT_DEFINE(hangAfterSettingUpResumableIndexBuild);
 MONGO_FAIL_POINT_DEFINE(hangIndexBuildBeforeCommit);
 MONGO_FAIL_POINT_DEFINE(hangBeforeBuildingIndex);
 MONGO_FAIL_POINT_DEFINE(hangIndexBuildBeforeWaitingUntilMajorityOpTime);
+MONGO_FAIL_POINT_DEFINE(failSetUpResumeIndexBuild);
 
 namespace {
 
@@ -505,11 +506,15 @@ Status IndexBuildsCoordinator::_startIndexBuildForRecovery(OperationContext* opC
                     return s;
                 }
             } else {
+                // There are no concurrent users of the index during startup recovery, so it is OK
+                // to pass in a nullptr for the index 'ident', promising that the index is not in
+                // use.
                 catalog::removeIndex(opCtx,
                                      indexNames[i],
                                      collection->getCatalogId(),
                                      collection->uuid(),
-                                     collection->ns());
+                                     collection->ns(),
+                                     nullptr /* ident */);
             }
         }
 
@@ -554,6 +559,10 @@ Status IndexBuildsCoordinator::_setUpResumeIndexBuild(OperationContext* opCtx,
                                                       const UUID& buildUUID,
                                                       const ResumeIndexInfo& resumeInfo) {
     NamespaceStringOrUUID nssOrUuid{dbName, collectionUUID};
+
+    if (MONGO_unlikely(failSetUpResumeIndexBuild.shouldFail())) {
+        return {ErrorCodes::FailPointEnabled, "failSetUpResumeIndexBuild fail point is enabled"};
+    }
 
     Lock::DBLock dbLock(opCtx, dbName, MODE_IX);
     Lock::CollectionLock collLock(opCtx, nssOrUuid, MODE_X);

@@ -123,7 +123,7 @@ variables:
   exec_timeout_secs: 14400 # Time out the task if it runs for more than 4 hours.
   depends_on: []
   commands:
-  - func: "generate multiversion tasks"
+  - func: "generate implicit multiversion tasks"
 
 # Templates used by powercycle
 - &powercycle_remote_credentials
@@ -1596,6 +1596,10 @@ functions:
           set -o errexit
 
           ${activate_virtualenv}
+
+          # Multiversion exclusions can be used when selecting tests.
+          $python buildscripts/evergreen_gen_multiversion_tests.py generate-exclude-tags --task-path-suffix=/data/multiversion --output=multiversion_exclude_tags.yml
+
           PATH=$PATH:$HOME $python buildscripts/burn_in_tags.py --expansion-file expansions.yml
     - command: archive.targz_pack
       params:
@@ -2090,7 +2094,56 @@ functions:
           echo "const AWS_KMS_SECRET_ID = '${aws_kms_access_key_id}';" >> src/mongo/db/modules/enterprise/jstests/fle/lib/aws_secrets.js
           echo "const AWS_KMS_SECRET_KEY = '${aws_kms_secret_access_key}';" >> src/mongo/db/modules/enterprise/jstests/fle/lib/aws_secrets.js
 
-  "generate multiversion tasks":
+
+  "generate explicit multiversion tasks":
+    - command: manifest.load
+    - *git_get_project
+    - *set_task_expansion_macros
+    - *set_up_virtualenv
+    - *upload_pip_requirements
+    - *configure_evergreen_api_credentials
+    - *do_multiversion_setup
+    - command: expansions.write
+      params:
+        file: src/expansions.yml
+
+    - command: shell.exec
+      type: test
+      params:
+        working_dir: src
+        script: |
+          set -o errexit
+
+          ${activate_virtualenv}
+          $python buildscripts/evergreen_generate_resmoke_tasks.py --expansion-file expansions.yml --verbose
+          $python buildscripts/evergreen_gen_multiversion_tests.py generate-exclude-tags --task-path-suffix=${use_multiversion}
+
+    - command: archive.targz_pack
+      params:
+        target: generate_tasks_config.tgz
+        source_dir: src/generated_resmoke_config
+        include:
+          - "*"
+
+    - command: s3.put
+      params:
+        aws_key: ${aws_key}
+        aws_secret: ${aws_secret}
+        local_file: generate_tasks_config.tgz
+        remote_file: ${project}/${build_variant}/${revision}/generate_tasks/${task_name}-${build_id}.tgz
+        bucket: mciuploads
+        permissions: public-read
+        content_type: ${content_type|application/gzip}
+        display_name: Generated Task Config - Execution ${execution}
+        optional: true
+
+    - command: generate.tasks
+      params:
+        optional: true
+        files:
+          - src/generated_resmoke_config/*.json
+
+  "generate implicit multiversion tasks":
     - command: manifest.load
     - *git_get_project
     - *set_task_expansion_macros
@@ -3438,7 +3491,6 @@ tasks:
           install-dist-test-debug
           ${additional_compile_targets|}
         task_compile_flags: >-
-          --detect-odr-violations
           --separate-debug
           PREFIX=dist-test
 
@@ -3453,7 +3505,6 @@ tasks:
           archive-dist-test-debug
           ${additional_compile_targets|}
         task_compile_flags: >-
-          --detect-odr-violations
           --separate-debug
           PREFIX=dist-test
 
@@ -3530,7 +3581,6 @@ tasks:
         targets: install-dist-test
         compiling_for_test: true
         task_compile_flags: >-
-          --detect-odr-violations
           --separate-debug
 
 - name: compile_ninja
@@ -3559,7 +3609,6 @@ tasks:
         targets: install-all-meta
         compiling_for_test: true
         task_compile_flags: >-
-          --detect-odr-violations
           --separate-debug
     - command: s3.put
       params:
@@ -3580,8 +3629,6 @@ tasks:
     - func: "scons compile"
       vars:
         targets: generated-sources compiledb
-        task_compile_flags: >-
-          --detect-odr-violations
         compiling_for_test: true
     - command: shell.exec
       type: test
@@ -3611,7 +3658,6 @@ tasks:
       vars:
         targets: install-unittests install-unittests-debug
         task_compile_flags: >-
-          --detect-odr-violations
           --separate-debug
         compiling_for_test: true
     - func: "run diskstats"
@@ -3627,8 +3673,6 @@ tasks:
     - func: "scons compile"
       vars:
         targets: archive-fuzzertests
-        task_compile_flags: >-
-          --detect-odr-violations
         compiling_for_test: true
     - command: s3.put
       params:
@@ -3655,8 +3699,6 @@ tasks:
     - func: "scons compile"
       vars:
         targets: install-sdam-json-test
-        task_compile_flags: >-
-          --detect-odr-violations
         compiling_for_test: true
     - func: "run tests"
       vars:
@@ -3667,8 +3709,6 @@ tasks:
     - func: "scons compile"
       vars:
         targets: install-server-selection-json-test
-        task_compile_flags: >-
-          --detect-odr-violations
         compiling_for_test: true
     - func: "run tests"
       vars:
@@ -3683,7 +3723,6 @@ tasks:
       vars:
         targets: install-dbtest install-dbtest-debug
         task_compile_flags: >-
-          --detect-odr-violations
           --separate-debug
         compiling_for_test: true
     - func: "run diskstats"
@@ -3702,7 +3741,6 @@ tasks:
       vars:
         targets: archive-dbtest archive-dbtest-debug
         task_compile_flags: >-
-          --detect-odr-violations
           --separate-debug
         compiling_for_test: true
 
@@ -4174,9 +4212,7 @@ tasks:
         burn_in_args="$burn_in_args"
         # Evergreen executable is in $HOME.
         PATH=$PATH:$HOME $python buildscripts/burn_in_tests_multiversion.py --task_id=${task_id} --project=${project} $build_variant_opts --distro=${distro_id} --generate-tasks-file=burn_in_tests_multiversion_gen.json $burn_in_args --verbose
-        if [ -d generated_resmoke_config ]; then
-            $python buildscripts/evergreen_gen_multiversion_tests.py generate-exclude-tags --task-path-suffix=/data/multiversion
-        fi
+        $python buildscripts/evergreen_gen_multiversion_tests.py generate-exclude-tags --task-path-suffix=/data/multiversion
 
 
   - command: archive.targz_pack
@@ -4815,7 +4851,7 @@ tasks:
   name: jstestfuzz_replication_multiversion_gen
   tags: ["jstestfuzz_multiversion_gen"]
   commands:
-  - func: "generate multiversion tasks"
+  - func: "generate implicit multiversion tasks"
     vars:
       <<: *jstestfuzz_config_vars
       jstestfuzz_vars: --jsTestsDir ../jstests
@@ -4871,7 +4907,7 @@ tasks:
   name: jstestfuzz_sharded_multiversion_gen
   tags: [jstestfuzz_multiversion_gen]
   commands:
-  - func: "generate multiversion tasks"
+  - func: "generate implicit multiversion tasks"
     vars:
       <<: *jstestfuzz_config_vars
       jstestfuzz_vars: --jsTestsDir ../jstests
@@ -4925,7 +4961,7 @@ tasks:
 ## Tests that the multiversion test generation logic is not broken.
 - name: multiversion_sanity_check_gen
   commands:
-  - func: "generate multiversion tasks"
+  - func: "generate implicit multiversion tasks"
     vars:
       suite: replica_sets_jscore_passthrough
       resmoke_args: --storageEngine=wiredTiger --includeWithAnyTags=multiversion_sanity_check
@@ -4935,7 +4971,7 @@ tasks:
 - name: replica_sets_jscore_multiversion_passthrough_gen
   tags: ["multiversion_passthrough"]
   commands:
-  - func: "generate multiversion tasks"
+  - func: "generate implicit multiversion tasks"
     vars:
       suite: replica_sets_jscore_passthrough
       resmoke_args: --storageEngine=wiredTiger
@@ -5097,6 +5133,15 @@ tasks:
       resmoke_args: --suites=aggregation_sharded_collections_causally_consistent_passthrough --storageEngine=wiredTiger
 
 - <<: *task_template
+  name: aggregation_slot_based_execution
+  tags: ["aggregation", "sbe"]
+  commands:
+  - func: "do setup"
+  - func: "run tests"
+    vars:
+      resmoke_args: --suites=aggregation_sbe --storageEngine=wiredTiger
+
+- <<: *task_template
   name: audit
   commands:
   - func: "do setup"
@@ -5163,12 +5208,21 @@ tasks:
   name: change_streams_multiversion_gen
   tags: ["multiversion_passthrough"]
   commands:
-  - func: "generate multiversion tasks"
+  - func: "generate implicit multiversion tasks"
     vars:
       suite: change_streams
       resmoke_args: --storageEngine=wiredTiger
       task_path_suffix: /data/multiversion
       fallback_num_sub_suites: 4
+
+- <<: *task_template
+  name: change_streams_update_v2_oplog
+  tags: ["change_streams"]
+  commands:
+  - func: "do setup"
+  - func: "run tests"
+    vars:
+      resmoke_args: --suites=change_streams_update_v2_oplog --storageEngine=wiredTiger
 
 - <<: *task_template
   name: change_streams_mongos_sessions_passthrough
@@ -5220,7 +5274,7 @@ tasks:
   depends_on:
   - name: change_streams_multiversion_gen
   commands:
-  - func: "generate multiversion tasks"
+  - func: "generate implicit multiversion tasks"
     vars:
       suite: change_streams_sharded_collections_passthrough
       resmoke_args: --storageEngine=wiredTiger
@@ -5435,8 +5489,6 @@ tasks:
       targets: install-integration-tests
       compiling_for_test: true
       bypass_compile: false
-      task_compile_flags: >-
-        --detect-odr-violations
   - func: "attach scons logs"
   - func: "run tests"
     vars:
@@ -5457,8 +5509,6 @@ tasks:
       targets: install-integration-tests
       compiling_for_test: true
       bypass_compile: false
-      task_compile_flags: >-
-        --detect-odr-violations
   - func: "attach scons logs"
   - func: "run tests"
     vars:
@@ -5479,8 +5529,6 @@ tasks:
       targets: install-integration-tests
       compiling_for_test: true
       bypass_compile: false
-      task_compile_flags: >-
-        --detect-odr-violations
   - func: "attach scons logs"
   - func: "run tests"
     vars:
@@ -5501,8 +5549,6 @@ tasks:
       targets: install-integration-tests
       compiling_for_test: true
       bypass_compile: false
-      task_compile_flags: >-
-        --detect-odr-violations
   - func: "attach scons logs"
   - func: "run tests"
     vars:
@@ -6083,7 +6129,7 @@ tasks:
   name: sharded_collections_jscore_multiversion_passthrough_gen
   tags: ["multiversion_passthrough"]
   commands:
-  - func: "generate multiversion tasks"
+  - func: "generate implicit multiversion tasks"
     vars:
       suite: sharded_collections_jscore_passthrough
       resmoke_args: --storageEngine=wiredTiger
@@ -6105,7 +6151,7 @@ tasks:
   name: sharding_jscore_multiversion_passthrough_gen
   tags: ["multiversion_passthrough"]
   commands:
-  - func: "generate multiversion tasks"
+  - func: "generate implicit multiversion tasks"
     vars:
       suite: sharding_jscore_passthrough
       resmoke_args: --storageEngine=wiredTiger
@@ -6254,7 +6300,7 @@ tasks:
   name: concurrency_replication_multiversion_gen
   tags: [multiversion_passthrough]
   commands:
-  - func: "generate multiversion tasks"
+  - func: "generate implicit multiversion tasks"
     vars:
       suite: concurrency_replication
       resmoke_args: --storageEngine=wiredTiger
@@ -6346,7 +6392,7 @@ tasks:
   name: concurrency_sharded_replication_multiversion_gen
   tags: ["multiversion_passthrough"]
   commands:
-  - func: "generate multiversion tasks"
+  - func: "generate implicit multiversion tasks"
     vars:
       suite: concurrency_sharded_replication
       resmoke_args: --storageEngine=wiredTiger
@@ -6759,7 +6805,7 @@ tasks:
   - func: "generate randomized multiversion tasks"
     vars:
       use_large_distro: "true"
-      resmoke_args: --storageEngine=wiredTiger
+      resmoke_args: --storageEngine=wiredTiger --tagFile=generated_resmoke_config/multiversion_exclude_tags.yml
       fallback_num_sub_suites: 32
       use_multiversion: /data/multiversion
       suite: sharding_multiversion
@@ -6853,11 +6899,11 @@ tasks:
 - name: sharding_last_lts_mongos_and_mixed_shards_gen
   tags: ["sharding", "common", "multiversion"]
   commands:
-  - func: "generate resmoke tasks"
+  - func: "generate explicit multiversion tasks"
     vars:
       use_large_distro: "true"
       use_multiversion: /data/multiversion
-      resmoke_args: ""
+      resmoke_args: --tagFile=generated_resmoke_config/multiversion_exclude_tags.yml
       fallback_num_sub_suites: 24
 
 - <<: *task_template
@@ -7434,7 +7480,6 @@ tasks:
           archive-shell-debug
           ${additional_package_targets|}
         task_compile_flags: >-
-          --detect-odr-violations
           --separate-debug
           --legacy-tarball
     - command: shell.exec
@@ -12330,12 +12375,21 @@ buildvariants:
     # We need llvm-symbolizer in the PATH for ASAN for clang-3.7 or later.
     variant_path_suffix: /opt/mongodbtoolchain/v3/bin
     lang_environment: LANG=C
-    # If you add anything to san_options, make sure the appropriate changes are
-    # also made to SConstruct.
-    san_options: TSAN_OPTIONS="die_after_fork=0:suppressions=etc/tsan.suppressions:halt_on_error=1"
+    # If you add anything to san_options, make sure the appropriate
+    # changes are also made to SConstruct.
+    #
+    # TODO SERVER-49121: die_after_fork=0 is a temporary setting to
+    # allow tests to continue while we figure out why we're running
+    # afoul of it.
+    #
+    # TODO SERVER-48490: report_thread_leaks=0 suppresses reporting
+    # thread leaks, which we have because we don't do a clean shutdown
+    # of the ServiceContext.
+    #
+    san_options: TSAN_OPTIONS="halt_on_error=1:report_thread_leaks=0:die_after_fork=0:suppressions=etc/tsan.suppressions"
     # TODO: Remove some of the excluded tags when the ephemeralForTest storage engine is
     # further along in development: https://jira.mongodb.org/browse/SERVER-48325
-    test_flags: --storageEngine=ephemeralForTest --excludeWithAnyTags=requires_persistence,requires_journaling,uses_transactions,requires_wiredtiger,requires_snapshot_read
+    test_flags: --storageEngine=ephemeralForTest --majorityReadConcern=off --excludeWithAnyTags=requires_persistence,requires_journaling,uses_transactions,requires_wiredtiger,requires_snapshot_read,requires_majority_read_concern
     compile_flags: --variables-files=etc/scons/mongodbtoolchain_v3_clang.vars --dbg=on --opt=on --allocator=system --sanitize=thread --ssl --enable-free-mon=on --use-libunwind=off -j$(grep -c ^processor /proc/cpuinfo)
     # Avoid starting too many mongod's under TSAN build.
     resmoke_jobs_factor: 0.3
@@ -12362,7 +12416,7 @@ buildvariants:
   modules:
   - enterprise
   expansions:
-    compile_flags: MONGO_DISTMOD=ubuntu1804 -j$(grep -c ^processor /proc/cpuinfo) --dbg=on --opt=off --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars
+    compile_flags: MONGO_DISTMOD=ubuntu1804 -j$(grep -c ^processor /proc/cpuinfo) --dbg=on --opt=off --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars --detect-odr-violations
     scons_cache_scope: shared
   tasks:
   - name: compile_all_run_unittests_TG

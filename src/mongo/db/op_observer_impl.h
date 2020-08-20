@@ -215,4 +215,7 @@ private:
         const repl::OpTime& prepareOrCommitOptime) {}
 };
 
+extern const OperationContext::Decoration<boost::optional<OpObserverImpl::DocumentKey>>
+    documentKeyDecoration;
+
 }  // namespace mongo

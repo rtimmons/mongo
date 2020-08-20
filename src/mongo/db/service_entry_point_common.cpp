@@ -630,6 +630,9 @@ void invokeWithSessionCheckedOut(OperationContext* opCtx,
 
     tenant_migration_donor::checkIfCanReadOrBlock(opCtx, request.getDatabase());
 
+    // Use the API parameters that were stored when the transaction was initiated.
+    APIParameters::get(opCtx) = txnParticipant.getAPIParameters(opCtx);
+
     try {
         tenant_migration_donor::migrationConflictRetry(
             opCtx,
@@ -933,7 +936,7 @@ void execCommandDatabase(OperationContext* opCtx,
         (opCtx->getClient()->session()->getTags() & transport::Session::kInternalClient);
 
     try {
-        auto const apiParamsFromClient = initializeAPIParameters(request.body, command);
+        const auto apiParamsFromClient = initializeAPIParameters(request.body, command);
         Client* client = opCtx->getClient();
 
         {
@@ -943,10 +946,11 @@ void execCommandDatabase(OperationContext* opCtx,
         }
 
         auto& apiParams = APIParameters::get(opCtx);
-        auto& apiVersionMetrics = ApplicationApiVersionMetrics::get(opCtx->getServiceContext());
+        auto& apiVersionMetrics = APIVersionMetrics::get(opCtx->getServiceContext());
         const auto& clientMetadata = ClientMetadataIsMasterState::get(client).getClientMetadata();
         if (clientMetadata) {
-            apiVersionMetrics.update(clientMetadata.get(), apiParams);
+            auto appName = clientMetadata.get().getApplicationName().toString();
+            apiVersionMetrics.update(appName, apiParams);
         }
 
         sleepMillisAfterCommandExecutionBegins.execute([&](const BSONObj& data) {
@@ -1147,6 +1151,13 @@ void execCommandDatabase(OperationContext* opCtx,
         if (startTransaction) {
             opCtx->lockState()->setSharedLocksShouldTwoPhaseLock(true);
             opCtx->lockState()->setShouldConflictWithSecondaryBatchApplication(false);
+        }
+
+        if (opCtx->inMultiDocumentTransaction() && !startTransaction) {
+            uassert(4937700,
+                    "API parameters are only allowed in the first command of a multi-document "
+                    "transaction",
+                    !APIParameters::get(opCtx).getParamsPassed());
         }
 
         // Remember whether or not this operation is starting a transaction, in case something

@@ -392,6 +392,11 @@ def generate_exclude_yaml(task_path_suffix: str, output: str) -> None:
 
     enable_logging()
 
+    location, _ = os.path.split(os.path.abspath(output))
+    if not os.path.isdir(location):
+        LOGGER.info(f"Cannot write to {output}. Not generating tag file.")
+        return
+
     backports_required_latest = generate_resmoke.read_yaml(ETC_DIR, BACKPORTS_REQUIRED_FILE)
 
     # Get the state of the backports_required_for_multiversion_tests.yml file for the last-lts
@@ -415,6 +420,10 @@ def generate_exclude_yaml(task_path_suffix: str, output: str) -> None:
     else:
         always_exclude = backports_required_latest["all"] or []
         suites_last_lts = defaultdict(list, backports_required_last_lts)
+        for suite in suites_latest.keys():
+            for elem in suites_last_lts[suite] or []:
+                if elem in always_exclude:
+                    always_exclude.remove(elem)
 
     tags = _tags.TagsConfig()
 

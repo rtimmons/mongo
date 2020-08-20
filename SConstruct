@@ -113,6 +113,13 @@ add_option('ninja',
     help='Enable the build.ninja generator tool stable or canary version',
 )
 
+add_option('build-tools',
+    choices=['stable', 'next'],
+    default='stable',
+    type='choice',
+    help='Enable experimental build tools',
+)
+
 add_option('legacy-tarball',
     choices=['true', 'false'],
     default='false',
@@ -630,6 +637,10 @@ def variable_distsrc_converter(val):
         return val + "/"
     return val
 
+def fatal_error(env, msg, *args):
+    print(msg.format(*args))
+    Exit(1)
+
 # Apply the default variables files, and walk the provided
 # arguments. Interpret any falsy argument (like the empty string) as
 # resetting any prior state. This makes the argument
@@ -643,10 +654,9 @@ for variables_file in variables_files_args:
     else:
         variables_files = []
 for vf in variables_files:
-    if os.path.isfile(vf):
-        print("Using variable customization file {}".format(vf))
-    else:
-        print("IGNORING missing variable customization file {}".format(vf))
+    if not os.path.isfile(vf):
+        fatal_error(None, f"Specified variables file '{vf}' does not exist")
+    print(f"Using variable customization file {vf}")
 
 env_vars = Variables(
     files=variables_files,
@@ -1071,6 +1081,14 @@ envDict = dict(BUILD_ROOT=buildDir,
                LIBDEPS_TAG_EXPANSIONS=[],
                )
 
+
+# By default, we will get the normal SCons tool search. But if the
+# user has opted into the next gen tools, add our experimental tool
+# directory into the default toolpath, ahead of whatever is already in
+# there so it overrides it.
+if get_option('build-tools') == 'next' or get_option('ninja') == 'next':
+    SCons.Tool.DefaultToolpath.insert(0, os.path.abspath('site_scons/site_tools/next'))
+
 env = Environment(variables=env_vars, **envDict)
 
 # Only print the spinner if stdout is a tty
@@ -1098,10 +1116,6 @@ for var in ['CC', 'CXX']:
 
 env.AddMethod(mongo_platform.env_os_is_wrapper, 'TargetOSIs')
 env.AddMethod(mongo_platform.env_get_os_name_wrapper, 'GetTargetOSName')
-
-def fatal_error(env, msg, *args):
-    print(msg.format(*args))
-    Exit(1)
 
 def conf_error(env, msg, *args):
     print(msg.format(*args))
@@ -2949,14 +2963,19 @@ def doConfigure(myenv):
                 # the benefits of libunwind. Fixing this is:
                 env.FatalError("Cannot use libunwind with TSAN, please add --use-libunwind=off to your compile flags")
 
-            # If anything is changed, added, or removed in tsan_options, be sure
-            # to make the corresponding changes to the appropriate build
-            # variants in etc/evergreen.yml
-            # die_after_fork=0 is a temporary setting to allow tests to continue while we figure out why
-            # we're running afoul of it. If we remove it here, it also needs to be removed from the test
-            # variant in etc/evergreen.yml
-            # TODO: https://jira.mongodb.org/browse/SERVER-49121
-            tsan_options += "die_after_fork=0:suppressions=\"%s\" " % myenv.File("#etc/tsan.suppressions").abspath
+            # If anything is changed, added, or removed in
+            # tsan_options, be sure to make the corresponding changes
+            # to the appropriate build variants in etc/evergreen.yml
+            #
+            # TODO SERVER-49121: die_after_fork=0 is a temporary
+            # setting to allow tests to continue while we figure out
+            # why we're running afoul of it.
+            #
+            # TODO SERVER-48490: report_thread_leaks=0 suppresses
+            # reporting thread leaks, which we have because we don't
+            # do a clean shutdown of the ServiceContext.
+            #
+            tsan_options += "halt_on_error=1:report_thread_leaks=0:die_after_fork=0:suppressions=\"%s\" " % myenv.File("#etc/tsan.suppressions").abspath
             myenv['ENV']['TSAN_OPTIONS'] = tsan_options
             myenv.AppendUnique(CPPDEFINES=['THREAD_SANITIZER'])
 
@@ -3032,8 +3051,11 @@ def doConfigure(myenv):
         # probably built with GCC. That combination appears to cause
         # false positives for the ODR detector. See SERVER-28133 for
         # additional details.
-        if (get_option('detect-odr-violations') and
-                not (myenv.ToolchainIs('clang') and usingLibStdCxx)):
+        if has_option('detect-odr-violations'):
+            if myenv.ToolchainIs('clang') and usingLibStdCxx:
+                env.FatalError('The --detect-odr-violations flag does not work with clang and libstdc++')
+            if optBuild:
+                env.FatalError('The --detect-odr-violations flag is expected to only be reliable with --opt=off')
             AddToLINKFLAGSIfSupported(myenv, '-Wl,--detect-odr-violations')
 
         # Disallow an executable stack. Also, issue a warning if any files are found that would
@@ -3822,8 +3844,11 @@ if env.ToolchainIs("clang"):
 elif env.ToolchainIs("gcc"):
     env["ICECC_COMPILER_TYPE"] = "gcc"
 
-env.Tool('icecream')
-
+if get_option('build-tools') == 'next' or get_option('ninja') == 'next':
+    env['ICECREAM_TARGET_DIR'] = '$BUILD_ROOT/scons/icecream'
+    env.Tool('icecream', verbose=env.Verbose())
+else:
+    env.Tool('icecream')
 
 # Defaults for SCons provided flags. SetOption only sets the option to our value
 # if the user did not provide it. So for any flag here if it's explicitly passed
@@ -3877,11 +3902,8 @@ if get_option('ninja') != 'disabled':
         if env['ICECREAM_VERSION'] < parse_version("1.2"):
             env.FatalError("Use of ccache is mandatory with --ninja and icecream older than 1.2. You are running {}.".format(env['ICECREAM_VERSION']))
 
-    if get_option('ninja') == 'stable':
-        ninja_builder = Tool("ninja")
-        ninja_builder.generate(env)
-    else:
-        ninja_builder = Tool("ninja_next")
+    ninja_builder = Tool("ninja")
+    if get_option('build-tools') == 'next' or get_option('ninja') == 'next':
         env["NINJA_BUILDDIR"] = env.Dir("$BUILD_DIR/ninja")
         ninja_builder.generate(env)
 
@@ -3890,7 +3912,8 @@ if get_option('ninja') != 'disabled':
         })
         env['NINJA_COMPDB_EXPAND'] = ninjaConf.CheckNinjaCompdbExpand()
         ninjaConf.Finish()
-
+    else:
+        ninja_builder.generate(env)
 
     # idlc.py has the ability to print it's implicit dependencies
     # while generating, Ninja can consume these prints using the

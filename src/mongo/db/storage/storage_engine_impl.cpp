@@ -51,6 +51,7 @@
 #include "mongo/logv2/log.h"
 #include "mongo/stdx/unordered_map.h"
 #include "mongo/util/assert_util.h"
+#include "mongo/util/fail_point.h"
 #include "mongo/util/scopeguard.h"
 #include "mongo/util/str.h"
 
@@ -61,6 +62,8 @@ namespace mongo {
 
 using std::string;
 using std::vector;
+
+MONGO_FAIL_POINT_DEFINE(failToParseResumeIndexInfo);
 
 namespace {
 const std::string catalogInfo = "_mdb_catalog";
@@ -357,6 +360,11 @@ bool StorageEngineImpl::_handleInternalIdents(
         if (doc.hasField("phase")) {
             ResumeIndexInfo resumeInfo;
             try {
+                if (MONGO_unlikely(failToParseResumeIndexInfo.shouldFail())) {
+                    uasserted(ErrorCodes::FailPointEnabled,
+                              "failToParseResumeIndexInfo fail point is enabled");
+                }
+
                 resumeInfo = ResumeIndexInfo::parse(IDLParserErrorContext("ResumeIndexInfo"), doc);
             } catch (const DBException& e) {
                 LOGV2(4916300, "Failed to parse resumable index info", "error"_attr = e.toStatus());
@@ -428,7 +436,7 @@ StatusWith<StorageEngine::ReconcileResult> StorageEngineImpl::reconcileCatalogAn
     }
     std::set<std::string> internalIdentsToDrop;
 
-    auto dropPendingIdents = _dropPendingIdentReaper.getAllIdents();
+    auto dropPendingIdents = _dropPendingIdentReaper.getAllIdentNames();
 
     // Drop all idents in the storage engine that are not known to the catalog. This can happen in
     // the case of a collection or index creation being rolled back.
@@ -723,8 +731,6 @@ Status StorageEngineImpl::_dropCollectionsNoTimestamp(OperationContext* opCtx,
     Status firstError = Status::OK();
     WriteUnitOfWork untimestampedDropWuow(opCtx);
     for (auto& nss : toDrop) {
-        auto durableCatalog = getCatalog();
-        invariant(durableCatalog);
         auto coll = CollectionCatalog::get(opCtx).lookupCollectionByNamespace(opCtx, nss);
 
         // No need to remove the indexes from the IndexCatalog because eliminating the Collection
@@ -737,11 +743,12 @@ Status StorageEngineImpl::_dropCollectionsNoTimestamp(OperationContext* opCtx,
                                  ice->descriptor()->indexName(),
                                  coll->getCatalogId(),
                                  coll->uuid(),
-                                 coll->ns());
+                                 coll->ns(),
+                                 ice->accessMethod()->getSharedIdent());
         }
 
         Status result = catalog::dropCollection(
-            opCtx, coll->ns(), coll->getCatalogId(), coll->getRecordStore()->getIdent());
+            opCtx, coll->ns(), coll->getCatalogId(), coll->getSharedIdent());
         if (!result.isOK() && firstError.isOK()) {
             firstError = result;
         }
@@ -999,7 +1006,7 @@ void StorageEngineImpl::_dumpCatalog(OperationContext* opCtx) {
 
 void StorageEngineImpl::addDropPendingIdent(const Timestamp& dropTimestamp,
                                             const NamespaceString& nss,
-                                            StringData ident) {
+                                            std::shared_ptr<Ident> ident) {
     _dropPendingIdentReaper.addDropPendingIdent(dropTimestamp, nss, ident);
 }
 

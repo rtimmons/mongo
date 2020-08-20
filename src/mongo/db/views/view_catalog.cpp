@@ -41,7 +41,6 @@
 #include "mongo/bson/util/builder.h"
 #include "mongo/db/catalog/collection_catalog.h"
 #include "mongo/db/catalog/database.h"
-#include "mongo/db/commands/feature_compatibility_version_command_parser.h"
 #include "mongo/db/namespace_string.h"
 #include "mongo/db/operation_context.h"
 #include "mongo/db/pipeline/aggregation_request.h"
@@ -94,11 +93,7 @@ Status ViewCatalog::reload(OperationContext* opCtx, ViewCatalogLookupBehavior lo
 Status ViewCatalog::_reload(WithLock,
                             OperationContext* opCtx,
                             ViewCatalogLookupBehavior lookupBehavior) {
-    LOGV2_DEBUG(22546,
-                1,
-                "Reloading view catalog for database {db}",
-                "Reloading view catalog for database",
-                "db"_attr = _durable->getName());
+    LOGV2_DEBUG(22546, 1, "Reloading view catalog for database", "db"_attr = _durable->getName());
 
     _viewMap.clear();
     _valid = false;
@@ -142,7 +137,6 @@ Status ViewCatalog::_reload(WithLock,
     } catch (const DBException& ex) {
         auto status = ex.toStatus();
         LOGV2(22547,
-              "Could not load view catalog for database {db}: {error}",
               "Could not load view catalog for database",
               "db"_attr = _durable->getName(),
               "error"_attr = status);

@@ -1,5 +1,5 @@
 /**
- *    Copyright (C) 2018-present MongoDB, Inc.
+ *    Copyright (C) 2020-present MongoDB, Inc.
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the Server Side Public License, version 1,
@@ -29,4 +29,23 @@
 
 #pragma once
 
-#include "mongo/logger/ramlog.h"
+#include <string>
+
+namespace mongo {
+
+/**
+ * Stores the storage catalog persisted identifier for a collection or index.
+ */
+class Ident {
+public:
+    Ident(StringData ident) : _ident(ident.rawData(), ident.size()) {}
+
+    const std::string& getIdent() const {
+        return _ident;
+    }
+
+protected:
+    const std::string _ident;
+};
+
+}  // namespace mongo

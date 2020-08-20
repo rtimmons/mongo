@@ -27,39 +27,22 @@
  *    it in the license file.
  */
 
-#include "mongo/logger/logger.h"
+#pragma once
 
-#include "mongo/base/init.h"
-#include "mongo/base/status.h"
-#include "mongo/platform/compiler.h"
+#include <cstdint>
+
+#include "mongo/base/string_data.h"
+#include "mongo/bson/bsontypes.h"
 
 namespace mongo {
-namespace logger {
-
-static LogManager* theGlobalLogManager;  // NULL at program start, before even static
-                                         // initialization.
-
-static RotatableFileManager theGlobalRotatableFileManager;
-
-LogManager* globalLogManager() {
-    if (MONGO_unlikely(!theGlobalLogManager)) {
-        theGlobalLogManager = new LogManager;
-    }
-    return theGlobalLogManager;
-}
-
-RotatableFileManager* globalRotatableFileManager() {
-    return &theGlobalRotatableFileManager;
-}
+class BSONObj;
+class Status;
 
 /**
- * Just in case no static initializer called globalLogManager, make sure that the global log
- * manager is instantiated while we're still in a single-threaded context.
+ * Older version of validateBSON to be used as "oracle" for the fuzzer to check the
+ * current version against.
  */
-MONGO_INITIALIZER_GENERAL(GlobalLogManager, ("ValidateLocale"), ("default"))(InitializerContext*) {
-    globalLogManager();
-    return Status::OK();
-}
-
-}  // namespace logger
+namespace fuzzerOnly {
+Status validateBSON(const char* buf, uint64_t maxLength);
+}  // namespace fuzzerOnly
 }  // namespace mongo
