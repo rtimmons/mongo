@@ -5,7 +5,7 @@ variables:
   ###
   # Leave this section uncommented to enable compile.
   _real_remote_file: &_remote_file
-      ${project}/${version_id}/${revision}/mongodb${compile-variant|}-${version_id}.tar.gz
+      ${project_dir}/${version_id}/${revision}/${platform}/mongodb${compile-variant|}-${version_id}.tar.gz
   _real_compile: &_compile
     - variant: linux-wt-standalone
       name: compile
