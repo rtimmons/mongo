@@ -424,7 +424,7 @@ functions:
           chmod 600 "${workdir}/key"
           # We provide the key file for mongod here, rather than in mongod_flags next to the --auth
           # option, because the path to key file requires expanding the {workdir} variable.
-          ${mongod_exec_wrapper} ./bin/mongod --dbpath ./dbdata ${mongod_flags} --keyFile "${workdir}/key" --logpath "${workdir}/mongod.log"
+          ${mongod_exec_wrapper} ./mongo/bin/mongod --dbpath ./dbdata ${mongod_flags} --keyFile "${workdir}/key" --logpath "${workdir}/mongod.log"
     - command: shell.exec
       params:
         working_dir: src
@@ -440,7 +440,7 @@ functions:
           #       As a result, writeConcernMajorityJournalDefault can be set to false. If this becomes configurable later
           #       then the correct value should be passed to rs.initiate or getCmdLineOpts needs to interrogated (but
           #       only after db.createUser).
-          ./bin/mongo --eval "if(db.isMaster().isreplicaset){\
+          ./mongo/bin/mongo --eval "if(db.isMaster().isreplicaset){\
                              rs.initiate({_id: 'test', version: 1, members: [ { _id: 0, host : 'localhost:27017' }], writeConcernMajorityJournalDefault:false});\
                              assert.soon(function(){return db.isMaster().ismaster}, 'no primary');\
                           }"
@@ -448,12 +448,12 @@ functions:
           # benchRun() authenticates against the admin db, with a user that must has admin access.
           # Note: This is possibly a legacy requirement from times when it would call serverStatus.
           # Btw, when mongod is started without --auth, these should be harmless no-ops
-          ./bin/mongo --eval "db.createUser({user: 'admin', pwd: 'password', roles:\
+          ./mongo/bin/mongo --eval "db.createUser({user: 'admin', pwd: 'password', roles:\
                          [ { role: 'root', db: 'admin' } ] })"\
                            admin
 
           # print the replset config unless this is a standalone
-          ./bin/mongo --eval "if( db.isMaster().hosts ) { printjson(rs.config()); }" --username admin --password password admin
+          ./mongo/bin/mongo --eval "if( db.isMaster().hosts ) { printjson(rs.config()); }" --username admin --password password admin
           echo "MONGOD STARTED."
 
   # This gets replaced by subset of f_run_dsi_workload's invocation of analysis
@@ -557,7 +557,7 @@ functions:
 
           sleep 5
           ${perf_exec_wrapper} python benchrun.py \
-              --shell ../bin/mongo                \
+              --shell ../mongo/bin/mongo          \
               -t ${threads}                       \
               --trialCount 5                      \
               -f testcases/*.js                   \
@@ -571,7 +571,7 @@ functions:
               --password password
 
           echo "Oplog size at end of tests..."
-          ../bin/mongo              \
+          ../mongo/bin/mongo        \
               --username admin      \
               --password password   \
               --eval "db.getSiblingDB('local').oplog.rs.totalSize()/1024/1024" \
