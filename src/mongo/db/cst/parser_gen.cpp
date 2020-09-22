@@ -39,7 +39,7 @@
 
 
 // Unqualified %code blocks.
-#line 82 "grammar.yy"
+#line 82 "src/mongo/db/cst/grammar.yy"
 
 #include <boost/algorithm/string.hpp>
 #include <iterator>
@@ -65,7 +65,7 @@ void ParserGen::error(const ParserGen::location_type& loc, const std::string& ms
 // mongo.
 #define YYLLOC_DEFAULT(newPos, rhsPositions, nRhs)
 
-#line 73 "parser_gen.cpp"
+#line 73 "src/mongo/db/cst/parser_gen.cpp"
 
 
 #ifndef YY_
@@ -156,9 +156,9 @@ void ParserGen::error(const ParserGen::location_type& loc, const std::string& ms
 #define YYERROR goto yyerrorlab
 #define YYRECOVERING() (!!yyerrstatus_)
 
-#line 57 "grammar.yy"
+#line 57 "src/mongo/db/cst/grammar.yy"
 namespace mongo {
-#line 166 "parser_gen.cpp"
+#line 166 "src/mongo/db/cst/parser_gen.cpp"
 
 /// Build a parser object.
 ParserGen::ParserGen(BSONLexer& lexer_yyarg, CNode* cst_yyarg)
@@ -209,265 +209,285 @@ ParserGen::stack_symbol_type::stack_symbol_type() {}
 ParserGen::stack_symbol_type::stack_symbol_type(YY_RVREF(stack_symbol_type) that)
     : super_type(YY_MOVE(that.state), YY_MOVE(that.location)) {
     switch (that.kind()) {
-        case 134:  // "BinData"
+        case 144:  // "BinData"
             value.YY_MOVE_OR_COPY<BSONBinData>(YY_MOVE(that.value));
             break;
 
-        case 141:  // "Code"
+        case 151:  // "Code"
             value.YY_MOVE_OR_COPY<BSONCode>(YY_MOVE(that.value));
             break;
 
-        case 143:  // "CodeWScope"
+        case 153:  // "CodeWScope"
             value.YY_MOVE_OR_COPY<BSONCodeWScope>(YY_MOVE(that.value));
             break;
 
-        case 140:  // "dbPointer"
+        case 150:  // "dbPointer"
             value.YY_MOVE_OR_COPY<BSONDBRef>(YY_MOVE(that.value));
             break;
 
-        case 139:  // "regex"
+        case 149:  // "regex"
             value.YY_MOVE_OR_COPY<BSONRegEx>(YY_MOVE(that.value));
             break;
 
-        case 142:  // "Symbol"
+        case 152:  // "Symbol"
             value.YY_MOVE_OR_COPY<BSONSymbol>(YY_MOVE(that.value));
             break;
 
-        case 172:  // dbPointer
-        case 173:  // javascript
-        case 174:  // symbol
-        case 175:  // javascriptWScope
-        case 176:  // int
-        case 177:  // timestamp
-        case 178:  // long
-        case 179:  // double
-        case 180:  // decimal
-        case 181:  // minKey
-        case 182:  // maxKey
-        case 183:  // value
-        case 184:  // string
-        case 185:  // aggregationFieldPath
-        case 186:  // binary
-        case 187:  // undefined
-        case 188:  // objectId
-        case 189:  // bool
-        case 190:  // date
-        case 191:  // null
-        case 192:  // regex
-        case 193:  // simpleValue
-        case 194:  // compoundValue
-        case 195:  // valueArray
-        case 196:  // valueObject
-        case 197:  // valueFields
-        case 198:  // variable
-        case 199:  // pipeline
-        case 200:  // stageList
-        case 201:  // stage
-        case 202:  // inhibitOptimization
-        case 203:  // unionWith
-        case 204:  // skip
-        case 205:  // limit
-        case 206:  // project
-        case 207:  // sample
-        case 208:  // projectFields
-        case 209:  // projectionObjectFields
-        case 210:  // topLevelProjection
-        case 211:  // projection
-        case 212:  // projectionObject
-        case 213:  // num
-        case 214:  // expression
-        case 215:  // compoundNonObjectExpression
-        case 216:  // exprFixedTwoArg
-        case 217:  // exprFixedThreeArg
-        case 218:  // arrayManipulation
-        case 219:  // slice
-        case 220:  // expressionArray
-        case 221:  // expressionObject
-        case 222:  // expressionFields
-        case 223:  // maths
-        case 224:  // meta
-        case 225:  // add
-        case 226:  // atan2
-        case 227:  // boolExprs
-        case 228:  // and
-        case 229:  // or
-        case 230:  // not
-        case 231:  // literalEscapes
-        case 232:  // const
-        case 233:  // literal
-        case 234:  // stringExps
-        case 235:  // concat
-        case 236:  // dateFromString
-        case 237:  // dateToString
-        case 238:  // indexOfBytes
-        case 239:  // indexOfCP
-        case 240:  // ltrim
-        case 241:  // regexFind
-        case 242:  // regexFindAll
-        case 243:  // regexMatch
-        case 244:  // regexArgs
-        case 245:  // replaceOne
-        case 246:  // replaceAll
-        case 247:  // rtrim
-        case 248:  // split
-        case 249:  // strLenBytes
-        case 250:  // strLenCP
-        case 251:  // strcasecmp
-        case 252:  // substr
-        case 253:  // substrBytes
-        case 254:  // substrCP
-        case 255:  // toLower
-        case 256:  // toUpper
-        case 257:  // trim
-        case 258:  // compExprs
-        case 259:  // cmp
-        case 260:  // eq
-        case 261:  // gt
-        case 262:  // gte
-        case 263:  // lt
-        case 264:  // lte
-        case 265:  // ne
-        case 266:  // typeExpression
-        case 267:  // convert
-        case 268:  // toBool
-        case 269:  // toDate
-        case 270:  // toDecimal
-        case 271:  // toDouble
-        case 272:  // toInt
-        case 273:  // toLong
-        case 274:  // toObjectId
-        case 275:  // toString
-        case 276:  // type
-        case 277:  // abs
-        case 278:  // ceil
-        case 279:  // divide
-        case 280:  // exponent
-        case 281:  // floor
-        case 282:  // ln
-        case 283:  // log
-        case 284:  // logten
-        case 285:  // mod
-        case 286:  // multiply
-        case 287:  // pow
-        case 288:  // round
-        case 289:  // sqrt
-        case 290:  // subtract
-        case 291:  // trunc
-        case 301:  // setExpression
-        case 302:  // allElementsTrue
-        case 303:  // anyElementTrue
-        case 304:  // setDifference
-        case 305:  // setEquals
-        case 306:  // setIntersection
-        case 307:  // setIsSubset
-        case 308:  // setUnion
-        case 309:  // match
-        case 310:  // predicates
-        case 311:  // compoundMatchExprs
-        case 312:  // predValue
-        case 313:  // additionalExprs
-        case 319:  // sortSpecs
-        case 320:  // specList
-        case 321:  // metaSort
-        case 322:  // oneOrNegOne
-        case 323:  // metaSortKeyword
+        case 182:  // dbPointer
+        case 183:  // javascript
+        case 184:  // symbol
+        case 185:  // javascriptWScope
+        case 186:  // int
+        case 187:  // timestamp
+        case 188:  // long
+        case 189:  // double
+        case 190:  // decimal
+        case 191:  // minKey
+        case 192:  // maxKey
+        case 193:  // value
+        case 194:  // string
+        case 195:  // aggregationFieldPath
+        case 196:  // binary
+        case 197:  // undefined
+        case 198:  // objectId
+        case 199:  // bool
+        case 200:  // date
+        case 201:  // null
+        case 202:  // regex
+        case 203:  // simpleValue
+        case 204:  // compoundValue
+        case 205:  // valueArray
+        case 206:  // valueObject
+        case 207:  // valueFields
+        case 208:  // variable
+        case 209:  // pipeline
+        case 210:  // stageList
+        case 211:  // stage
+        case 212:  // inhibitOptimization
+        case 213:  // unionWith
+        case 214:  // skip
+        case 215:  // limit
+        case 216:  // project
+        case 217:  // sample
+        case 218:  // projectFields
+        case 219:  // projectionObjectFields
+        case 220:  // topLevelProjection
+        case 221:  // projection
+        case 222:  // projectionObject
+        case 223:  // num
+        case 224:  // expression
+        case 225:  // compoundNonObjectExpression
+        case 226:  // exprFixedTwoArg
+        case 227:  // exprFixedThreeArg
+        case 228:  // arrayManipulation
+        case 229:  // slice
+        case 230:  // expressionArray
+        case 231:  // expressionObject
+        case 232:  // expressionFields
+        case 233:  // maths
+        case 234:  // meta
+        case 235:  // add
+        case 236:  // boolExprs
+        case 237:  // and
+        case 238:  // or
+        case 239:  // not
+        case 240:  // literalEscapes
+        case 241:  // const
+        case 242:  // literal
+        case 243:  // stringExps
+        case 244:  // concat
+        case 245:  // dateFromString
+        case 246:  // dateToString
+        case 247:  // indexOfBytes
+        case 248:  // indexOfCP
+        case 249:  // ltrim
+        case 250:  // regexFind
+        case 251:  // regexFindAll
+        case 252:  // regexMatch
+        case 253:  // regexArgs
+        case 254:  // replaceOne
+        case 255:  // replaceAll
+        case 256:  // rtrim
+        case 257:  // split
+        case 258:  // strLenBytes
+        case 259:  // strLenCP
+        case 260:  // strcasecmp
+        case 261:  // substr
+        case 262:  // substrBytes
+        case 263:  // substrCP
+        case 264:  // toLower
+        case 265:  // toUpper
+        case 266:  // trim
+        case 267:  // compExprs
+        case 268:  // cmp
+        case 269:  // eq
+        case 270:  // gt
+        case 271:  // gte
+        case 272:  // lt
+        case 273:  // lte
+        case 274:  // ne
+        case 275:  // typeExpression
+        case 276:  // convert
+        case 277:  // toBool
+        case 278:  // toDate
+        case 279:  // toDecimal
+        case 280:  // toDouble
+        case 281:  // toInt
+        case 282:  // toLong
+        case 283:  // toObjectId
+        case 284:  // toString
+        case 285:  // type
+        case 286:  // abs
+        case 287:  // ceil
+        case 288:  // divide
+        case 289:  // exponent
+        case 290:  // floor
+        case 291:  // ln
+        case 292:  // log
+        case 293:  // logten
+        case 294:  // mod
+        case 295:  // multiply
+        case 296:  // pow
+        case 297:  // round
+        case 298:  // sqrt
+        case 299:  // subtract
+        case 300:  // trunc
+        case 310:  // setExpression
+        case 311:  // allElementsTrue
+        case 312:  // anyElementTrue
+        case 313:  // setDifference
+        case 314:  // setEquals
+        case 315:  // setIntersection
+        case 316:  // setIsSubset
+        case 317:  // setUnion
+        case 318:  // trig
+        case 319:  // sin
+        case 320:  // cos
+        case 321:  // tan
+        case 322:  // sinh
+        case 323:  // cosh
+        case 324:  // tanh
+        case 325:  // asin
+        case 326:  // acos
+        case 327:  // atan
+        case 328:  // asinh
+        case 329:  // acosh
+        case 330:  // atanh
+        case 331:  // atan2
+        case 332:  // degreesToRadians
+        case 333:  // radiansToDegrees
+        case 334:  // nonArrayExpression
+        case 335:  // nonArrayCompoundExpression
+        case 336:  // nonArrayNonObjCompoundExpression
+        case 337:  // expressionSingletonArray
+        case 338:  // singleArgExpression
+        case 339:  // match
+        case 340:  // predicates
+        case 341:  // compoundMatchExprs
+        case 342:  // predValue
+        case 343:  // additionalExprs
+        case 349:  // sortSpecs
+        case 350:  // specList
+        case 351:  // metaSort
+        case 352:  // oneOrNegOne
+        case 353:  // metaSortKeyword
             value.YY_MOVE_OR_COPY<CNode>(YY_MOVE(that.value));
             break;
 
-        case 155:  // aggregationProjectionFieldname
-        case 156:  // projectionFieldname
-        case 157:  // expressionFieldname
-        case 158:  // stageAsUserFieldname
-        case 159:  // argAsUserFieldname
-        case 160:  // argAsProjectionPath
-        case 161:  // aggExprAsUserFieldname
-        case 162:  // invariableUserFieldname
-        case 163:  // idAsUserFieldname
-        case 164:  // idAsProjectionPath
-        case 165:  // valueFieldname
-        case 166:  // predFieldname
-        case 318:  // logicalExprField
+        case 165:  // aggregationProjectionFieldname
+        case 166:  // projectionFieldname
+        case 167:  // expressionFieldname
+        case 168:  // stageAsUserFieldname
+        case 169:  // argAsUserFieldname
+        case 170:  // argAsProjectionPath
+        case 171:  // aggExprAsUserFieldname
+        case 172:  // invariableUserFieldname
+        case 173:  // idAsUserFieldname
+        case 174:  // idAsProjectionPath
+        case 175:  // valueFieldname
+        case 176:  // predFieldname
+        case 348:  // logicalExprField
             value.YY_MOVE_OR_COPY<CNode::Fieldname>(YY_MOVE(that.value));
             break;
 
-        case 137:  // "Date"
+        case 147:  // "Date"
             value.YY_MOVE_OR_COPY<Date_t>(YY_MOVE(that.value));
             break;
 
-        case 147:  // "arbitrary decimal"
+        case 157:  // "arbitrary decimal"
             value.YY_MOVE_OR_COPY<Decimal128>(YY_MOVE(that.value));
             break;
 
-        case 136:  // "ObjectID"
+        case 146:  // "ObjectID"
             value.YY_MOVE_OR_COPY<OID>(YY_MOVE(that.value));
             break;
 
-        case 148:  // "Timestamp"
+        case 158:  // "Timestamp"
             value.YY_MOVE_OR_COPY<Timestamp>(YY_MOVE(that.value));
             break;
 
-        case 150:  // "maxKey"
+        case 160:  // "maxKey"
             value.YY_MOVE_OR_COPY<UserMaxKey>(YY_MOVE(that.value));
             break;
 
-        case 149:  // "minKey"
+        case 159:  // "minKey"
             value.YY_MOVE_OR_COPY<UserMinKey>(YY_MOVE(that.value));
             break;
 
-        case 138:  // "null"
+        case 148:  // "null"
             value.YY_MOVE_OR_COPY<UserNull>(YY_MOVE(that.value));
             break;
 
-        case 135:  // "undefined"
+        case 145:  // "undefined"
             value.YY_MOVE_OR_COPY<UserUndefined>(YY_MOVE(that.value));
             break;
 
-        case 146:  // "arbitrary double"
+        case 156:  // "arbitrary double"
             value.YY_MOVE_OR_COPY<double>(YY_MOVE(that.value));
             break;
 
-        case 144:  // "arbitrary integer"
+        case 154:  // "arbitrary integer"
             value.YY_MOVE_OR_COPY<int>(YY_MOVE(that.value));
             break;
 
-        case 145:  // "arbitrary long"
+        case 155:  // "arbitrary long"
             value.YY_MOVE_OR_COPY<long long>(YY_MOVE(that.value));
             break;
 
-        case 167:  // projectField
-        case 168:  // projectionObjectField
-        case 169:  // expressionField
-        case 170:  // valueField
-        case 292:  // onErrorArg
-        case 293:  // onNullArg
-        case 294:  // formatArg
-        case 295:  // timezoneArg
-        case 296:  // charsArg
-        case 297:  // optionsArg
-        case 314:  // predicate
-        case 315:  // logicalExpr
-        case 316:  // operatorExpression
-        case 317:  // notExpr
-        case 324:  // sortSpec
+        case 177:  // projectField
+        case 178:  // projectionObjectField
+        case 179:  // expressionField
+        case 180:  // valueField
+        case 301:  // onErrorArg
+        case 302:  // onNullArg
+        case 303:  // formatArg
+        case 304:  // timezoneArg
+        case 305:  // charsArg
+        case 306:  // optionsArg
+        case 344:  // predicate
+        case 345:  // logicalExpr
+        case 346:  // operatorExpression
+        case 347:  // notExpr
+        case 354:  // sortSpec
             value.YY_MOVE_OR_COPY<std::pair<CNode::Fieldname, CNode>>(YY_MOVE(that.value));
             break;
 
-        case 128:  // "fieldname"
-        case 130:  // "$-prefixed fieldname"
-        case 131:  // "string"
-        case 132:  // "$-prefixed string"
-        case 133:  // "$$-prefixed string"
-        case 171:  // arg
+        case 138:  // "fieldname"
+        case 140:  // "$-prefixed fieldname"
+        case 141:  // "string"
+        case 142:  // "$-prefixed string"
+        case 143:  // "$$-prefixed string"
+        case 181:  // arg
             value.YY_MOVE_OR_COPY<std::string>(YY_MOVE(that.value));
             break;
 
-        case 298:  // expressions
-        case 299:  // values
-        case 300:  // exprZeroToTwo
+        case 307:  // expressions
+        case 308:  // values
+        case 309:  // exprZeroToTwo
             value.YY_MOVE_OR_COPY<std::vector<CNode>>(YY_MOVE(that.value));
             break;
 
-        case 129:  // "fieldname containing dotted path"
+        case 139:  // "fieldname containing dotted path"
             value.YY_MOVE_OR_COPY<std::vector<std::string>>(YY_MOVE(that.value));
             break;
 
@@ -484,265 +504,285 @@ ParserGen::stack_symbol_type::stack_symbol_type(YY_RVREF(stack_symbol_type) that
 ParserGen::stack_symbol_type::stack_symbol_type(state_type s, YY_MOVE_REF(symbol_type) that)
     : super_type(s, YY_MOVE(that.location)) {
     switch (that.kind()) {
-        case 134:  // "BinData"
+        case 144:  // "BinData"
             value.move<BSONBinData>(YY_MOVE(that.value));
             break;
 
-        case 141:  // "Code"
+        case 151:  // "Code"
             value.move<BSONCode>(YY_MOVE(that.value));
             break;
 
-        case 143:  // "CodeWScope"
+        case 153:  // "CodeWScope"
             value.move<BSONCodeWScope>(YY_MOVE(that.value));
             break;
 
-        case 140:  // "dbPointer"
+        case 150:  // "dbPointer"
             value.move<BSONDBRef>(YY_MOVE(that.value));
             break;
 
-        case 139:  // "regex"
+        case 149:  // "regex"
             value.move<BSONRegEx>(YY_MOVE(that.value));
             break;
 
-        case 142:  // "Symbol"
+        case 152:  // "Symbol"
             value.move<BSONSymbol>(YY_MOVE(that.value));
             break;
 
-        case 172:  // dbPointer
-        case 173:  // javascript
-        case 174:  // symbol
-        case 175:  // javascriptWScope
-        case 176:  // int
-        case 177:  // timestamp
-        case 178:  // long
-        case 179:  // double
-        case 180:  // decimal
-        case 181:  // minKey
-        case 182:  // maxKey
-        case 183:  // value
-        case 184:  // string
-        case 185:  // aggregationFieldPath
-        case 186:  // binary
-        case 187:  // undefined
-        case 188:  // objectId
-        case 189:  // bool
-        case 190:  // date
-        case 191:  // null
-        case 192:  // regex
-        case 193:  // simpleValue
-        case 194:  // compoundValue
-        case 195:  // valueArray
-        case 196:  // valueObject
-        case 197:  // valueFields
-        case 198:  // variable
-        case 199:  // pipeline
-        case 200:  // stageList
-        case 201:  // stage
-        case 202:  // inhibitOptimization
-        case 203:  // unionWith
-        case 204:  // skip
-        case 205:  // limit
-        case 206:  // project
-        case 207:  // sample
-        case 208:  // projectFields
-        case 209:  // projectionObjectFields
-        case 210:  // topLevelProjection
-        case 211:  // projection
-        case 212:  // projectionObject
-        case 213:  // num
-        case 214:  // expression
-        case 215:  // compoundNonObjectExpression
-        case 216:  // exprFixedTwoArg
-        case 217:  // exprFixedThreeArg
-        case 218:  // arrayManipulation
-        case 219:  // slice
-        case 220:  // expressionArray
-        case 221:  // expressionObject
-        case 222:  // expressionFields
-        case 223:  // maths
-        case 224:  // meta
-        case 225:  // add
-        case 226:  // atan2
-        case 227:  // boolExprs
-        case 228:  // and
-        case 229:  // or
-        case 230:  // not
-        case 231:  // literalEscapes
-        case 232:  // const
-        case 233:  // literal
-        case 234:  // stringExps
-        case 235:  // concat
-        case 236:  // dateFromString
-        case 237:  // dateToString
-        case 238:  // indexOfBytes
-        case 239:  // indexOfCP
-        case 240:  // ltrim
-        case 241:  // regexFind
-        case 242:  // regexFindAll
-        case 243:  // regexMatch
-        case 244:  // regexArgs
-        case 245:  // replaceOne
-        case 246:  // replaceAll
-        case 247:  // rtrim
-        case 248:  // split
-        case 249:  // strLenBytes
-        case 250:  // strLenCP
-        case 251:  // strcasecmp
-        case 252:  // substr
-        case 253:  // substrBytes
-        case 254:  // substrCP
-        case 255:  // toLower
-        case 256:  // toUpper
-        case 257:  // trim
-        case 258:  // compExprs
-        case 259:  // cmp
-        case 260:  // eq
-        case 261:  // gt
-        case 262:  // gte
-        case 263:  // lt
-        case 264:  // lte
-        case 265:  // ne
-        case 266:  // typeExpression
-        case 267:  // convert
-        case 268:  // toBool
-        case 269:  // toDate
-        case 270:  // toDecimal
-        case 271:  // toDouble
-        case 272:  // toInt
-        case 273:  // toLong
-        case 274:  // toObjectId
-        case 275:  // toString
-        case 276:  // type
-        case 277:  // abs
-        case 278:  // ceil
-        case 279:  // divide
-        case 280:  // exponent
-        case 281:  // floor
-        case 282:  // ln
-        case 283:  // log
-        case 284:  // logten
-        case 285:  // mod
-        case 286:  // multiply
-        case 287:  // pow
-        case 288:  // round
-        case 289:  // sqrt
-        case 290:  // subtract
-        case 291:  // trunc
-        case 301:  // setExpression
-        case 302:  // allElementsTrue
-        case 303:  // anyElementTrue
-        case 304:  // setDifference
-        case 305:  // setEquals
-        case 306:  // setIntersection
-        case 307:  // setIsSubset
-        case 308:  // setUnion
-        case 309:  // match
-        case 310:  // predicates
-        case 311:  // compoundMatchExprs
-        case 312:  // predValue
-        case 313:  // additionalExprs
-        case 319:  // sortSpecs
-        case 320:  // specList
-        case 321:  // metaSort
-        case 322:  // oneOrNegOne
-        case 323:  // metaSortKeyword
+        case 182:  // dbPointer
+        case 183:  // javascript
+        case 184:  // symbol
+        case 185:  // javascriptWScope
+        case 186:  // int
+        case 187:  // timestamp
+        case 188:  // long
+        case 189:  // double
+        case 190:  // decimal
+        case 191:  // minKey
+        case 192:  // maxKey
+        case 193:  // value
+        case 194:  // string
+        case 195:  // aggregationFieldPath
+        case 196:  // binary
+        case 197:  // undefined
+        case 198:  // objectId
+        case 199:  // bool
+        case 200:  // date
+        case 201:  // null
+        case 202:  // regex
+        case 203:  // simpleValue
+        case 204:  // compoundValue
+        case 205:  // valueArray
+        case 206:  // valueObject
+        case 207:  // valueFields
+        case 208:  // variable
+        case 209:  // pipeline
+        case 210:  // stageList
+        case 211:  // stage
+        case 212:  // inhibitOptimization
+        case 213:  // unionWith
+        case 214:  // skip
+        case 215:  // limit
+        case 216:  // project
+        case 217:  // sample
+        case 218:  // projectFields
+        case 219:  // projectionObjectFields
+        case 220:  // topLevelProjection
+        case 221:  // projection
+        case 222:  // projectionObject
+        case 223:  // num
+        case 224:  // expression
+        case 225:  // compoundNonObjectExpression
+        case 226:  // exprFixedTwoArg
+        case 227:  // exprFixedThreeArg
+        case 228:  // arrayManipulation
+        case 229:  // slice
+        case 230:  // expressionArray
+        case 231:  // expressionObject
+        case 232:  // expressionFields
+        case 233:  // maths
+        case 234:  // meta
+        case 235:  // add
+        case 236:  // boolExprs
+        case 237:  // and
+        case 238:  // or
+        case 239:  // not
+        case 240:  // literalEscapes
+        case 241:  // const
+        case 242:  // literal
+        case 243:  // stringExps
+        case 244:  // concat
+        case 245:  // dateFromString
+        case 246:  // dateToString
+        case 247:  // indexOfBytes
+        case 248:  // indexOfCP
+        case 249:  // ltrim
+        case 250:  // regexFind
+        case 251:  // regexFindAll
+        case 252:  // regexMatch
+        case 253:  // regexArgs
+        case 254:  // replaceOne
+        case 255:  // replaceAll
+        case 256:  // rtrim
+        case 257:  // split
+        case 258:  // strLenBytes
+        case 259:  // strLenCP
+        case 260:  // strcasecmp
+        case 261:  // substr
+        case 262:  // substrBytes
+        case 263:  // substrCP
+        case 264:  // toLower
+        case 265:  // toUpper
+        case 266:  // trim
+        case 267:  // compExprs
+        case 268:  // cmp
+        case 269:  // eq
+        case 270:  // gt
+        case 271:  // gte
+        case 272:  // lt
+        case 273:  // lte
+        case 274:  // ne
+        case 275:  // typeExpression
+        case 276:  // convert
+        case 277:  // toBool
+        case 278:  // toDate
+        case 279:  // toDecimal
+        case 280:  // toDouble
+        case 281:  // toInt
+        case 282:  // toLong
+        case 283:  // toObjectId
+        case 284:  // toString
+        case 285:  // type
+        case 286:  // abs
+        case 287:  // ceil
+        case 288:  // divide
+        case 289:  // exponent
+        case 290:  // floor
+        case 291:  // ln
+        case 292:  // log
+        case 293:  // logten
+        case 294:  // mod
+        case 295:  // multiply
+        case 296:  // pow
+        case 297:  // round
+        case 298:  // sqrt
+        case 299:  // subtract
+        case 300:  // trunc
+        case 310:  // setExpression
+        case 311:  // allElementsTrue
+        case 312:  // anyElementTrue
+        case 313:  // setDifference
+        case 314:  // setEquals
+        case 315:  // setIntersection
+        case 316:  // setIsSubset
+        case 317:  // setUnion
+        case 318:  // trig
+        case 319:  // sin
+        case 320:  // cos
+        case 321:  // tan
+        case 322:  // sinh
+        case 323:  // cosh
+        case 324:  // tanh
+        case 325:  // asin
+        case 326:  // acos
+        case 327:  // atan
+        case 328:  // asinh
+        case 329:  // acosh
+        case 330:  // atanh
+        case 331:  // atan2
+        case 332:  // degreesToRadians
+        case 333:  // radiansToDegrees
+        case 334:  // nonArrayExpression
+        case 335:  // nonArrayCompoundExpression
+        case 336:  // nonArrayNonObjCompoundExpression
+        case 337:  // expressionSingletonArray
+        case 338:  // singleArgExpression
+        case 339:  // match
+        case 340:  // predicates
+        case 341:  // compoundMatchExprs
+        case 342:  // predValue
+        case 343:  // additionalExprs
+        case 349:  // sortSpecs
+        case 350:  // specList
+        case 351:  // metaSort
+        case 352:  // oneOrNegOne
+        case 353:  // metaSortKeyword
             value.move<CNode>(YY_MOVE(that.value));
             break;
 
-        case 155:  // aggregationProjectionFieldname
-        case 156:  // projectionFieldname
-        case 157:  // expressionFieldname
-        case 158:  // stageAsUserFieldname
-        case 159:  // argAsUserFieldname
-        case 160:  // argAsProjectionPath
-        case 161:  // aggExprAsUserFieldname
-        case 162:  // invariableUserFieldname
-        case 163:  // idAsUserFieldname
-        case 164:  // idAsProjectionPath
-        case 165:  // valueFieldname
-        case 166:  // predFieldname
-        case 318:  // logicalExprField
+        case 165:  // aggregationProjectionFieldname
+        case 166:  // projectionFieldname
+        case 167:  // expressionFieldname
+        case 168:  // stageAsUserFieldname
+        case 169:  // argAsUserFieldname
+        case 170:  // argAsProjectionPath
+        case 171:  // aggExprAsUserFieldname
+        case 172:  // invariableUserFieldname
+        case 173:  // idAsUserFieldname
+        case 174:  // idAsProjectionPath
+        case 175:  // valueFieldname
+        case 176:  // predFieldname
+        case 348:  // logicalExprField
             value.move<CNode::Fieldname>(YY_MOVE(that.value));
             break;
 
-        case 137:  // "Date"
+        case 147:  // "Date"
             value.move<Date_t>(YY_MOVE(that.value));
             break;
 
-        case 147:  // "arbitrary decimal"
+        case 157:  // "arbitrary decimal"
             value.move<Decimal128>(YY_MOVE(that.value));
             break;
 
-        case 136:  // "ObjectID"
+        case 146:  // "ObjectID"
             value.move<OID>(YY_MOVE(that.value));
             break;
 
-        case 148:  // "Timestamp"
+        case 158:  // "Timestamp"
             value.move<Timestamp>(YY_MOVE(that.value));
             break;
 
-        case 150:  // "maxKey"
+        case 160:  // "maxKey"
             value.move<UserMaxKey>(YY_MOVE(that.value));
             break;
 
-        case 149:  // "minKey"
+        case 159:  // "minKey"
             value.move<UserMinKey>(YY_MOVE(that.value));
             break;
 
-        case 138:  // "null"
+        case 148:  // "null"
             value.move<UserNull>(YY_MOVE(that.value));
             break;
 
-        case 135:  // "undefined"
+        case 145:  // "undefined"
             value.move<UserUndefined>(YY_MOVE(that.value));
             break;
 
-        case 146:  // "arbitrary double"
+        case 156:  // "arbitrary double"
             value.move<double>(YY_MOVE(that.value));
             break;
 
-        case 144:  // "arbitrary integer"
+        case 154:  // "arbitrary integer"
             value.move<int>(YY_MOVE(that.value));
             break;
 
-        case 145:  // "arbitrary long"
+        case 155:  // "arbitrary long"
             value.move<long long>(YY_MOVE(that.value));
             break;
 
-        case 167:  // projectField
-        case 168:  // projectionObjectField
-        case 169:  // expressionField
-        case 170:  // valueField
-        case 292:  // onErrorArg
-        case 293:  // onNullArg
-        case 294:  // formatArg
-        case 295:  // timezoneArg
-        case 296:  // charsArg
-        case 297:  // optionsArg
-        case 314:  // predicate
-        case 315:  // logicalExpr
-        case 316:  // operatorExpression
-        case 317:  // notExpr
-        case 324:  // sortSpec
+        case 177:  // projectField
+        case 178:  // projectionObjectField
+        case 179:  // expressionField
+        case 180:  // valueField
+        case 301:  // onErrorArg
+        case 302:  // onNullArg
+        case 303:  // formatArg
+        case 304:  // timezoneArg
+        case 305:  // charsArg
+        case 306:  // optionsArg
+        case 344:  // predicate
+        case 345:  // logicalExpr
+        case 346:  // operatorExpression
+        case 347:  // notExpr
+        case 354:  // sortSpec
             value.move<std::pair<CNode::Fieldname, CNode>>(YY_MOVE(that.value));
             break;
 
-        case 128:  // "fieldname"
-        case 130:  // "$-prefixed fieldname"
-        case 131:  // "string"
-        case 132:  // "$-prefixed string"
-        case 133:  // "$$-prefixed string"
-        case 171:  // arg
+        case 138:  // "fieldname"
+        case 140:  // "$-prefixed fieldname"
+        case 141:  // "string"
+        case 142:  // "$-prefixed string"
+        case 143:  // "$$-prefixed string"
+        case 181:  // arg
             value.move<std::string>(YY_MOVE(that.value));
             break;
 
-        case 298:  // expressions
-        case 299:  // values
-        case 300:  // exprZeroToTwo
+        case 307:  // expressions
+        case 308:  // values
+        case 309:  // exprZeroToTwo
             value.move<std::vector<CNode>>(YY_MOVE(that.value));
             break;
 
-        case 129:  // "fieldname containing dotted path"
+        case 139:  // "fieldname containing dotted path"
             value.move<std::vector<std::string>>(YY_MOVE(that.value));
             break;
 
@@ -759,265 +799,285 @@ ParserGen::stack_symbol_type& ParserGen::stack_symbol_type::operator=(
     const stack_symbol_type& that) {
     state = that.state;
     switch (that.kind()) {
-        case 134:  // "BinData"
+        case 144:  // "BinData"
             value.copy<BSONBinData>(that.value);
             break;
 
-        case 141:  // "Code"
+        case 151:  // "Code"
             value.copy<BSONCode>(that.value);
             break;
 
-        case 143:  // "CodeWScope"
+        case 153:  // "CodeWScope"
             value.copy<BSONCodeWScope>(that.value);
             break;
 
-        case 140:  // "dbPointer"
+        case 150:  // "dbPointer"
             value.copy<BSONDBRef>(that.value);
             break;
 
-        case 139:  // "regex"
+        case 149:  // "regex"
             value.copy<BSONRegEx>(that.value);
             break;
 
-        case 142:  // "Symbol"
+        case 152:  // "Symbol"
             value.copy<BSONSymbol>(that.value);
             break;
 
-        case 172:  // dbPointer
-        case 173:  // javascript
-        case 174:  // symbol
-        case 175:  // javascriptWScope
-        case 176:  // int
-        case 177:  // timestamp
-        case 178:  // long
-        case 179:  // double
-        case 180:  // decimal
-        case 181:  // minKey
-        case 182:  // maxKey
-        case 183:  // value
-        case 184:  // string
-        case 185:  // aggregationFieldPath
-        case 186:  // binary
-        case 187:  // undefined
-        case 188:  // objectId
-        case 189:  // bool
-        case 190:  // date
-        case 191:  // null
-        case 192:  // regex
-        case 193:  // simpleValue
-        case 194:  // compoundValue
-        case 195:  // valueArray
-        case 196:  // valueObject
-        case 197:  // valueFields
-        case 198:  // variable
-        case 199:  // pipeline
-        case 200:  // stageList
-        case 201:  // stage
-        case 202:  // inhibitOptimization
-        case 203:  // unionWith
-        case 204:  // skip
-        case 205:  // limit
-        case 206:  // project
-        case 207:  // sample
-        case 208:  // projectFields
-        case 209:  // projectionObjectFields
-        case 210:  // topLevelProjection
-        case 211:  // projection
-        case 212:  // projectionObject
-        case 213:  // num
-        case 214:  // expression
-        case 215:  // compoundNonObjectExpression
-        case 216:  // exprFixedTwoArg
-        case 217:  // exprFixedThreeArg
-        case 218:  // arrayManipulation
-        case 219:  // slice
-        case 220:  // expressionArray
-        case 221:  // expressionObject
-        case 222:  // expressionFields
-        case 223:  // maths
-        case 224:  // meta
-        case 225:  // add
-        case 226:  // atan2
-        case 227:  // boolExprs
-        case 228:  // and
-        case 229:  // or
-        case 230:  // not
-        case 231:  // literalEscapes
-        case 232:  // const
-        case 233:  // literal
-        case 234:  // stringExps
-        case 235:  // concat
-        case 236:  // dateFromString
-        case 237:  // dateToString
-        case 238:  // indexOfBytes
-        case 239:  // indexOfCP
-        case 240:  // ltrim
-        case 241:  // regexFind
-        case 242:  // regexFindAll
-        case 243:  // regexMatch
-        case 244:  // regexArgs
-        case 245:  // replaceOne
-        case 246:  // replaceAll
-        case 247:  // rtrim
-        case 248:  // split
-        case 249:  // strLenBytes
-        case 250:  // strLenCP
-        case 251:  // strcasecmp
-        case 252:  // substr
-        case 253:  // substrBytes
-        case 254:  // substrCP
-        case 255:  // toLower
-        case 256:  // toUpper
-        case 257:  // trim
-        case 258:  // compExprs
-        case 259:  // cmp
-        case 260:  // eq
-        case 261:  // gt
-        case 262:  // gte
-        case 263:  // lt
-        case 264:  // lte
-        case 265:  // ne
-        case 266:  // typeExpression
-        case 267:  // convert
-        case 268:  // toBool
-        case 269:  // toDate
-        case 270:  // toDecimal
-        case 271:  // toDouble
-        case 272:  // toInt
-        case 273:  // toLong
-        case 274:  // toObjectId
-        case 275:  // toString
-        case 276:  // type
-        case 277:  // abs
-        case 278:  // ceil
-        case 279:  // divide
-        case 280:  // exponent
-        case 281:  // floor
-        case 282:  // ln
-        case 283:  // log
-        case 284:  // logten
-        case 285:  // mod
-        case 286:  // multiply
-        case 287:  // pow
-        case 288:  // round
-        case 289:  // sqrt
-        case 290:  // subtract
-        case 291:  // trunc
-        case 301:  // setExpression
-        case 302:  // allElementsTrue
-        case 303:  // anyElementTrue
-        case 304:  // setDifference
-        case 305:  // setEquals
-        case 306:  // setIntersection
-        case 307:  // setIsSubset
-        case 308:  // setUnion
-        case 309:  // match
-        case 310:  // predicates
-        case 311:  // compoundMatchExprs
-        case 312:  // predValue
-        case 313:  // additionalExprs
-        case 319:  // sortSpecs
-        case 320:  // specList
-        case 321:  // metaSort
-        case 322:  // oneOrNegOne
-        case 323:  // metaSortKeyword
+        case 182:  // dbPointer
+        case 183:  // javascript
+        case 184:  // symbol
+        case 185:  // javascriptWScope
+        case 186:  // int
+        case 187:  // timestamp
+        case 188:  // long
+        case 189:  // double
+        case 190:  // decimal
+        case 191:  // minKey
+        case 192:  // maxKey
+        case 193:  // value
+        case 194:  // string
+        case 195:  // aggregationFieldPath
+        case 196:  // binary
+        case 197:  // undefined
+        case 198:  // objectId
+        case 199:  // bool
+        case 200:  // date
+        case 201:  // null
+        case 202:  // regex
+        case 203:  // simpleValue
+        case 204:  // compoundValue
+        case 205:  // valueArray
+        case 206:  // valueObject
+        case 207:  // valueFields
+        case 208:  // variable
+        case 209:  // pipeline
+        case 210:  // stageList
+        case 211:  // stage
+        case 212:  // inhibitOptimization
+        case 213:  // unionWith
+        case 214:  // skip
+        case 215:  // limit
+        case 216:  // project
+        case 217:  // sample
+        case 218:  // projectFields
+        case 219:  // projectionObjectFields
+        case 220:  // topLevelProjection
+        case 221:  // projection
+        case 222:  // projectionObject
+        case 223:  // num
+        case 224:  // expression
+        case 225:  // compoundNonObjectExpression
+        case 226:  // exprFixedTwoArg
+        case 227:  // exprFixedThreeArg
+        case 228:  // arrayManipulation
+        case 229:  // slice
+        case 230:  // expressionArray
+        case 231:  // expressionObject
+        case 232:  // expressionFields
+        case 233:  // maths
+        case 234:  // meta
+        case 235:  // add
+        case 236:  // boolExprs
+        case 237:  // and
+        case 238:  // or
+        case 239:  // not
+        case 240:  // literalEscapes
+        case 241:  // const
+        case 242:  // literal
+        case 243:  // stringExps
+        case 244:  // concat
+        case 245:  // dateFromString
+        case 246:  // dateToString
+        case 247:  // indexOfBytes
+        case 248:  // indexOfCP
+        case 249:  // ltrim
+        case 250:  // regexFind
+        case 251:  // regexFindAll
+        case 252:  // regexMatch
+        case 253:  // regexArgs
+        case 254:  // replaceOne
+        case 255:  // replaceAll
+        case 256:  // rtrim
+        case 257:  // split
+        case 258:  // strLenBytes
+        case 259:  // strLenCP
+        case 260:  // strcasecmp
+        case 261:  // substr
+        case 262:  // substrBytes
+        case 263:  // substrCP
+        case 264:  // toLower
+        case 265:  // toUpper
+        case 266:  // trim
+        case 267:  // compExprs
+        case 268:  // cmp
+        case 269:  // eq
+        case 270:  // gt
+        case 271:  // gte
+        case 272:  // lt
+        case 273:  // lte
+        case 274:  // ne
+        case 275:  // typeExpression
+        case 276:  // convert
+        case 277:  // toBool
+        case 278:  // toDate
+        case 279:  // toDecimal
+        case 280:  // toDouble
+        case 281:  // toInt
+        case 282:  // toLong
+        case 283:  // toObjectId
+        case 284:  // toString
+        case 285:  // type
+        case 286:  // abs
+        case 287:  // ceil
+        case 288:  // divide
+        case 289:  // exponent
+        case 290:  // floor
+        case 291:  // ln
+        case 292:  // log
+        case 293:  // logten
+        case 294:  // mod
+        case 295:  // multiply
+        case 296:  // pow
+        case 297:  // round
+        case 298:  // sqrt
+        case 299:  // subtract
+        case 300:  // trunc
+        case 310:  // setExpression
+        case 311:  // allElementsTrue
+        case 312:  // anyElementTrue
+        case 313:  // setDifference
+        case 314:  // setEquals
+        case 315:  // setIntersection
+        case 316:  // setIsSubset
+        case 317:  // setUnion
+        case 318:  // trig
+        case 319:  // sin
+        case 320:  // cos
+        case 321:  // tan
+        case 322:  // sinh
+        case 323:  // cosh
+        case 324:  // tanh
+        case 325:  // asin
+        case 326:  // acos
+        case 327:  // atan
+        case 328:  // asinh
+        case 329:  // acosh
+        case 330:  // atanh
+        case 331:  // atan2
+        case 332:  // degreesToRadians
+        case 333:  // radiansToDegrees
+        case 334:  // nonArrayExpression
+        case 335:  // nonArrayCompoundExpression
+        case 336:  // nonArrayNonObjCompoundExpression
+        case 337:  // expressionSingletonArray
+        case 338:  // singleArgExpression
+        case 339:  // match
+        case 340:  // predicates
+        case 341:  // compoundMatchExprs
+        case 342:  // predValue
+        case 343:  // additionalExprs
+        case 349:  // sortSpecs
+        case 350:  // specList
+        case 351:  // metaSort
+        case 352:  // oneOrNegOne
+        case 353:  // metaSortKeyword
             value.copy<CNode>(that.value);
             break;
 
-        case 155:  // aggregationProjectionFieldname
-        case 156:  // projectionFieldname
-        case 157:  // expressionFieldname
-        case 158:  // stageAsUserFieldname
-        case 159:  // argAsUserFieldname
-        case 160:  // argAsProjectionPath
-        case 161:  // aggExprAsUserFieldname
-        case 162:  // invariableUserFieldname
-        case 163:  // idAsUserFieldname
-        case 164:  // idAsProjectionPath
-        case 165:  // valueFieldname
-        case 166:  // predFieldname
-        case 318:  // logicalExprField
+        case 165:  // aggregationProjectionFieldname
+        case 166:  // projectionFieldname
+        case 167:  // expressionFieldname
+        case 168:  // stageAsUserFieldname
+        case 169:  // argAsUserFieldname
+        case 170:  // argAsProjectionPath
+        case 171:  // aggExprAsUserFieldname
+        case 172:  // invariableUserFieldname
+        case 173:  // idAsUserFieldname
+        case 174:  // idAsProjectionPath
+        case 175:  // valueFieldname
+        case 176:  // predFieldname
+        case 348:  // logicalExprField
             value.copy<CNode::Fieldname>(that.value);
             break;
 
-        case 137:  // "Date"
+        case 147:  // "Date"
             value.copy<Date_t>(that.value);
             break;
 
-        case 147:  // "arbitrary decimal"
+        case 157:  // "arbitrary decimal"
             value.copy<Decimal128>(that.value);
             break;
 
-        case 136:  // "ObjectID"
+        case 146:  // "ObjectID"
             value.copy<OID>(that.value);
             break;
 
-        case 148:  // "Timestamp"
+        case 158:  // "Timestamp"
             value.copy<Timestamp>(that.value);
             break;
 
-        case 150:  // "maxKey"
+        case 160:  // "maxKey"
             value.copy<UserMaxKey>(that.value);
             break;
 
-        case 149:  // "minKey"
+        case 159:  // "minKey"
             value.copy<UserMinKey>(that.value);
             break;
 
-        case 138:  // "null"
+        case 148:  // "null"
             value.copy<UserNull>(that.value);
             break;
 
-        case 135:  // "undefined"
+        case 145:  // "undefined"
             value.copy<UserUndefined>(that.value);
             break;
 
-        case 146:  // "arbitrary double"
+        case 156:  // "arbitrary double"
             value.copy<double>(that.value);
             break;
 
-        case 144:  // "arbitrary integer"
+        case 154:  // "arbitrary integer"
             value.copy<int>(that.value);
             break;
 
-        case 145:  // "arbitrary long"
+        case 155:  // "arbitrary long"
             value.copy<long long>(that.value);
             break;
 
-        case 167:  // projectField
-        case 168:  // projectionObjectField
-        case 169:  // expressionField
-        case 170:  // valueField
-        case 292:  // onErrorArg
-        case 293:  // onNullArg
-        case 294:  // formatArg
-        case 295:  // timezoneArg
-        case 296:  // charsArg
-        case 297:  // optionsArg
-        case 314:  // predicate
-        case 315:  // logicalExpr
-        case 316:  // operatorExpression
-        case 317:  // notExpr
-        case 324:  // sortSpec
+        case 177:  // projectField
+        case 178:  // projectionObjectField
+        case 179:  // expressionField
+        case 180:  // valueField
+        case 301:  // onErrorArg
+        case 302:  // onNullArg
+        case 303:  // formatArg
+        case 304:  // timezoneArg
+        case 305:  // charsArg
+        case 306:  // optionsArg
+        case 344:  // predicate
+        case 345:  // logicalExpr
+        case 346:  // operatorExpression
+        case 347:  // notExpr
+        case 354:  // sortSpec
             value.copy<std::pair<CNode::Fieldname, CNode>>(that.value);
             break;
 
-        case 128:  // "fieldname"
-        case 130:  // "$-prefixed fieldname"
-        case 131:  // "string"
-        case 132:  // "$-prefixed string"
-        case 133:  // "$$-prefixed string"
-        case 171:  // arg
+        case 138:  // "fieldname"
+        case 140:  // "$-prefixed fieldname"
+        case 141:  // "string"
+        case 142:  // "$-prefixed string"
+        case 143:  // "$$-prefixed string"
+        case 181:  // arg
             value.copy<std::string>(that.value);
             break;
 
-        case 298:  // expressions
-        case 299:  // values
-        case 300:  // exprZeroToTwo
+        case 307:  // expressions
+        case 308:  // values
+        case 309:  // exprZeroToTwo
             value.copy<std::vector<CNode>>(that.value);
             break;
 
-        case 129:  // "fieldname containing dotted path"
+        case 139:  // "fieldname containing dotted path"
             value.copy<std::vector<std::string>>(that.value);
             break;
 
@@ -1032,265 +1092,285 @@ ParserGen::stack_symbol_type& ParserGen::stack_symbol_type::operator=(
 ParserGen::stack_symbol_type& ParserGen::stack_symbol_type::operator=(stack_symbol_type& that) {
     state = that.state;
     switch (that.kind()) {
-        case 134:  // "BinData"
+        case 144:  // "BinData"
             value.move<BSONBinData>(that.value);
             break;
 
-        case 141:  // "Code"
+        case 151:  // "Code"
             value.move<BSONCode>(that.value);
             break;
 
-        case 143:  // "CodeWScope"
+        case 153:  // "CodeWScope"
             value.move<BSONCodeWScope>(that.value);
             break;
 
-        case 140:  // "dbPointer"
+        case 150:  // "dbPointer"
             value.move<BSONDBRef>(that.value);
             break;
 
-        case 139:  // "regex"
+        case 149:  // "regex"
             value.move<BSONRegEx>(that.value);
             break;
 
-        case 142:  // "Symbol"
+        case 152:  // "Symbol"
             value.move<BSONSymbol>(that.value);
             break;
 
-        case 172:  // dbPointer
-        case 173:  // javascript
-        case 174:  // symbol
-        case 175:  // javascriptWScope
-        case 176:  // int
-        case 177:  // timestamp
-        case 178:  // long
-        case 179:  // double
-        case 180:  // decimal
-        case 181:  // minKey
-        case 182:  // maxKey
-        case 183:  // value
-        case 184:  // string
-        case 185:  // aggregationFieldPath
-        case 186:  // binary
-        case 187:  // undefined
-        case 188:  // objectId
-        case 189:  // bool
-        case 190:  // date
-        case 191:  // null
-        case 192:  // regex
-        case 193:  // simpleValue
-        case 194:  // compoundValue
-        case 195:  // valueArray
-        case 196:  // valueObject
-        case 197:  // valueFields
-        case 198:  // variable
-        case 199:  // pipeline
-        case 200:  // stageList
-        case 201:  // stage
-        case 202:  // inhibitOptimization
-        case 203:  // unionWith
-        case 204:  // skip
-        case 205:  // limit
-        case 206:  // project
-        case 207:  // sample
-        case 208:  // projectFields
-        case 209:  // projectionObjectFields
-        case 210:  // topLevelProjection
-        case 211:  // projection
-        case 212:  // projectionObject
-        case 213:  // num
-        case 214:  // expression
-        case 215:  // compoundNonObjectExpression
-        case 216:  // exprFixedTwoArg
-        case 217:  // exprFixedThreeArg
-        case 218:  // arrayManipulation
-        case 219:  // slice
-        case 220:  // expressionArray
-        case 221:  // expressionObject
-        case 222:  // expressionFields
-        case 223:  // maths
-        case 224:  // meta
-        case 225:  // add
-        case 226:  // atan2
-        case 227:  // boolExprs
-        case 228:  // and
-        case 229:  // or
-        case 230:  // not
-        case 231:  // literalEscapes
-        case 232:  // const
-        case 233:  // literal
-        case 234:  // stringExps
-        case 235:  // concat
-        case 236:  // dateFromString
-        case 237:  // dateToString
-        case 238:  // indexOfBytes
-        case 239:  // indexOfCP
-        case 240:  // ltrim
-        case 241:  // regexFind
-        case 242:  // regexFindAll
-        case 243:  // regexMatch
-        case 244:  // regexArgs
-        case 245:  // replaceOne
-        case 246:  // replaceAll
-        case 247:  // rtrim
-        case 248:  // split
-        case 249:  // strLenBytes
-        case 250:  // strLenCP
-        case 251:  // strcasecmp
-        case 252:  // substr
-        case 253:  // substrBytes
-        case 254:  // substrCP
-        case 255:  // toLower
-        case 256:  // toUpper
-        case 257:  // trim
-        case 258:  // compExprs
-        case 259:  // cmp
-        case 260:  // eq
-        case 261:  // gt
-        case 262:  // gte
-        case 263:  // lt
-        case 264:  // lte
-        case 265:  // ne
-        case 266:  // typeExpression
-        case 267:  // convert
-        case 268:  // toBool
-        case 269:  // toDate
-        case 270:  // toDecimal
-        case 271:  // toDouble
-        case 272:  // toInt
-        case 273:  // toLong
-        case 274:  // toObjectId
-        case 275:  // toString
-        case 276:  // type
-        case 277:  // abs
-        case 278:  // ceil
-        case 279:  // divide
-        case 280:  // exponent
-        case 281:  // floor
-        case 282:  // ln
-        case 283:  // log
-        case 284:  // logten
-        case 285:  // mod
-        case 286:  // multiply
-        case 287:  // pow
-        case 288:  // round
-        case 289:  // sqrt
-        case 290:  // subtract
-        case 291:  // trunc
-        case 301:  // setExpression
-        case 302:  // allElementsTrue
-        case 303:  // anyElementTrue
-        case 304:  // setDifference
-        case 305:  // setEquals
-        case 306:  // setIntersection
-        case 307:  // setIsSubset
-        case 308:  // setUnion
-        case 309:  // match
-        case 310:  // predicates
-        case 311:  // compoundMatchExprs
-        case 312:  // predValue
-        case 313:  // additionalExprs
-        case 319:  // sortSpecs
-        case 320:  // specList
-        case 321:  // metaSort
-        case 322:  // oneOrNegOne
-        case 323:  // metaSortKeyword
+        case 182:  // dbPointer
+        case 183:  // javascript
+        case 184:  // symbol
+        case 185:  // javascriptWScope
+        case 186:  // int
+        case 187:  // timestamp
+        case 188:  // long
+        case 189:  // double
+        case 190:  // decimal
+        case 191:  // minKey
+        case 192:  // maxKey
+        case 193:  // value
+        case 194:  // string
+        case 195:  // aggregationFieldPath
+        case 196:  // binary
+        case 197:  // undefined
+        case 198:  // objectId
+        case 199:  // bool
+        case 200:  // date
+        case 201:  // null
+        case 202:  // regex
+        case 203:  // simpleValue
+        case 204:  // compoundValue
+        case 205:  // valueArray
+        case 206:  // valueObject
+        case 207:  // valueFields
+        case 208:  // variable
+        case 209:  // pipeline
+        case 210:  // stageList
+        case 211:  // stage
+        case 212:  // inhibitOptimization
+        case 213:  // unionWith
+        case 214:  // skip
+        case 215:  // limit
+        case 216:  // project
+        case 217:  // sample
+        case 218:  // projectFields
+        case 219:  // projectionObjectFields
+        case 220:  // topLevelProjection
+        case 221:  // projection
+        case 222:  // projectionObject
+        case 223:  // num
+        case 224:  // expression
+        case 225:  // compoundNonObjectExpression
+        case 226:  // exprFixedTwoArg
+        case 227:  // exprFixedThreeArg
+        case 228:  // arrayManipulation
+        case 229:  // slice
+        case 230:  // expressionArray
+        case 231:  // expressionObject
+        case 232:  // expressionFields
+        case 233:  // maths
+        case 234:  // meta
+        case 235:  // add
+        case 236:  // boolExprs
+        case 237:  // and
+        case 238:  // or
+        case 239:  // not
+        case 240:  // literalEscapes
+        case 241:  // const
+        case 242:  // literal
+        case 243:  // stringExps
+        case 244:  // concat
+        case 245:  // dateFromString
+        case 246:  // dateToString
+        case 247:  // indexOfBytes
+        case 248:  // indexOfCP
+        case 249:  // ltrim
+        case 250:  // regexFind
+        case 251:  // regexFindAll
+        case 252:  // regexMatch
+        case 253:  // regexArgs
+        case 254:  // replaceOne
+        case 255:  // replaceAll
+        case 256:  // rtrim
+        case 257:  // split
+        case 258:  // strLenBytes
+        case 259:  // strLenCP
+        case 260:  // strcasecmp
+        case 261:  // substr
+        case 262:  // substrBytes
+        case 263:  // substrCP
+        case 264:  // toLower
+        case 265:  // toUpper
+        case 266:  // trim
+        case 267:  // compExprs
+        case 268:  // cmp
+        case 269:  // eq
+        case 270:  // gt
+        case 271:  // gte
+        case 272:  // lt
+        case 273:  // lte
+        case 274:  // ne
+        case 275:  // typeExpression
+        case 276:  // convert
+        case 277:  // toBool
+        case 278:  // toDate
+        case 279:  // toDecimal
+        case 280:  // toDouble
+        case 281:  // toInt
+        case 282:  // toLong
+        case 283:  // toObjectId
+        case 284:  // toString
+        case 285:  // type
+        case 286:  // abs
+        case 287:  // ceil
+        case 288:  // divide
+        case 289:  // exponent
+        case 290:  // floor
+        case 291:  // ln
+        case 292:  // log
+        case 293:  // logten
+        case 294:  // mod
+        case 295:  // multiply
+        case 296:  // pow
+        case 297:  // round
+        case 298:  // sqrt
+        case 299:  // subtract
+        case 300:  // trunc
+        case 310:  // setExpression
+        case 311:  // allElementsTrue
+        case 312:  // anyElementTrue
+        case 313:  // setDifference
+        case 314:  // setEquals
+        case 315:  // setIntersection
+        case 316:  // setIsSubset
+        case 317:  // setUnion
+        case 318:  // trig
+        case 319:  // sin
+        case 320:  // cos
+        case 321:  // tan
+        case 322:  // sinh
+        case 323:  // cosh
+        case 324:  // tanh
+        case 325:  // asin
+        case 326:  // acos
+        case 327:  // atan
+        case 328:  // asinh
+        case 329:  // acosh
+        case 330:  // atanh
+        case 331:  // atan2
+        case 332:  // degreesToRadians
+        case 333:  // radiansToDegrees
+        case 334:  // nonArrayExpression
+        case 335:  // nonArrayCompoundExpression
+        case 336:  // nonArrayNonObjCompoundExpression
+        case 337:  // expressionSingletonArray
+        case 338:  // singleArgExpression
+        case 339:  // match
+        case 340:  // predicates
+        case 341:  // compoundMatchExprs
+        case 342:  // predValue
+        case 343:  // additionalExprs
+        case 349:  // sortSpecs
+        case 350:  // specList
+        case 351:  // metaSort
+        case 352:  // oneOrNegOne
+        case 353:  // metaSortKeyword
             value.move<CNode>(that.value);
             break;
 
-        case 155:  // aggregationProjectionFieldname
-        case 156:  // projectionFieldname
-        case 157:  // expressionFieldname
-        case 158:  // stageAsUserFieldname
-        case 159:  // argAsUserFieldname
-        case 160:  // argAsProjectionPath
-        case 161:  // aggExprAsUserFieldname
-        case 162:  // invariableUserFieldname
-        case 163:  // idAsUserFieldname
-        case 164:  // idAsProjectionPath
-        case 165:  // valueFieldname
-        case 166:  // predFieldname
-        case 318:  // logicalExprField
+        case 165:  // aggregationProjectionFieldname
+        case 166:  // projectionFieldname
+        case 167:  // expressionFieldname
+        case 168:  // stageAsUserFieldname
+        case 169:  // argAsUserFieldname
+        case 170:  // argAsProjectionPath
+        case 171:  // aggExprAsUserFieldname
+        case 172:  // invariableUserFieldname
+        case 173:  // idAsUserFieldname
+        case 174:  // idAsProjectionPath
+        case 175:  // valueFieldname
+        case 176:  // predFieldname
+        case 348:  // logicalExprField
             value.move<CNode::Fieldname>(that.value);
             break;
 
-        case 137:  // "Date"
+        case 147:  // "Date"
             value.move<Date_t>(that.value);
             break;
 
-        case 147:  // "arbitrary decimal"
+        case 157:  // "arbitrary decimal"
             value.move<Decimal128>(that.value);
             break;
 
-        case 136:  // "ObjectID"
+        case 146:  // "ObjectID"
             value.move<OID>(that.value);
             break;
 
-        case 148:  // "Timestamp"
+        case 158:  // "Timestamp"
             value.move<Timestamp>(that.value);
             break;
 
-        case 150:  // "maxKey"
+        case 160:  // "maxKey"
             value.move<UserMaxKey>(that.value);
             break;
 
-        case 149:  // "minKey"
+        case 159:  // "minKey"
             value.move<UserMinKey>(that.value);
             break;
 
-        case 138:  // "null"
+        case 148:  // "null"
             value.move<UserNull>(that.value);
             break;
 
-        case 135:  // "undefined"
+        case 145:  // "undefined"
             value.move<UserUndefined>(that.value);
             break;
 
-        case 146:  // "arbitrary double"
+        case 156:  // "arbitrary double"
             value.move<double>(that.value);
             break;
 
-        case 144:  // "arbitrary integer"
+        case 154:  // "arbitrary integer"
             value.move<int>(that.value);
             break;
 
-        case 145:  // "arbitrary long"
+        case 155:  // "arbitrary long"
             value.move<long long>(that.value);
             break;
 
-        case 167:  // projectField
-        case 168:  // projectionObjectField
-        case 169:  // expressionField
-        case 170:  // valueField
-        case 292:  // onErrorArg
-        case 293:  // onNullArg
-        case 294:  // formatArg
-        case 295:  // timezoneArg
-        case 296:  // charsArg
-        case 297:  // optionsArg
-        case 314:  // predicate
-        case 315:  // logicalExpr
-        case 316:  // operatorExpression
-        case 317:  // notExpr
-        case 324:  // sortSpec
+        case 177:  // projectField
+        case 178:  // projectionObjectField
+        case 179:  // expressionField
+        case 180:  // valueField
+        case 301:  // onErrorArg
+        case 302:  // onNullArg
+        case 303:  // formatArg
+        case 304:  // timezoneArg
+        case 305:  // charsArg
+        case 306:  // optionsArg
+        case 344:  // predicate
+        case 345:  // logicalExpr
+        case 346:  // operatorExpression
+        case 347:  // notExpr
+        case 354:  // sortSpec
             value.move<std::pair<CNode::Fieldname, CNode>>(that.value);
             break;
 
-        case 128:  // "fieldname"
-        case 130:  // "$-prefixed fieldname"
-        case 131:  // "string"
-        case 132:  // "$-prefixed string"
-        case 133:  // "$$-prefixed string"
-        case 171:  // arg
+        case 138:  // "fieldname"
+        case 140:  // "$-prefixed fieldname"
+        case 141:  // "string"
+        case 142:  // "$-prefixed string"
+        case 143:  // "$$-prefixed string"
+        case 181:  // arg
             value.move<std::string>(that.value);
             break;
 
-        case 298:  // expressions
-        case 299:  // values
-        case 300:  // exprZeroToTwo
+        case 307:  // expressions
+        case 308:  // values
+        case 309:  // exprZeroToTwo
             value.move<std::vector<CNode>>(that.value);
             break;
 
-        case 129:  // "fieldname containing dotted path"
+        case 139:  // "fieldname containing dotted path"
             value.move<std::vector<std::string>>(that.value);
             break;
 
@@ -1517,265 +1597,285 @@ int ParserGen::parse() {
                correct type. The default '$$ = $1' action is NOT applied
                when using variants.  */
             switch (yyr1_[yyn]) {
-                case 134:  // "BinData"
+                case 144:  // "BinData"
                     yylhs.value.emplace<BSONBinData>();
                     break;
 
-                case 141:  // "Code"
+                case 151:  // "Code"
                     yylhs.value.emplace<BSONCode>();
                     break;
 
-                case 143:  // "CodeWScope"
+                case 153:  // "CodeWScope"
                     yylhs.value.emplace<BSONCodeWScope>();
                     break;
 
-                case 140:  // "dbPointer"
+                case 150:  // "dbPointer"
                     yylhs.value.emplace<BSONDBRef>();
                     break;
 
-                case 139:  // "regex"
+                case 149:  // "regex"
                     yylhs.value.emplace<BSONRegEx>();
                     break;
 
-                case 142:  // "Symbol"
+                case 152:  // "Symbol"
                     yylhs.value.emplace<BSONSymbol>();
                     break;
 
-                case 172:  // dbPointer
-                case 173:  // javascript
-                case 174:  // symbol
-                case 175:  // javascriptWScope
-                case 176:  // int
-                case 177:  // timestamp
-                case 178:  // long
-                case 179:  // double
-                case 180:  // decimal
-                case 181:  // minKey
-                case 182:  // maxKey
-                case 183:  // value
-                case 184:  // string
-                case 185:  // aggregationFieldPath
-                case 186:  // binary
-                case 187:  // undefined
-                case 188:  // objectId
-                case 189:  // bool
-                case 190:  // date
-                case 191:  // null
-                case 192:  // regex
-                case 193:  // simpleValue
-                case 194:  // compoundValue
-                case 195:  // valueArray
-                case 196:  // valueObject
-                case 197:  // valueFields
-                case 198:  // variable
-                case 199:  // pipeline
-                case 200:  // stageList
-                case 201:  // stage
-                case 202:  // inhibitOptimization
-                case 203:  // unionWith
-                case 204:  // skip
-                case 205:  // limit
-                case 206:  // project
-                case 207:  // sample
-                case 208:  // projectFields
-                case 209:  // projectionObjectFields
-                case 210:  // topLevelProjection
-                case 211:  // projection
-                case 212:  // projectionObject
-                case 213:  // num
-                case 214:  // expression
-                case 215:  // compoundNonObjectExpression
-                case 216:  // exprFixedTwoArg
-                case 217:  // exprFixedThreeArg
-                case 218:  // arrayManipulation
-                case 219:  // slice
-                case 220:  // expressionArray
-                case 221:  // expressionObject
-                case 222:  // expressionFields
-                case 223:  // maths
-                case 224:  // meta
-                case 225:  // add
-                case 226:  // atan2
-                case 227:  // boolExprs
-                case 228:  // and
-                case 229:  // or
-                case 230:  // not
-                case 231:  // literalEscapes
-                case 232:  // const
-                case 233:  // literal
-                case 234:  // stringExps
-                case 235:  // concat
-                case 236:  // dateFromString
-                case 237:  // dateToString
-                case 238:  // indexOfBytes
-                case 239:  // indexOfCP
-                case 240:  // ltrim
-                case 241:  // regexFind
-                case 242:  // regexFindAll
-                case 243:  // regexMatch
-                case 244:  // regexArgs
-                case 245:  // replaceOne
-                case 246:  // replaceAll
-                case 247:  // rtrim
-                case 248:  // split
-                case 249:  // strLenBytes
-                case 250:  // strLenCP
-                case 251:  // strcasecmp
-                case 252:  // substr
-                case 253:  // substrBytes
-                case 254:  // substrCP
-                case 255:  // toLower
-                case 256:  // toUpper
-                case 257:  // trim
-                case 258:  // compExprs
-                case 259:  // cmp
-                case 260:  // eq
-                case 261:  // gt
-                case 262:  // gte
-                case 263:  // lt
-                case 264:  // lte
-                case 265:  // ne
-                case 266:  // typeExpression
-                case 267:  // convert
-                case 268:  // toBool
-                case 269:  // toDate
-                case 270:  // toDecimal
-                case 271:  // toDouble
-                case 272:  // toInt
-                case 273:  // toLong
-                case 274:  // toObjectId
-                case 275:  // toString
-                case 276:  // type
-                case 277:  // abs
-                case 278:  // ceil
-                case 279:  // divide
-                case 280:  // exponent
-                case 281:  // floor
-                case 282:  // ln
-                case 283:  // log
-                case 284:  // logten
-                case 285:  // mod
-                case 286:  // multiply
-                case 287:  // pow
-                case 288:  // round
-                case 289:  // sqrt
-                case 290:  // subtract
-                case 291:  // trunc
-                case 301:  // setExpression
-                case 302:  // allElementsTrue
-                case 303:  // anyElementTrue
-                case 304:  // setDifference
-                case 305:  // setEquals
-                case 306:  // setIntersection
-                case 307:  // setIsSubset
-                case 308:  // setUnion
-                case 309:  // match
-                case 310:  // predicates
-                case 311:  // compoundMatchExprs
-                case 312:  // predValue
-                case 313:  // additionalExprs
-                case 319:  // sortSpecs
-                case 320:  // specList
-                case 321:  // metaSort
-                case 322:  // oneOrNegOne
-                case 323:  // metaSortKeyword
+                case 182:  // dbPointer
+                case 183:  // javascript
+                case 184:  // symbol
+                case 185:  // javascriptWScope
+                case 186:  // int
+                case 187:  // timestamp
+                case 188:  // long
+                case 189:  // double
+                case 190:  // decimal
+                case 191:  // minKey
+                case 192:  // maxKey
+                case 193:  // value
+                case 194:  // string
+                case 195:  // aggregationFieldPath
+                case 196:  // binary
+                case 197:  // undefined
+                case 198:  // objectId
+                case 199:  // bool
+                case 200:  // date
+                case 201:  // null
+                case 202:  // regex
+                case 203:  // simpleValue
+                case 204:  // compoundValue
+                case 205:  // valueArray
+                case 206:  // valueObject
+                case 207:  // valueFields
+                case 208:  // variable
+                case 209:  // pipeline
+                case 210:  // stageList
+                case 211:  // stage
+                case 212:  // inhibitOptimization
+                case 213:  // unionWith
+                case 214:  // skip
+                case 215:  // limit
+                case 216:  // project
+                case 217:  // sample
+                case 218:  // projectFields
+                case 219:  // projectionObjectFields
+                case 220:  // topLevelProjection
+                case 221:  // projection
+                case 222:  // projectionObject
+                case 223:  // num
+                case 224:  // expression
+                case 225:  // compoundNonObjectExpression
+                case 226:  // exprFixedTwoArg
+                case 227:  // exprFixedThreeArg
+                case 228:  // arrayManipulation
+                case 229:  // slice
+                case 230:  // expressionArray
+                case 231:  // expressionObject
+                case 232:  // expressionFields
+                case 233:  // maths
+                case 234:  // meta
+                case 235:  // add
+                case 236:  // boolExprs
+                case 237:  // and
+                case 238:  // or
+                case 239:  // not
+                case 240:  // literalEscapes
+                case 241:  // const
+                case 242:  // literal
+                case 243:  // stringExps
+                case 244:  // concat
+                case 245:  // dateFromString
+                case 246:  // dateToString
+                case 247:  // indexOfBytes
+                case 248:  // indexOfCP
+                case 249:  // ltrim
+                case 250:  // regexFind
+                case 251:  // regexFindAll
+                case 252:  // regexMatch
+                case 253:  // regexArgs
+                case 254:  // replaceOne
+                case 255:  // replaceAll
+                case 256:  // rtrim
+                case 257:  // split
+                case 258:  // strLenBytes
+                case 259:  // strLenCP
+                case 260:  // strcasecmp
+                case 261:  // substr
+                case 262:  // substrBytes
+                case 263:  // substrCP
+                case 264:  // toLower
+                case 265:  // toUpper
+                case 266:  // trim
+                case 267:  // compExprs
+                case 268:  // cmp
+                case 269:  // eq
+                case 270:  // gt
+                case 271:  // gte
+                case 272:  // lt
+                case 273:  // lte
+                case 274:  // ne
+                case 275:  // typeExpression
+                case 276:  // convert
+                case 277:  // toBool
+                case 278:  // toDate
+                case 279:  // toDecimal
+                case 280:  // toDouble
+                case 281:  // toInt
+                case 282:  // toLong
+                case 283:  // toObjectId
+                case 284:  // toString
+                case 285:  // type
+                case 286:  // abs
+                case 287:  // ceil
+                case 288:  // divide
+                case 289:  // exponent
+                case 290:  // floor
+                case 291:  // ln
+                case 292:  // log
+                case 293:  // logten
+                case 294:  // mod
+                case 295:  // multiply
+                case 296:  // pow
+                case 297:  // round
+                case 298:  // sqrt
+                case 299:  // subtract
+                case 300:  // trunc
+                case 310:  // setExpression
+                case 311:  // allElementsTrue
+                case 312:  // anyElementTrue
+                case 313:  // setDifference
+                case 314:  // setEquals
+                case 315:  // setIntersection
+                case 316:  // setIsSubset
+                case 317:  // setUnion
+                case 318:  // trig
+                case 319:  // sin
+                case 320:  // cos
+                case 321:  // tan
+                case 322:  // sinh
+                case 323:  // cosh
+                case 324:  // tanh
+                case 325:  // asin
+                case 326:  // acos
+                case 327:  // atan
+                case 328:  // asinh
+                case 329:  // acosh
+                case 330:  // atanh
+                case 331:  // atan2
+                case 332:  // degreesToRadians
+                case 333:  // radiansToDegrees
+                case 334:  // nonArrayExpression
+                case 335:  // nonArrayCompoundExpression
+                case 336:  // nonArrayNonObjCompoundExpression
+                case 337:  // expressionSingletonArray
+                case 338:  // singleArgExpression
+                case 339:  // match
+                case 340:  // predicates
+                case 341:  // compoundMatchExprs
+                case 342:  // predValue
+                case 343:  // additionalExprs
+                case 349:  // sortSpecs
+                case 350:  // specList
+                case 351:  // metaSort
+                case 352:  // oneOrNegOne
+                case 353:  // metaSortKeyword
                     yylhs.value.emplace<CNode>();
                     break;
 
-                case 155:  // aggregationProjectionFieldname
-                case 156:  // projectionFieldname
-                case 157:  // expressionFieldname
-                case 158:  // stageAsUserFieldname
-                case 159:  // argAsUserFieldname
-                case 160:  // argAsProjectionPath
-                case 161:  // aggExprAsUserFieldname
-                case 162:  // invariableUserFieldname
-                case 163:  // idAsUserFieldname
-                case 164:  // idAsProjectionPath
-                case 165:  // valueFieldname
-                case 166:  // predFieldname
-                case 318:  // logicalExprField
+                case 165:  // aggregationProjectionFieldname
+                case 166:  // projectionFieldname
+                case 167:  // expressionFieldname
+                case 168:  // stageAsUserFieldname
+                case 169:  // argAsUserFieldname
+                case 170:  // argAsProjectionPath
+                case 171:  // aggExprAsUserFieldname
+                case 172:  // invariableUserFieldname
+                case 173:  // idAsUserFieldname
+                case 174:  // idAsProjectionPath
+                case 175:  // valueFieldname
+                case 176:  // predFieldname
+                case 348:  // logicalExprField
                     yylhs.value.emplace<CNode::Fieldname>();
                     break;
 
-                case 137:  // "Date"
+                case 147:  // "Date"
                     yylhs.value.emplace<Date_t>();
                     break;
 
-                case 147:  // "arbitrary decimal"
+                case 157:  // "arbitrary decimal"
                     yylhs.value.emplace<Decimal128>();
                     break;
 
-                case 136:  // "ObjectID"
+                case 146:  // "ObjectID"
                     yylhs.value.emplace<OID>();
                     break;
 
-                case 148:  // "Timestamp"
+                case 158:  // "Timestamp"
                     yylhs.value.emplace<Timestamp>();
                     break;
 
-                case 150:  // "maxKey"
+                case 160:  // "maxKey"
                     yylhs.value.emplace<UserMaxKey>();
                     break;
 
-                case 149:  // "minKey"
+                case 159:  // "minKey"
                     yylhs.value.emplace<UserMinKey>();
                     break;
 
-                case 138:  // "null"
+                case 148:  // "null"
                     yylhs.value.emplace<UserNull>();
                     break;
 
-                case 135:  // "undefined"
+                case 145:  // "undefined"
                     yylhs.value.emplace<UserUndefined>();
                     break;
 
-                case 146:  // "arbitrary double"
+                case 156:  // "arbitrary double"
                     yylhs.value.emplace<double>();
                     break;
 
-                case 144:  // "arbitrary integer"
+                case 154:  // "arbitrary integer"
                     yylhs.value.emplace<int>();
                     break;
 
-                case 145:  // "arbitrary long"
+                case 155:  // "arbitrary long"
                     yylhs.value.emplace<long long>();
                     break;
 
-                case 167:  // projectField
-                case 168:  // projectionObjectField
-                case 169:  // expressionField
-                case 170:  // valueField
-                case 292:  // onErrorArg
-                case 293:  // onNullArg
-                case 294:  // formatArg
-                case 295:  // timezoneArg
-                case 296:  // charsArg
-                case 297:  // optionsArg
-                case 314:  // predicate
-                case 315:  // logicalExpr
-                case 316:  // operatorExpression
-                case 317:  // notExpr
-                case 324:  // sortSpec
+                case 177:  // projectField
+                case 178:  // projectionObjectField
+                case 179:  // expressionField
+                case 180:  // valueField
+                case 301:  // onErrorArg
+                case 302:  // onNullArg
+                case 303:  // formatArg
+                case 304:  // timezoneArg
+                case 305:  // charsArg
+                case 306:  // optionsArg
+                case 344:  // predicate
+                case 345:  // logicalExpr
+                case 346:  // operatorExpression
+                case 347:  // notExpr
+                case 354:  // sortSpec
                     yylhs.value.emplace<std::pair<CNode::Fieldname, CNode>>();
                     break;
 
-                case 128:  // "fieldname"
-                case 130:  // "$-prefixed fieldname"
-                case 131:  // "string"
-                case 132:  // "$-prefixed string"
-                case 133:  // "$$-prefixed string"
-                case 171:  // arg
+                case 138:  // "fieldname"
+                case 140:  // "$-prefixed fieldname"
+                case 141:  // "string"
+                case 142:  // "$-prefixed string"
+                case 143:  // "$$-prefixed string"
+                case 181:  // arg
                     yylhs.value.emplace<std::string>();
                     break;
 
-                case 298:  // expressions
-                case 299:  // values
-                case 300:  // exprZeroToTwo
+                case 307:  // expressions
+                case 308:  // values
+                case 309:  // exprZeroToTwo
                     yylhs.value.emplace<std::vector<CNode>>();
                     break;
 
-                case 129:  // "fieldname containing dotted path"
+                case 139:  // "fieldname containing dotted path"
                     yylhs.value.emplace<std::vector<std::string>>();
                     break;
 
@@ -1799,127 +1899,111 @@ int ParserGen::parse() {
             {
                 switch (yyn) {
                     case 2:
-#line 333 "grammar.yy"
+#line 349 "src/mongo/db/cst/grammar.yy"
                     {
                         *cst = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 1873 "parser_gen.cpp"
+#line 1973 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 3:
-#line 336 "grammar.yy"
+#line 352 "src/mongo/db/cst/grammar.yy"
                     {
                         *cst = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 1881 "parser_gen.cpp"
+#line 1981 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 4:
-#line 339 "grammar.yy"
+#line 355 "src/mongo/db/cst/grammar.yy"
                     {
                         *cst = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 1889 "parser_gen.cpp"
+#line 1989 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 5:
-#line 342 "grammar.yy"
-                    {
-                        *cst = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 1897 "parser_gen.cpp"
-                    break;
-
-                    case 6:
-#line 345 "grammar.yy"
-                    {
-                        *cst = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 1905 "parser_gen.cpp"
-                    break;
-
-                    case 7:
-#line 352 "grammar.yy"
+#line 362 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[1].value.as<CNode>());
                     }
-#line 1913 "parser_gen.cpp"
+#line 1997 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 8:
-#line 358 "grammar.yy"
+                    case 6:
+#line 368 "src/mongo/db/cst/grammar.yy"
                     {
                     }
-#line 1919 "parser_gen.cpp"
+#line 2003 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 9:
-#line 359 "grammar.yy"
+                    case 7:
+#line 369 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() =
                             CNode{CNode::ArrayChildren{YY_MOVE(yystack_[2].value.as<CNode>())}};
                     }
-#line 1927 "parser_gen.cpp"
+#line 2011 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 10:
-#line 367 "grammar.yy"
+                    case 8:
+#line 377 "src/mongo/db/cst/grammar.yy"
                     {
                         lexer.sortObjTokens();
                     }
-#line 1933 "parser_gen.cpp"
+#line 2017 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 10:
+#line 380 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 2023 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 11:
+#line 380 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 2029 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 12:
-#line 370 "grammar.yy"
+#line 380 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 1939 "parser_gen.cpp"
+#line 2035 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 13:
-#line 370 "grammar.yy"
+#line 380 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 1945 "parser_gen.cpp"
+#line 2041 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 14:
-#line 370 "grammar.yy"
+#line 380 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 1951 "parser_gen.cpp"
+#line 2047 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 15:
-#line 370 "grammar.yy"
+#line 380 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 1957 "parser_gen.cpp"
+#line 2053 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 16:
-#line 370 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 1963 "parser_gen.cpp"
-                    break;
-
-                    case 17:
-#line 370 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 1969 "parser_gen.cpp"
-                    break;
-
-                    case 18:
-#line 373 "grammar.yy"
+#line 383 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{std::pair{
                             KeyFieldname::sample,
@@ -1927,20 +2011,20 @@ int ParserGen::parse() {
                                 {KeyFieldname::sizeArg, YY_MOVE(yystack_[1].value.as<CNode>())},
                             }}}}};
                     }
-#line 1981 "parser_gen.cpp"
+#line 2065 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 19:
-#line 383 "grammar.yy"
+                    case 17:
+#line 393 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             std::pair{KeyFieldname::inhibitOptimization, CNode::noopLeaf()}}};
                     }
-#line 1989 "parser_gen.cpp"
+#line 2073 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 20:
-#line 389 "grammar.yy"
+                    case 18:
+#line 399 "src/mongo/db/cst/grammar.yy"
                     {
                         auto pipeline = YY_MOVE(yystack_[1].value.as<CNode>());
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{std::pair{
@@ -1949,61 +2033,61 @@ int ParserGen::parse() {
                                 {KeyFieldname::collArg, YY_MOVE(yystack_[3].value.as<CNode>())},
                                 {KeyFieldname::pipelineArg, std::move(pipeline)}}}}}};
                     }
-#line 2002 "parser_gen.cpp"
+#line 2086 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 19:
+#line 409 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 2092 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 20:
+#line 409 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 2098 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 21:
-#line 399 "grammar.yy"
+#line 409 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 2008 "parser_gen.cpp"
+#line 2104 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 22:
-#line 399 "grammar.yy"
+#line 409 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 2014 "parser_gen.cpp"
+#line 2110 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 23:
-#line 399 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 2020 "parser_gen.cpp"
-                    break;
-
-                    case 24:
-#line 399 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 2026 "parser_gen.cpp"
-                    break;
-
-                    case 25:
-#line 403 "grammar.yy"
+#line 413 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             std::pair{KeyFieldname::skip, YY_MOVE(yystack_[0].value.as<CNode>())}}};
                     }
-#line 2034 "parser_gen.cpp"
+#line 2118 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 26:
-#line 408 "grammar.yy"
+                    case 24:
+#line 418 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{std::pair{
                             KeyFieldname::limit, YY_MOVE(yystack_[0].value.as<CNode>())}}};
                     }
-#line 2042 "parser_gen.cpp"
+#line 2126 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 27:
-#line 413 "grammar.yy"
+                    case 25:
+#line 423 "src/mongo/db/cst/grammar.yy"
                     {
                         auto&& fields = YY_MOVE(yystack_[1].value.as<CNode>());
                         if (auto status =
@@ -2024,48 +2108,48 @@ int ParserGen::parse() {
                             // function.
                             error(yystack_[3].location, inclusion.getStatus().reason());
                     }
-#line 2063 "parser_gen.cpp"
+#line 2147 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 28:
-#line 432 "grammar.yy"
+                    case 26:
+#line 442 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode::noopLeaf();
                     }
-#line 2071 "parser_gen.cpp"
+#line 2155 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 29:
-#line 435 "grammar.yy"
+                    case 27:
+#line 445 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[1].value.as<CNode>());
                         yylhs.value.as<CNode>().objectChildren().emplace_back(
                             YY_MOVE(yystack_[0].value.as<std::pair<CNode::Fieldname, CNode>>()));
                     }
-#line 2080 "parser_gen.cpp"
+#line 2164 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 30:
-#line 442 "grammar.yy"
+                    case 28:
+#line 452 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() = {
                             KeyFieldname::id, YY_MOVE(yystack_[0].value.as<CNode>())};
                     }
-#line 2088 "parser_gen.cpp"
+#line 2172 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 31:
-#line 445 "grammar.yy"
+                    case 29:
+#line 455 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() = {
                             YY_MOVE(yystack_[1].value.as<CNode::Fieldname>()),
                             YY_MOVE(yystack_[0].value.as<CNode>())};
                     }
-#line 2096 "parser_gen.cpp"
+#line 2180 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 32:
-#line 451 "grammar.yy"
+                    case 30:
+#line 461 "src/mongo/db/cst/grammar.yy"
                     {
                         auto projection = YY_MOVE(yystack_[0].value.as<CNode>());
                         yylhs.value.as<CNode>() =
@@ -2082,287 +2166,287 @@ int ParserGen::parse() {
                                       "object project field cannot contain both "
                                       "inclusion and exclusion indicators");
                     }
-#line 2112 "parser_gen.cpp"
+#line 2196 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 31:
+#line 475 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 2202 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 32:
+#line 476 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 2208 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 33:
-#line 465 "grammar.yy"
+#line 477 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 2118 "parser_gen.cpp"
+#line 2214 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 34:
-#line 466 "grammar.yy"
+#line 478 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 2124 "parser_gen.cpp"
+#line 2220 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 35:
-#line 467 "grammar.yy"
+#line 479 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 2130 "parser_gen.cpp"
+#line 2226 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 36:
-#line 468 "grammar.yy"
+#line 480 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 2136 "parser_gen.cpp"
+#line 2232 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 37:
-#line 469 "grammar.yy"
+#line 481 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 2142 "parser_gen.cpp"
+#line 2238 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 38:
-#line 470 "grammar.yy"
+#line 482 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 2148 "parser_gen.cpp"
+#line 2244 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 39:
-#line 471 "grammar.yy"
+#line 483 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 2154 "parser_gen.cpp"
+#line 2250 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 40:
-#line 472 "grammar.yy"
+#line 484 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 2160 "parser_gen.cpp"
+#line 2256 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 41:
-#line 473 "grammar.yy"
+#line 485 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 2166 "parser_gen.cpp"
+#line 2262 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 42:
-#line 474 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 2172 "parser_gen.cpp"
-                    break;
-
-                    case 43:
-#line 475 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 2178 "parser_gen.cpp"
-                    break;
-
-                    case 44:
-#line 476 "grammar.yy"
+#line 486 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{NonZeroKey{1}};
                     }
-#line 2186 "parser_gen.cpp"
+#line 2270 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 45:
-#line 479 "grammar.yy"
+                    case 43:
+#line 489 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{NonZeroKey{-1}};
                     }
-#line 2194 "parser_gen.cpp"
+#line 2278 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 46:
-#line 482 "grammar.yy"
+                    case 44:
+#line 492 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() =
                             CNode{NonZeroKey{YY_MOVE(yystack_[0].value.as<int>())}};
                     }
-#line 2202 "parser_gen.cpp"
+#line 2286 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 47:
-#line 485 "grammar.yy"
+                    case 45:
+#line 495 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{KeyValue::intZeroKey};
                     }
-#line 2210 "parser_gen.cpp"
+#line 2294 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 48:
-#line 488 "grammar.yy"
+                    case 46:
+#line 498 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{NonZeroKey{1ll}};
                     }
-#line 2218 "parser_gen.cpp"
+#line 2302 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 49:
-#line 491 "grammar.yy"
+                    case 47:
+#line 501 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{NonZeroKey{-1ll}};
                     }
-#line 2226 "parser_gen.cpp"
+#line 2310 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 50:
-#line 494 "grammar.yy"
+                    case 48:
+#line 504 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() =
                             CNode{NonZeroKey{YY_MOVE(yystack_[0].value.as<long long>())}};
                     }
-#line 2234 "parser_gen.cpp"
+#line 2318 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 51:
-#line 497 "grammar.yy"
+                    case 49:
+#line 507 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{KeyValue::longZeroKey};
                     }
-#line 2242 "parser_gen.cpp"
+#line 2326 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 52:
-#line 500 "grammar.yy"
+                    case 50:
+#line 510 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{NonZeroKey{1.0}};
                     }
-#line 2250 "parser_gen.cpp"
+#line 2334 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 53:
-#line 503 "grammar.yy"
+                    case 51:
+#line 513 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{NonZeroKey{-1.0}};
                     }
-#line 2258 "parser_gen.cpp"
+#line 2342 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 54:
-#line 506 "grammar.yy"
+                    case 52:
+#line 516 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() =
                             CNode{NonZeroKey{YY_MOVE(yystack_[0].value.as<double>())}};
                     }
-#line 2266 "parser_gen.cpp"
+#line 2350 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 55:
-#line 509 "grammar.yy"
+                    case 53:
+#line 519 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{KeyValue::doubleZeroKey};
                     }
-#line 2274 "parser_gen.cpp"
+#line 2358 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 56:
-#line 512 "grammar.yy"
+                    case 54:
+#line 522 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{NonZeroKey{Decimal128{1.0}}};
                     }
-#line 2282 "parser_gen.cpp"
+#line 2366 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 57:
-#line 515 "grammar.yy"
+                    case 55:
+#line 525 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{NonZeroKey{Decimal128{-1.0}}};
                     }
-#line 2290 "parser_gen.cpp"
+#line 2374 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 58:
-#line 518 "grammar.yy"
+                    case 56:
+#line 528 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() =
                             CNode{NonZeroKey{YY_MOVE(yystack_[0].value.as<Decimal128>())}};
                     }
-#line 2298 "parser_gen.cpp"
+#line 2382 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 59:
-#line 521 "grammar.yy"
+                    case 57:
+#line 531 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{KeyValue::decimalZeroKey};
                     }
-#line 2306 "parser_gen.cpp"
+#line 2390 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 60:
-#line 524 "grammar.yy"
+                    case 58:
+#line 534 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{KeyValue::trueKey};
                     }
-#line 2314 "parser_gen.cpp"
+#line 2398 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 61:
-#line 527 "grammar.yy"
+                    case 59:
+#line 537 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{KeyValue::falseKey};
                     }
-#line 2322 "parser_gen.cpp"
+#line 2406 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 60:
+#line 540 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 2412 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 61:
+#line 541 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 2418 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 62:
-#line 530 "grammar.yy"
+#line 542 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 2328 "parser_gen.cpp"
+#line 2424 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 63:
-#line 531 "grammar.yy"
+#line 543 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 2334 "parser_gen.cpp"
+#line 2430 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 64:
-#line 532 "grammar.yy"
+#line 544 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 2340 "parser_gen.cpp"
+#line 2436 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 65:
-#line 533 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 2346 "parser_gen.cpp"
-                    break;
-
-                    case 66:
-#line 534 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 2352 "parser_gen.cpp"
-                    break;
-
-                    case 67:
-#line 539 "grammar.yy"
+#line 549 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() =
                             YY_MOVE(yystack_[0].value.as<CNode::Fieldname>());
@@ -2372,11 +2456,11 @@ int ParserGen::parse() {
                                   "positional projection forbidden in $project aggregation "
                                   "pipeline stage");
                     }
-#line 2362 "parser_gen.cpp"
+#line 2446 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 68:
-#line 547 "grammar.yy"
+                    case 66:
+#line 557 "src/mongo/db/cst/grammar.yy"
                     {
                         auto components =
                             make_vector<std::string>(YY_MOVE(yystack_[0].value.as<std::string>()));
@@ -2394,20 +2478,20 @@ int ParserGen::parse() {
                             error(yystack_[0].location, positional.getStatus().reason());
                         }
                     }
-#line 2380 "parser_gen.cpp"
+#line 2464 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 69:
-#line 560 "grammar.yy"
+                    case 67:
+#line 570 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() =
                             YY_MOVE(yystack_[0].value.as<CNode::Fieldname>());
                     }
-#line 2386 "parser_gen.cpp"
+#line 2470 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 70:
-#line 561 "grammar.yy"
+                    case 68:
+#line 571 "src/mongo/db/cst/grammar.yy"
                     {
                         auto components = YY_MOVE(yystack_[0].value.as<std::vector<std::string>>());
                         if (auto positional =
@@ -2424,156 +2508,156 @@ int ParserGen::parse() {
                             error(yystack_[0].location, positional.getStatus().reason());
                         }
                     }
-#line 2404 "parser_gen.cpp"
+#line 2488 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 69:
+#line 588 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[1].value.as<CNode>());
+                    }
+#line 2496 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 70:
+#line 595 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = CNode::noopLeaf();
+                        yylhs.value.as<CNode>().objectChildren().emplace_back(
+                            YY_MOVE(yystack_[0].value.as<std::pair<CNode::Fieldname, CNode>>()));
+                    }
+#line 2505 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 71:
-#line 578 "grammar.yy"
+#line 599 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[1].value.as<CNode>());
+                        yylhs.value.as<CNode>().objectChildren().emplace_back(
+                            YY_MOVE(yystack_[0].value.as<std::pair<CNode::Fieldname, CNode>>()));
                     }
-#line 2412 "parser_gen.cpp"
+#line 2514 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 72:
-#line 585 "grammar.yy"
+#line 607 "src/mongo/db/cst/grammar.yy"
                     {
-                        yylhs.value.as<CNode>() = CNode::noopLeaf();
-                        yylhs.value.as<CNode>().objectChildren().emplace_back(
-                            YY_MOVE(yystack_[0].value.as<std::pair<CNode::Fieldname, CNode>>()));
+                        yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() = {
+                            YY_MOVE(yystack_[1].value.as<CNode::Fieldname>()),
+                            YY_MOVE(yystack_[0].value.as<CNode>())};
                     }
-#line 2421 "parser_gen.cpp"
+#line 2522 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 73:
-#line 589 "grammar.yy"
+#line 610 "src/mongo/db/cst/grammar.yy"
                     {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[1].value.as<CNode>());
-                        yylhs.value.as<CNode>().objectChildren().emplace_back(
-                            YY_MOVE(yystack_[0].value.as<std::pair<CNode::Fieldname, CNode>>()));
+                        yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() = {
+                            YY_MOVE(yystack_[1].value.as<CNode::Fieldname>()),
+                            YY_MOVE(yystack_[0].value.as<CNode>())};
                     }
-#line 2430 "parser_gen.cpp"
+#line 2530 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 74:
-#line 597 "grammar.yy"
+#line 616 "src/mongo/db/cst/grammar.yy"
                     {
-                        yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() = {
-                            YY_MOVE(yystack_[1].value.as<CNode::Fieldname>()),
-                            YY_MOVE(yystack_[0].value.as<CNode>())};
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[1].value.as<CNode>());
                     }
-#line 2438 "parser_gen.cpp"
+#line 2538 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 75:
-#line 600 "grammar.yy"
+#line 622 "src/mongo/db/cst/grammar.yy"
                     {
-                        yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() = {
-                            YY_MOVE(yystack_[1].value.as<CNode::Fieldname>()),
-                            YY_MOVE(yystack_[0].value.as<CNode>())};
+                        yylhs.value.as<CNode>() = CNode::noopLeaf();
                     }
-#line 2446 "parser_gen.cpp"
+#line 2546 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 76:
-#line 606 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[1].value.as<CNode>());
-                    }
-#line 2454 "parser_gen.cpp"
-                    break;
-
-                    case 77:
-#line 612 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = CNode::noopLeaf();
-                    }
-#line 2462 "parser_gen.cpp"
-                    break;
-
-                    case 78:
-#line 615 "grammar.yy"
+#line 625 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[1].value.as<CNode>());
                         yylhs.value.as<CNode>().objectChildren().emplace_back(
                             YY_MOVE(yystack_[0].value.as<std::pair<CNode::Fieldname, CNode>>()));
                     }
-#line 2471 "parser_gen.cpp"
+#line 2555 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 79:
-#line 621 "grammar.yy"
+                    case 77:
+#line 631 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() = {
                             YY_MOVE(yystack_[1].value.as<CNode::Fieldname>()),
                             YY_MOVE(yystack_[0].value.as<CNode>())};
                     }
-#line 2479 "parser_gen.cpp"
+#line 2563 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 80:
-#line 624 "grammar.yy"
+                    case 78:
+#line 634 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() =
                             YY_MOVE(yystack_[0].value.as<std::pair<CNode::Fieldname, CNode>>());
                     }
-#line 2487 "parser_gen.cpp"
+#line 2571 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 81:
-#line 633 "grammar.yy"
+                    case 79:
+#line 643 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 2493 "parser_gen.cpp"
+#line 2577 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 82:
-#line 634 "grammar.yy"
+                    case 80:
+#line 644 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[1].value.as<CNode>());
                     }
-#line 2501 "parser_gen.cpp"
+#line 2585 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 83:
-#line 640 "grammar.yy"
+                    case 81:
+#line 650 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode::noopLeaf();
                     }
-#line 2509 "parser_gen.cpp"
+#line 2593 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 84:
-#line 643 "grammar.yy"
+                    case 82:
+#line 653 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[1].value.as<CNode>());
                         yylhs.value.as<CNode>().objectChildren().emplace_back(
                             YY_MOVE(yystack_[0].value.as<std::pair<CNode::Fieldname, CNode>>()));
                     }
-#line 2518 "parser_gen.cpp"
+#line 2602 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 85:
-#line 650 "grammar.yy"
+                    case 83:
+#line 660 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() =
                             YY_MOVE(yystack_[0].value.as<std::pair<CNode::Fieldname, CNode>>());
                     }
-#line 2524 "parser_gen.cpp"
+#line 2608 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 86:
-#line 653 "grammar.yy"
+                    case 84:
+#line 663 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() = std::pair{
                             KeyFieldname::notExpr, YY_MOVE(yystack_[0].value.as<CNode>())};
                     }
-#line 2532 "parser_gen.cpp"
+#line 2616 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 87:
-#line 657 "grammar.yy"
+                    case 85:
+#line 667 "src/mongo/db/cst/grammar.yy"
                     {
                         auto&& exprs = YY_MOVE(yystack_[1].value.as<CNode>());
                         exprs.objectChildren().emplace_back(
@@ -2582,11 +2666,11 @@ int ParserGen::parse() {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() =
                             std::pair{KeyFieldname::notExpr, std::move(exprs)};
                     }
-#line 2543 "parser_gen.cpp"
+#line 2627 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 88:
-#line 666 "grammar.yy"
+                    case 86:
+#line 676 "src/mongo/db/cst/grammar.yy"
                     {
                         auto&& children = YY_MOVE(yystack_[1].value.as<CNode>());
                         children.arrayChildren().emplace_back(
@@ -2594,147 +2678,147 @@ int ParserGen::parse() {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() = {
                             YY_MOVE(yystack_[4].value.as<CNode::Fieldname>()), std::move(children)};
                     }
-#line 2553 "parser_gen.cpp"
+#line 2637 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 89:
-#line 674 "grammar.yy"
+                    case 87:
+#line 684 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = KeyFieldname::andExpr;
                     }
-#line 2559 "parser_gen.cpp"
+#line 2643 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 90:
-#line 675 "grammar.yy"
+                    case 88:
+#line 685 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = KeyFieldname::orExpr;
                     }
-#line 2565 "parser_gen.cpp"
+#line 2649 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 91:
-#line 676 "grammar.yy"
+                    case 89:
+#line 686 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = KeyFieldname::norExpr;
                     }
-#line 2571 "parser_gen.cpp"
+#line 2655 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 92:
-#line 679 "grammar.yy"
+                    case 90:
+#line 689 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ArrayChildren{}};
                     }
-#line 2579 "parser_gen.cpp"
+#line 2663 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 93:
-#line 682 "grammar.yy"
+                    case 91:
+#line 692 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[1].value.as<CNode>());
                         yylhs.value.as<CNode>().arrayChildren().emplace_back(
                             YY_MOVE(yystack_[0].value.as<CNode>()));
                     }
-#line 2588 "parser_gen.cpp"
+#line 2672 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 92:
+#line 699 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode::Fieldname>() =
+                            YY_MOVE(yystack_[0].value.as<CNode::Fieldname>());
+                    }
+#line 2678 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 93:
+#line 699 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode::Fieldname>() =
+                            YY_MOVE(yystack_[0].value.as<CNode::Fieldname>());
+                    }
+#line 2684 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 94:
-#line 689 "grammar.yy"
+#line 699 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() =
                             YY_MOVE(yystack_[0].value.as<CNode::Fieldname>());
                     }
-#line 2594 "parser_gen.cpp"
+#line 2690 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 95:
-#line 689 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode::Fieldname>() =
-                            YY_MOVE(yystack_[0].value.as<CNode::Fieldname>());
-                    }
-#line 2600 "parser_gen.cpp"
-                    break;
-
-                    case 96:
-#line 689 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode::Fieldname>() =
-                            YY_MOVE(yystack_[0].value.as<CNode::Fieldname>());
-                    }
-#line 2606 "parser_gen.cpp"
-                    break;
-
-                    case 97:
-#line 692 "grammar.yy"
+#line 702 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() =
                             UserFieldname{YY_MOVE(yystack_[0].value.as<std::string>())};
                     }
-#line 2614 "parser_gen.cpp"
+#line 2698 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 98:
-#line 700 "grammar.yy"
+                    case 96:
+#line 710 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() =
                             UserFieldname{"$_internalInhibitOptimization"};
                     }
-#line 2622 "parser_gen.cpp"
+#line 2706 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 99:
-#line 703 "grammar.yy"
+                    case 97:
+#line 713 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$unionWith"};
                     }
-#line 2630 "parser_gen.cpp"
+#line 2714 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 100:
-#line 706 "grammar.yy"
+                    case 98:
+#line 716 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$skip"};
                     }
-#line 2638 "parser_gen.cpp"
+#line 2722 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 101:
-#line 709 "grammar.yy"
+                    case 99:
+#line 719 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$limit"};
                     }
-#line 2646 "parser_gen.cpp"
+#line 2730 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 102:
-#line 712 "grammar.yy"
+                    case 100:
+#line 722 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$project"};
                     }
-#line 2654 "parser_gen.cpp"
+#line 2738 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 103:
-#line 715 "grammar.yy"
+                    case 101:
+#line 725 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$sample"};
                     }
-#line 2662 "parser_gen.cpp"
+#line 2746 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 104:
-#line 721 "grammar.yy"
+                    case 102:
+#line 731 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() =
                             UserFieldname{YY_MOVE(yystack_[0].value.as<std::string>())};
                     }
-#line 2670 "parser_gen.cpp"
+#line 2754 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 105:
-#line 727 "grammar.yy"
+                    case 103:
+#line 737 "src/mongo/db/cst/grammar.yy"
                     {
                         auto components =
                             make_vector<std::string>(YY_MOVE(yystack_[0].value.as<std::string>()));
@@ -2752,796 +2836,892 @@ int ParserGen::parse() {
                             error(yystack_[0].location, positional.getStatus().reason());
                         }
                     }
-#line 2688 "parser_gen.cpp"
+#line 2772 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 106:
-#line 746 "grammar.yy"
+                    case 104:
+#line 756 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::string>() = "coll";
                     }
-#line 2696 "parser_gen.cpp"
+#line 2780 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 107:
-#line 749 "grammar.yy"
+                    case 105:
+#line 759 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::string>() = "pipeline";
                     }
-#line 2704 "parser_gen.cpp"
+#line 2788 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 108:
-#line 752 "grammar.yy"
+                    case 106:
+#line 762 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::string>() = "size";
                     }
-#line 2712 "parser_gen.cpp"
+#line 2796 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 109:
-#line 755 "grammar.yy"
+                    case 107:
+#line 765 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::string>() = "input";
                     }
-#line 2720 "parser_gen.cpp"
+#line 2804 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 110:
-#line 758 "grammar.yy"
+                    case 108:
+#line 768 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::string>() = "to";
                     }
-#line 2728 "parser_gen.cpp"
+#line 2812 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 111:
-#line 761 "grammar.yy"
+                    case 109:
+#line 771 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::string>() = "onError";
                     }
-#line 2736 "parser_gen.cpp"
+#line 2820 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 112:
-#line 764 "grammar.yy"
+                    case 110:
+#line 774 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::string>() = "onNull";
                     }
-#line 2744 "parser_gen.cpp"
+#line 2828 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 113:
-#line 767 "grammar.yy"
+                    case 111:
+#line 777 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::string>() = "dateString";
                     }
-#line 2752 "parser_gen.cpp"
+#line 2836 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 114:
-#line 770 "grammar.yy"
+                    case 112:
+#line 780 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::string>() = "format";
                     }
-#line 2760 "parser_gen.cpp"
+#line 2844 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 115:
-#line 773 "grammar.yy"
+                    case 113:
+#line 783 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::string>() = "timezone";
                     }
-#line 2768 "parser_gen.cpp"
+#line 2852 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 116:
-#line 776 "grammar.yy"
+                    case 114:
+#line 786 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::string>() = "date";
                     }
-#line 2776 "parser_gen.cpp"
+#line 2860 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 117:
-#line 779 "grammar.yy"
+                    case 115:
+#line 789 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::string>() = "chars";
                     }
-#line 2784 "parser_gen.cpp"
+#line 2868 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 118:
-#line 782 "grammar.yy"
+                    case 116:
+#line 792 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::string>() = "regex";
                     }
-#line 2792 "parser_gen.cpp"
+#line 2876 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 119:
-#line 785 "grammar.yy"
+                    case 117:
+#line 795 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::string>() = "options";
                     }
-#line 2800 "parser_gen.cpp"
+#line 2884 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 120:
-#line 788 "grammar.yy"
+                    case 118:
+#line 798 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::string>() = "find";
                     }
-#line 2808 "parser_gen.cpp"
+#line 2892 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 121:
-#line 791 "grammar.yy"
+                    case 119:
+#line 801 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::string>() = "replacement";
                     }
-#line 2816 "parser_gen.cpp"
+#line 2900 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 122:
-#line 794 "grammar.yy"
-                    {
-                        yylhs.value.as<std::string>() = UserFieldname{"filter"};
-                    }
-#line 2824 "parser_gen.cpp"
-                    break;
-
-                    case 123:
-#line 797 "grammar.yy"
-                    {
-                        yylhs.value.as<std::string>() = UserFieldname{"q"};
-                    }
-#line 2832 "parser_gen.cpp"
-                    break;
-
-                    case 124:
-#line 805 "grammar.yy"
+                    case 120:
+#line 809 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$add"};
                     }
-#line 2840 "parser_gen.cpp"
+#line 2908 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 125:
-#line 808 "grammar.yy"
+                    case 121:
+#line 812 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$atan2"};
                     }
-#line 2848 "parser_gen.cpp"
+#line 2916 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 126:
-#line 811 "grammar.yy"
+                    case 122:
+#line 815 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$and"};
                     }
-#line 2856 "parser_gen.cpp"
+#line 2924 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 127:
-#line 814 "grammar.yy"
+                    case 123:
+#line 818 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$const"};
                     }
-#line 2864 "parser_gen.cpp"
+#line 2932 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 128:
-#line 817 "grammar.yy"
+                    case 124:
+#line 821 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$literal"};
                     }
-#line 2872 "parser_gen.cpp"
+#line 2940 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 129:
-#line 820 "grammar.yy"
+                    case 125:
+#line 824 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$or"};
                     }
-#line 2880 "parser_gen.cpp"
+#line 2948 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 130:
-#line 823 "grammar.yy"
+                    case 126:
+#line 827 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$not"};
                     }
-#line 2888 "parser_gen.cpp"
+#line 2956 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 131:
-#line 826 "grammar.yy"
+                    case 127:
+#line 830 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$cmp"};
                     }
-#line 2896 "parser_gen.cpp"
+#line 2964 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 132:
-#line 829 "grammar.yy"
+                    case 128:
+#line 833 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$eq"};
                     }
-#line 2904 "parser_gen.cpp"
+#line 2972 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 133:
-#line 832 "grammar.yy"
+                    case 129:
+#line 836 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$gt"};
                     }
-#line 2912 "parser_gen.cpp"
+#line 2980 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 134:
-#line 835 "grammar.yy"
+                    case 130:
+#line 839 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$gte"};
                     }
-#line 2920 "parser_gen.cpp"
+#line 2988 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 135:
-#line 838 "grammar.yy"
+                    case 131:
+#line 842 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$lt"};
                     }
-#line 2928 "parser_gen.cpp"
+#line 2996 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 136:
-#line 841 "grammar.yy"
+                    case 132:
+#line 845 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$lte"};
                     }
-#line 2936 "parser_gen.cpp"
+#line 3004 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 137:
-#line 844 "grammar.yy"
+                    case 133:
+#line 848 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$ne"};
                     }
-#line 2944 "parser_gen.cpp"
+#line 3012 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 138:
-#line 847 "grammar.yy"
+                    case 134:
+#line 851 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$convert"};
                     }
-#line 2952 "parser_gen.cpp"
+#line 3020 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 139:
-#line 850 "grammar.yy"
+                    case 135:
+#line 854 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$toBool"};
                     }
-#line 2960 "parser_gen.cpp"
+#line 3028 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 140:
-#line 853 "grammar.yy"
+                    case 136:
+#line 857 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$toDate"};
                     }
-#line 2968 "parser_gen.cpp"
+#line 3036 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 141:
-#line 856 "grammar.yy"
+                    case 137:
+#line 860 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$toDecimal"};
                     }
-#line 2976 "parser_gen.cpp"
+#line 3044 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 142:
-#line 859 "grammar.yy"
+                    case 138:
+#line 863 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$toDouble"};
                     }
-#line 2984 "parser_gen.cpp"
+#line 3052 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 143:
-#line 862 "grammar.yy"
+                    case 139:
+#line 866 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$toInt"};
                     }
-#line 2992 "parser_gen.cpp"
+#line 3060 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 144:
-#line 865 "grammar.yy"
+                    case 140:
+#line 869 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$toLong"};
                     }
-#line 3000 "parser_gen.cpp"
+#line 3068 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 145:
-#line 868 "grammar.yy"
+                    case 141:
+#line 872 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$toObjectId"};
                     }
-#line 3008 "parser_gen.cpp"
+#line 3076 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 146:
-#line 871 "grammar.yy"
+                    case 142:
+#line 875 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$toString"};
                     }
-#line 3016 "parser_gen.cpp"
+#line 3084 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 147:
-#line 874 "grammar.yy"
+                    case 143:
+#line 878 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$type"};
                     }
-#line 3024 "parser_gen.cpp"
+#line 3092 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 148:
-#line 877 "grammar.yy"
+                    case 144:
+#line 881 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$abs"};
                     }
-#line 3032 "parser_gen.cpp"
+#line 3100 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 149:
-#line 880 "grammar.yy"
+                    case 145:
+#line 884 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$ceil"};
                     }
-#line 3040 "parser_gen.cpp"
+#line 3108 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 150:
-#line 883 "grammar.yy"
+                    case 146:
+#line 887 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$divide"};
                     }
-#line 3048 "parser_gen.cpp"
+#line 3116 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 151:
-#line 886 "grammar.yy"
+                    case 147:
+#line 890 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$exp"};
                     }
-#line 3056 "parser_gen.cpp"
+#line 3124 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 152:
-#line 889 "grammar.yy"
+                    case 148:
+#line 893 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$floor"};
                     }
-#line 3064 "parser_gen.cpp"
+#line 3132 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 153:
-#line 892 "grammar.yy"
+                    case 149:
+#line 896 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$ln"};
                     }
-#line 3072 "parser_gen.cpp"
+#line 3140 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 154:
-#line 895 "grammar.yy"
+                    case 150:
+#line 899 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$log"};
                     }
-#line 3080 "parser_gen.cpp"
+#line 3148 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 155:
-#line 898 "grammar.yy"
+                    case 151:
+#line 902 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$log10"};
                     }
-#line 3088 "parser_gen.cpp"
+#line 3156 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 156:
-#line 901 "grammar.yy"
+                    case 152:
+#line 905 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$mod"};
                     }
-#line 3096 "parser_gen.cpp"
+#line 3164 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 157:
-#line 904 "grammar.yy"
+                    case 153:
+#line 908 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$multiply"};
                     }
-#line 3104 "parser_gen.cpp"
+#line 3172 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 158:
-#line 907 "grammar.yy"
+                    case 154:
+#line 911 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$pow"};
                     }
-#line 3112 "parser_gen.cpp"
+#line 3180 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 159:
-#line 910 "grammar.yy"
+                    case 155:
+#line 914 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$round"};
                     }
-#line 3120 "parser_gen.cpp"
+#line 3188 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 160:
-#line 913 "grammar.yy"
+                    case 156:
+#line 917 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$slice"};
                     }
-#line 3128 "parser_gen.cpp"
+#line 3196 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 161:
-#line 916 "grammar.yy"
+                    case 157:
+#line 920 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$sqrt"};
                     }
-#line 3136 "parser_gen.cpp"
+#line 3204 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 162:
-#line 919 "grammar.yy"
+                    case 158:
+#line 923 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$subtract"};
                     }
-#line 3144 "parser_gen.cpp"
+#line 3212 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 163:
-#line 922 "grammar.yy"
+                    case 159:
+#line 926 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$trunc"};
                     }
-#line 3152 "parser_gen.cpp"
+#line 3220 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 164:
-#line 925 "grammar.yy"
+                    case 160:
+#line 929 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$concat"};
                     }
-#line 3160 "parser_gen.cpp"
+#line 3228 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 165:
-#line 928 "grammar.yy"
+                    case 161:
+#line 932 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$dateFromString"};
                     }
-#line 3168 "parser_gen.cpp"
+#line 3236 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 166:
-#line 931 "grammar.yy"
+                    case 162:
+#line 935 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$dateToString"};
                     }
-#line 3176 "parser_gen.cpp"
+#line 3244 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 167:
-#line 934 "grammar.yy"
+                    case 163:
+#line 938 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$indexOfBytes"};
                     }
-#line 3184 "parser_gen.cpp"
+#line 3252 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 168:
-#line 937 "grammar.yy"
+                    case 164:
+#line 941 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$indexOfCP"};
                     }
-#line 3192 "parser_gen.cpp"
+#line 3260 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 169:
-#line 940 "grammar.yy"
+                    case 165:
+#line 944 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$ltrim"};
                     }
-#line 3200 "parser_gen.cpp"
+#line 3268 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 170:
-#line 943 "grammar.yy"
+                    case 166:
+#line 947 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$meta"};
                     }
-#line 3208 "parser_gen.cpp"
+#line 3276 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 171:
-#line 946 "grammar.yy"
+                    case 167:
+#line 950 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$regexFind"};
                     }
-#line 3216 "parser_gen.cpp"
+#line 3284 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 172:
-#line 949 "grammar.yy"
+                    case 168:
+#line 953 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$regexFindAll"};
                     }
-#line 3224 "parser_gen.cpp"
+#line 3292 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 173:
-#line 952 "grammar.yy"
+                    case 169:
+#line 956 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$regexMatch"};
                     }
-#line 3232 "parser_gen.cpp"
+#line 3300 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 174:
-#line 955 "grammar.yy"
+                    case 170:
+#line 959 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$replaceOne"};
                     }
-#line 3240 "parser_gen.cpp"
+#line 3308 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 175:
-#line 958 "grammar.yy"
+                    case 171:
+#line 962 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$replaceAll"};
                     }
-#line 3248 "parser_gen.cpp"
+#line 3316 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 176:
-#line 961 "grammar.yy"
+                    case 172:
+#line 965 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$rtrim"};
                     }
-#line 3256 "parser_gen.cpp"
+#line 3324 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 177:
-#line 964 "grammar.yy"
+                    case 173:
+#line 968 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$split"};
                     }
-#line 3264 "parser_gen.cpp"
+#line 3332 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 178:
-#line 967 "grammar.yy"
+                    case 174:
+#line 971 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$strLenBytes"};
                     }
-#line 3272 "parser_gen.cpp"
+#line 3340 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 179:
-#line 970 "grammar.yy"
+                    case 175:
+#line 974 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$strLenCP"};
                     }
-#line 3280 "parser_gen.cpp"
+#line 3348 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 180:
-#line 973 "grammar.yy"
+                    case 176:
+#line 977 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$strcasecmp"};
                     }
-#line 3288 "parser_gen.cpp"
+#line 3356 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 181:
-#line 976 "grammar.yy"
+                    case 177:
+#line 980 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$substr"};
                     }
-#line 3296 "parser_gen.cpp"
+#line 3364 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 182:
-#line 979 "grammar.yy"
+                    case 178:
+#line 983 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$substrBytes"};
                     }
-#line 3304 "parser_gen.cpp"
+#line 3372 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 183:
-#line 982 "grammar.yy"
+                    case 179:
+#line 986 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$substrCP"};
                     }
-#line 3312 "parser_gen.cpp"
+#line 3380 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 184:
-#line 985 "grammar.yy"
+                    case 180:
+#line 989 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$toLower"};
                     }
-#line 3320 "parser_gen.cpp"
+#line 3388 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 185:
-#line 988 "grammar.yy"
+                    case 181:
+#line 992 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$trim"};
                     }
-#line 3328 "parser_gen.cpp"
+#line 3396 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 186:
-#line 991 "grammar.yy"
+                    case 182:
+#line 995 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$toUpper"};
                     }
-#line 3336 "parser_gen.cpp"
+#line 3404 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 187:
-#line 994 "grammar.yy"
+                    case 183:
+#line 998 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$allElementsTrue"};
                     }
-#line 3344 "parser_gen.cpp"
+#line 3412 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 188:
-#line 997 "grammar.yy"
+                    case 184:
+#line 1001 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$anyElementTrue"};
                     }
-#line 3352 "parser_gen.cpp"
+#line 3420 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 189:
-#line 1000 "grammar.yy"
+                    case 185:
+#line 1004 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$setDifference"};
                     }
-#line 3360 "parser_gen.cpp"
+#line 3428 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 190:
-#line 1003 "grammar.yy"
+                    case 186:
+#line 1007 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$setEquals"};
                     }
-#line 3368 "parser_gen.cpp"
+#line 3436 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 191:
-#line 1006 "grammar.yy"
+                    case 187:
+#line 1010 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$setIntersection"};
                     }
-#line 3376 "parser_gen.cpp"
+#line 3444 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 192:
-#line 1009 "grammar.yy"
+                    case 188:
+#line 1013 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$setIsSubset"};
                     }
-#line 3384 "parser_gen.cpp"
+#line 3452 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 193:
-#line 1012 "grammar.yy"
+                    case 189:
+#line 1016 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$setUnion"};
                     }
-#line 3392 "parser_gen.cpp"
+#line 3460 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 190:
+#line 1019 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$sin"};
+                    }
+#line 3468 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 191:
+#line 1022 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$cos"};
+                    }
+#line 3476 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 192:
+#line 1025 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$tan"};
+                    }
+#line 3484 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 193:
+#line 1028 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$sinh"};
+                    }
+#line 3492 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 194:
-#line 1019 "grammar.yy"
+#line 1031 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$cosh"};
+                    }
+#line 3500 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 195:
+#line 1034 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$tanh"};
+                    }
+#line 3508 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 196:
+#line 1037 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$asin"};
+                    }
+#line 3516 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 197:
+#line 1040 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$acos"};
+                    }
+#line 3524 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 198:
+#line 1043 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$atan"};
+                    }
+#line 3532 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 199:
+#line 1046 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$asinh"};
+                    }
+#line 3540 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 200:
+#line 1049 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$acosh"};
+                    }
+#line 3548 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 201:
+#line 1052 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$atanh"};
+                    }
+#line 3556 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 202:
+#line 1055 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$degreesToRadians"};
+                    }
+#line 3564 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 203:
+#line 1058 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode::Fieldname>() = UserFieldname{"$radiansToDegrees"};
+                    }
+#line 3572 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 204:
+#line 1065 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() =
                             CNode{UserString{YY_MOVE(yystack_[0].value.as<std::string>())}};
                     }
-#line 3400 "parser_gen.cpp"
+#line 3580 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 195:
-#line 1024 "grammar.yy"
+                    case 205:
+#line 1070 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{UserString{"geoNearDistance"}};
                     }
-#line 3408 "parser_gen.cpp"
+#line 3588 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 196:
-#line 1027 "grammar.yy"
+                    case 206:
+#line 1073 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{UserString{"geoNearPoint"}};
                     }
-#line 3416 "parser_gen.cpp"
+#line 3596 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 197:
-#line 1030 "grammar.yy"
+                    case 207:
+#line 1076 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{UserString{"indexKey"}};
                     }
-#line 3424 "parser_gen.cpp"
+#line 3604 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 198:
-#line 1033 "grammar.yy"
+                    case 208:
+#line 1079 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{UserString{"randVal"}};
                     }
-#line 3432 "parser_gen.cpp"
+#line 3612 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 199:
-#line 1036 "grammar.yy"
+                    case 209:
+#line 1082 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{UserString{"recordId"}};
                     }
-#line 3440 "parser_gen.cpp"
+#line 3620 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 200:
-#line 1039 "grammar.yy"
+                    case 210:
+#line 1085 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{UserString{"searchHighlights"}};
                     }
-#line 3448 "parser_gen.cpp"
+#line 3628 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 201:
-#line 1042 "grammar.yy"
+                    case 211:
+#line 1088 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{UserString{"searchScore"}};
                     }
-#line 3456 "parser_gen.cpp"
+#line 3636 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 202:
-#line 1045 "grammar.yy"
+                    case 212:
+#line 1091 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{UserString{"sortKey"}};
                     }
-#line 3464 "parser_gen.cpp"
+#line 3644 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 203:
-#line 1048 "grammar.yy"
+                    case 213:
+#line 1094 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{UserString{"textScore"}};
                     }
-#line 3472 "parser_gen.cpp"
+#line 3652 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 204:
-#line 1054 "grammar.yy"
+                    case 214:
+#line 1100 "src/mongo/db/cst/grammar.yy"
                     {
                         auto str = YY_MOVE(yystack_[0].value.as<std::string>());
                         auto components = std::vector<std::string>{};
@@ -3552,11 +3732,11 @@ int ParserGen::parse() {
                             error(yystack_[0].location, status.reason());
                         yylhs.value.as<CNode>() = CNode{AggregationPath{std::move(components)}};
                     }
-#line 3488 "parser_gen.cpp"
+#line 3668 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 205:
-#line 1068 "grammar.yy"
+                    case 215:
+#line 1114 "src/mongo/db/cst/grammar.yy"
                     {
                         auto str = YY_MOVE(yystack_[0].value.as<std::string>());
                         auto components = std::vector<std::string>{};
@@ -3570,1030 +3750,1223 @@ int ParserGen::parse() {
                         yylhs.value.as<CNode>() =
                             CNode{AggregationVariablePath{std::move(components)}};
                     }
-#line 3504 "parser_gen.cpp"
+#line 3684 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 206:
-#line 1082 "grammar.yy"
+                    case 216:
+#line 1128 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() =
                             CNode{UserBinary{YY_MOVE(yystack_[0].value.as<BSONBinData>())}};
                     }
-#line 3512 "parser_gen.cpp"
+#line 3692 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 207:
-#line 1088 "grammar.yy"
+                    case 217:
+#line 1134 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{UserUndefined{}};
                     }
-#line 3520 "parser_gen.cpp"
+#line 3700 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 208:
-#line 1094 "grammar.yy"
+                    case 218:
+#line 1140 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{UserObjectId{}};
                     }
-#line 3528 "parser_gen.cpp"
+#line 3708 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 209:
-#line 1100 "grammar.yy"
+                    case 219:
+#line 1146 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() =
                             CNode{UserDate{YY_MOVE(yystack_[0].value.as<Date_t>())}};
                     }
-#line 3536 "parser_gen.cpp"
+#line 3716 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 210:
-#line 1106 "grammar.yy"
+                    case 220:
+#line 1152 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{UserNull{}};
                     }
-#line 3544 "parser_gen.cpp"
+#line 3724 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 211:
-#line 1112 "grammar.yy"
+                    case 221:
+#line 1158 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() =
                             CNode{UserRegex{YY_MOVE(yystack_[0].value.as<BSONRegEx>())}};
                     }
-#line 3552 "parser_gen.cpp"
+#line 3732 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 212:
-#line 1118 "grammar.yy"
+                    case 222:
+#line 1164 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() =
                             CNode{UserDBPointer{YY_MOVE(yystack_[0].value.as<BSONDBRef>())}};
                     }
-#line 3560 "parser_gen.cpp"
+#line 3740 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 213:
-#line 1124 "grammar.yy"
+                    case 223:
+#line 1170 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() =
                             CNode{UserJavascript{YY_MOVE(yystack_[0].value.as<BSONCode>())}};
                     }
-#line 3568 "parser_gen.cpp"
+#line 3748 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 214:
-#line 1130 "grammar.yy"
+                    case 224:
+#line 1176 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() =
                             CNode{UserSymbol{YY_MOVE(yystack_[0].value.as<BSONSymbol>())}};
                     }
-#line 3576 "parser_gen.cpp"
+#line 3756 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 215:
-#line 1136 "grammar.yy"
+                    case 225:
+#line 1182 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{UserJavascriptWithScope{
                             YY_MOVE(yystack_[0].value.as<BSONCodeWScope>())}};
                     }
-#line 3584 "parser_gen.cpp"
+#line 3764 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 216:
-#line 1142 "grammar.yy"
+                    case 226:
+#line 1188 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() =
                             CNode{UserTimestamp{YY_MOVE(yystack_[0].value.as<Timestamp>())}};
                     }
-#line 3592 "parser_gen.cpp"
+#line 3772 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 217:
-#line 1148 "grammar.yy"
+                    case 227:
+#line 1194 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() =
                             CNode{UserMinKey{YY_MOVE(yystack_[0].value.as<UserMinKey>())}};
                     }
-#line 3600 "parser_gen.cpp"
+#line 3780 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 218:
-#line 1154 "grammar.yy"
+                    case 228:
+#line 1200 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() =
                             CNode{UserMaxKey{YY_MOVE(yystack_[0].value.as<UserMaxKey>())}};
                     }
-#line 3608 "parser_gen.cpp"
+#line 3788 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 219:
-#line 1160 "grammar.yy"
+                    case 229:
+#line 1206 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() =
                             CNode{UserInt{YY_MOVE(yystack_[0].value.as<int>())}};
                     }
-#line 3616 "parser_gen.cpp"
+#line 3796 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 220:
-#line 1163 "grammar.yy"
+                    case 230:
+#line 1209 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{UserInt{0}};
                     }
-#line 3624 "parser_gen.cpp"
+#line 3804 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 221:
-#line 1166 "grammar.yy"
+                    case 231:
+#line 1212 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{UserInt{1}};
                     }
-#line 3632 "parser_gen.cpp"
+#line 3812 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 222:
-#line 1169 "grammar.yy"
+                    case 232:
+#line 1215 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{UserInt{-1}};
                     }
-#line 3640 "parser_gen.cpp"
+#line 3820 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 223:
-#line 1175 "grammar.yy"
+                    case 233:
+#line 1221 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() =
                             CNode{UserLong{YY_MOVE(yystack_[0].value.as<long long>())}};
                     }
-#line 3648 "parser_gen.cpp"
+#line 3828 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 224:
-#line 1178 "grammar.yy"
+                    case 234:
+#line 1224 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{UserLong{0ll}};
                     }
-#line 3656 "parser_gen.cpp"
+#line 3836 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 225:
-#line 1181 "grammar.yy"
+                    case 235:
+#line 1227 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{UserLong{1ll}};
                     }
-#line 3664 "parser_gen.cpp"
+#line 3844 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 226:
-#line 1184 "grammar.yy"
+                    case 236:
+#line 1230 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{UserLong{-1ll}};
                     }
-#line 3672 "parser_gen.cpp"
+#line 3852 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 227:
-#line 1190 "grammar.yy"
+                    case 237:
+#line 1236 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() =
                             CNode{UserDouble{YY_MOVE(yystack_[0].value.as<double>())}};
                     }
-#line 3680 "parser_gen.cpp"
+#line 3860 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 228:
-#line 1193 "grammar.yy"
+                    case 238:
+#line 1239 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{UserDouble{0.0}};
                     }
-#line 3688 "parser_gen.cpp"
+#line 3868 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 229:
-#line 1196 "grammar.yy"
+                    case 239:
+#line 1242 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{UserDouble{1.0}};
                     }
-#line 3696 "parser_gen.cpp"
+#line 3876 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 230:
-#line 1199 "grammar.yy"
+                    case 240:
+#line 1245 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{UserDouble{-1.0}};
                     }
-#line 3704 "parser_gen.cpp"
+#line 3884 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 231:
-#line 1205 "grammar.yy"
+                    case 241:
+#line 1251 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() =
                             CNode{UserDecimal{YY_MOVE(yystack_[0].value.as<Decimal128>())}};
                     }
-#line 3712 "parser_gen.cpp"
-                    break;
-
-                    case 232:
-#line 1208 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = CNode{UserDecimal{0.0}};
-                    }
-#line 3720 "parser_gen.cpp"
-                    break;
-
-                    case 233:
-#line 1211 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = CNode{UserDecimal{1.0}};
-                    }
-#line 3728 "parser_gen.cpp"
-                    break;
-
-                    case 234:
-#line 1214 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = CNode{UserDecimal{-1.0}};
-                    }
-#line 3736 "parser_gen.cpp"
-                    break;
-
-                    case 235:
-#line 1220 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = CNode{UserBoolean{true}};
-                    }
-#line 3744 "parser_gen.cpp"
-                    break;
-
-                    case 236:
-#line 1223 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = CNode{UserBoolean{false}};
-                    }
-#line 3752 "parser_gen.cpp"
-                    break;
-
-                    case 237:
-#line 1229 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 3758 "parser_gen.cpp"
-                    break;
-
-                    case 238:
-#line 1230 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 3764 "parser_gen.cpp"
-                    break;
-
-                    case 239:
-#line 1231 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 3770 "parser_gen.cpp"
-                    break;
-
-                    case 240:
-#line 1232 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 3776 "parser_gen.cpp"
-                    break;
-
-                    case 241:
-#line 1233 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 3782 "parser_gen.cpp"
+#line 3892 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 242:
-#line 1234 "grammar.yy"
+#line 1254 "src/mongo/db/cst/grammar.yy"
                     {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                        yylhs.value.as<CNode>() = CNode{UserDecimal{0.0}};
                     }
-#line 3788 "parser_gen.cpp"
+#line 3900 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 243:
-#line 1235 "grammar.yy"
+#line 1257 "src/mongo/db/cst/grammar.yy"
                     {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                        yylhs.value.as<CNode>() = CNode{UserDecimal{1.0}};
                     }
-#line 3794 "parser_gen.cpp"
+#line 3908 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 244:
-#line 1236 "grammar.yy"
+#line 1260 "src/mongo/db/cst/grammar.yy"
                     {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                        yylhs.value.as<CNode>() = CNode{UserDecimal{-1.0}};
                     }
-#line 3800 "parser_gen.cpp"
+#line 3916 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 245:
-#line 1237 "grammar.yy"
+#line 1266 "src/mongo/db/cst/grammar.yy"
                     {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                        yylhs.value.as<CNode>() = CNode{UserBoolean{true}};
                     }
-#line 3806 "parser_gen.cpp"
+#line 3924 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 246:
-#line 1238 "grammar.yy"
+#line 1269 "src/mongo/db/cst/grammar.yy"
                     {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                        yylhs.value.as<CNode>() = CNode{UserBoolean{false}};
                     }
-#line 3812 "parser_gen.cpp"
+#line 3932 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 247:
-#line 1239 "grammar.yy"
+#line 1275 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 3818 "parser_gen.cpp"
+#line 3938 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 248:
-#line 1240 "grammar.yy"
+#line 1276 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 3824 "parser_gen.cpp"
+#line 3944 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 249:
-#line 1241 "grammar.yy"
+#line 1277 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 3830 "parser_gen.cpp"
+#line 3950 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 250:
-#line 1242 "grammar.yy"
+#line 1278 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 3836 "parser_gen.cpp"
+#line 3956 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 251:
-#line 1243 "grammar.yy"
+#line 1279 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 3842 "parser_gen.cpp"
+#line 3962 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 252:
-#line 1244 "grammar.yy"
+#line 1280 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 3848 "parser_gen.cpp"
+#line 3968 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 253:
-#line 1245 "grammar.yy"
+#line 1281 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 3854 "parser_gen.cpp"
+#line 3974 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 254:
-#line 1246 "grammar.yy"
+#line 1282 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 3860 "parser_gen.cpp"
+#line 3980 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 255:
-#line 1247 "grammar.yy"
+#line 1283 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 3866 "parser_gen.cpp"
+#line 3986 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 256:
-#line 1248 "grammar.yy"
+#line 1284 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 3872 "parser_gen.cpp"
+#line 3992 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 257:
-#line 1249 "grammar.yy"
+#line 1285 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 3878 "parser_gen.cpp"
+#line 3998 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 258:
-#line 1256 "grammar.yy"
+#line 1286 "src/mongo/db/cst/grammar.yy"
                     {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 3884 "parser_gen.cpp"
+#line 4004 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
                     case 259:
-#line 1257 "grammar.yy"
+#line 1287 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4010 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 260:
+#line 1288 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4016 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 261:
+#line 1289 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4022 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 262:
+#line 1290 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4028 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 263:
+#line 1291 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4034 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 264:
+#line 1292 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4040 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 265:
+#line 1293 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4046 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 266:
+#line 1294 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4052 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 267:
+#line 1295 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4058 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 268:
+#line 1302 "src/mongo/db/cst/grammar.yy"
+                    {
+                    }
+#line 4064 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 269:
+#line 1303 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::vector<CNode>>() =
                             YY_MOVE(yystack_[0].value.as<std::vector<CNode>>());
                         yylhs.value.as<std::vector<CNode>>().emplace_back(
                             YY_MOVE(yystack_[1].value.as<CNode>()));
                     }
-#line 3893 "parser_gen.cpp"
+#line 4073 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 260:
-#line 1264 "grammar.yy"
+                    case 270:
+#line 1310 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 3899 "parser_gen.cpp"
+#line 4079 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 261:
-#line 1264 "grammar.yy"
+                    case 271:
+#line 1310 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 3905 "parser_gen.cpp"
+#line 4085 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 262:
-#line 1264 "grammar.yy"
+                    case 272:
+#line 1310 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 3911 "parser_gen.cpp"
+#line 4091 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 263:
-#line 1269 "grammar.yy"
+                    case 273:
+#line 1310 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4097 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 274:
+#line 1314 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4103 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 275:
+#line 1314 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4109 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 276:
+#line 1318 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4115 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 277:
+#line 1318 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4121 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 278:
+#line 1322 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4127 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 279:
+#line 1322 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4133 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 280:
+#line 1322 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4139 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 281:
+#line 1322 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4145 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 282:
+#line 1322 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4151 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 283:
+#line 1322 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4157 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 284:
+#line 1322 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4163 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 285:
+#line 1323 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4169 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 286:
+#line 1323 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4175 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 287:
+#line 1323 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4181 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 288:
+#line 1328 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() =
                             CNode{CNode::ArrayChildren{YY_MOVE(yystack_[2].value.as<CNode>()),
                                                        YY_MOVE(yystack_[1].value.as<CNode>())}};
                     }
-#line 3919 "parser_gen.cpp"
+#line 4189 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 264:
-#line 1276 "grammar.yy"
+                    case 289:
+#line 1335 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() =
                             CNode{CNode::ArrayChildren{YY_MOVE(yystack_[3].value.as<CNode>()),
                                                        YY_MOVE(yystack_[2].value.as<CNode>()),
                                                        YY_MOVE(yystack_[1].value.as<CNode>())}};
                     }
-#line 3927 "parser_gen.cpp"
+#line 4197 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 265:
-#line 1282 "grammar.yy"
+                    case 290:
+#line 1341 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 3933 "parser_gen.cpp"
+#line 4203 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 266:
-#line 1282 "grammar.yy"
+                    case 291:
+#line 1341 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 3939 "parser_gen.cpp"
+#line 4209 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 267:
-#line 1282 "grammar.yy"
+                    case 292:
+#line 1345 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 3945 "parser_gen.cpp"
+#line 4215 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 268:
-#line 1282 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 3951 "parser_gen.cpp"
-                    break;
-
-                    case 269:
-#line 1282 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 3957 "parser_gen.cpp"
-                    break;
-
-                    case 270:
-#line 1283 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 3963 "parser_gen.cpp"
-                    break;
-
-                    case 271:
-#line 1283 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 3969 "parser_gen.cpp"
-                    break;
-
-                    case 272:
-#line 1283 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 3975 "parser_gen.cpp"
-                    break;
-
-                    case 273:
-#line 1283 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 3981 "parser_gen.cpp"
-                    break;
-
-                    case 274:
-#line 1283 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 3987 "parser_gen.cpp"
-                    break;
-
-                    case 275:
-#line 1287 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 3993 "parser_gen.cpp"
-                    break;
-
-                    case 276:
-#line 1291 "grammar.yy"
+                    case 293:
+#line 1349 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::slice, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 4002 "parser_gen.cpp"
+#line 4224 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 277:
-#line 1295 "grammar.yy"
+                    case 294:
+#line 1353 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::slice, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 4011 "parser_gen.cpp"
+#line 4233 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 278:
-#line 1304 "grammar.yy"
+                    case 295:
+#line 1362 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() =
                             CNode{YY_MOVE(yystack_[1].value.as<std::vector<CNode>>())};
                     }
-#line 4019 "parser_gen.cpp"
+#line 4241 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 279:
-#line 1312 "grammar.yy"
+                    case 296:
+#line 1369 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() =
+                            CNode{CNode::ArrayChildren{YY_MOVE(yystack_[1].value.as<CNode>())}};
+                    }
+#line 4249 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 297:
+#line 1374 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4255 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 298:
+#line 1374 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4261 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 299:
+#line 1379 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[1].value.as<CNode>());
                     }
-#line 4027 "parser_gen.cpp"
+#line 4269 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 280:
-#line 1318 "grammar.yy"
+                    case 300:
+#line 1385 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode::noopLeaf();
                     }
-#line 4035 "parser_gen.cpp"
+#line 4277 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 281:
-#line 1321 "grammar.yy"
+                    case 301:
+#line 1388 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[1].value.as<CNode>());
                         yylhs.value.as<CNode>().objectChildren().emplace_back(
                             YY_MOVE(yystack_[0].value.as<std::pair<CNode::Fieldname, CNode>>()));
                     }
-#line 4044 "parser_gen.cpp"
+#line 4286 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 282:
-#line 1328 "grammar.yy"
+                    case 302:
+#line 1395 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() = {
                             YY_MOVE(yystack_[1].value.as<CNode::Fieldname>()),
                             YY_MOVE(yystack_[0].value.as<CNode>())};
                     }
-#line 4052 "parser_gen.cpp"
+#line 4294 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 283:
-#line 1335 "grammar.yy"
+                    case 303:
+#line 1402 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() =
                             YY_MOVE(yystack_[0].value.as<CNode::Fieldname>());
                     }
-#line 4058 "parser_gen.cpp"
+#line 4300 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 284:
-#line 1335 "grammar.yy"
+                    case 304:
+#line 1402 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() =
                             YY_MOVE(yystack_[0].value.as<CNode::Fieldname>());
                     }
-#line 4064 "parser_gen.cpp"
+#line 4306 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 285:
-#line 1335 "grammar.yy"
+                    case 305:
+#line 1402 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() =
                             YY_MOVE(yystack_[0].value.as<CNode::Fieldname>());
                     }
-#line 4070 "parser_gen.cpp"
+#line 4312 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 286:
-#line 1335 "grammar.yy"
+                    case 306:
+#line 1402 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() =
                             YY_MOVE(yystack_[0].value.as<CNode::Fieldname>());
                     }
-#line 4076 "parser_gen.cpp"
+#line 4318 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 287:
-#line 1339 "grammar.yy"
+                    case 307:
+#line 1406 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() = UserFieldname{"_id"};
                     }
-#line 4084 "parser_gen.cpp"
+#line 4326 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 288:
-#line 1345 "grammar.yy"
+                    case 308:
+#line 1412 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() =
                             ProjectionPath{make_vector<std::string>("_id")};
                     }
-#line 4092 "parser_gen.cpp"
+#line 4334 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 289:
-#line 1351 "grammar.yy"
+                    case 309:
+#line 1418 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4098 "parser_gen.cpp"
+#line 4340 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 290:
-#line 1351 "grammar.yy"
+                    case 310:
+#line 1418 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4104 "parser_gen.cpp"
+#line 4346 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 291:
-#line 1351 "grammar.yy"
+                    case 311:
+#line 1418 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4110 "parser_gen.cpp"
+#line 4352 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 292:
-#line 1351 "grammar.yy"
+                    case 312:
+#line 1418 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4116 "parser_gen.cpp"
+#line 4358 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 293:
-#line 1351 "grammar.yy"
+                    case 313:
+#line 1418 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4122 "parser_gen.cpp"
+#line 4364 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 294:
-#line 1351 "grammar.yy"
+                    case 314:
+#line 1418 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4128 "parser_gen.cpp"
+#line 4370 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 295:
-#line 1351 "grammar.yy"
+                    case 315:
+#line 1418 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4134 "parser_gen.cpp"
+#line 4376 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 296:
-#line 1351 "grammar.yy"
+                    case 316:
+#line 1418 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4140 "parser_gen.cpp"
+#line 4382 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 297:
-#line 1351 "grammar.yy"
+                    case 317:
+#line 1418 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4146 "parser_gen.cpp"
+#line 4388 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 298:
-#line 1351 "grammar.yy"
+                    case 318:
+#line 1418 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4152 "parser_gen.cpp"
+#line 4394 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 299:
-#line 1351 "grammar.yy"
+                    case 319:
+#line 1418 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4158 "parser_gen.cpp"
+#line 4400 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 300:
-#line 1351 "grammar.yy"
+                    case 320:
+#line 1418 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4164 "parser_gen.cpp"
+#line 4406 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 301:
-#line 1351 "grammar.yy"
+                    case 321:
+#line 1419 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4170 "parser_gen.cpp"
+#line 4412 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 302:
-#line 1352 "grammar.yy"
+                    case 322:
+#line 1419 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4176 "parser_gen.cpp"
+#line 4418 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 303:
-#line 1352 "grammar.yy"
+                    case 323:
+#line 1419 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4182 "parser_gen.cpp"
+#line 4424 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 304:
-#line 1352 "grammar.yy"
+                    case 324:
+#line 1419 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4188 "parser_gen.cpp"
+#line 4430 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 305:
-#line 1352 "grammar.yy"
-                    {
-                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
-                    }
-#line 4194 "parser_gen.cpp"
-                    break;
-
-                    case 306:
-#line 1356 "grammar.yy"
+                    case 325:
+#line 1423 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::meta, CNode{KeyValue::geoNearDistance}}}};
                     }
-#line 4202 "parser_gen.cpp"
+#line 4438 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 307:
-#line 1359 "grammar.yy"
+                    case 326:
+#line 1426 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::meta, CNode{KeyValue::geoNearPoint}}}};
                     }
-#line 4210 "parser_gen.cpp"
+#line 4446 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 308:
-#line 1362 "grammar.yy"
+                    case 327:
+#line 1429 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{
                             CNode::ObjectChildren{{KeyFieldname::meta, CNode{KeyValue::indexKey}}}};
                     }
-#line 4218 "parser_gen.cpp"
+#line 4454 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 309:
-#line 1365 "grammar.yy"
+                    case 328:
+#line 1432 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{
                             CNode::ObjectChildren{{KeyFieldname::meta, CNode{KeyValue::randVal}}}};
                     }
-#line 4226 "parser_gen.cpp"
+#line 4462 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 310:
-#line 1368 "grammar.yy"
+                    case 329:
+#line 1435 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{
                             CNode::ObjectChildren{{KeyFieldname::meta, CNode{KeyValue::recordId}}}};
                     }
-#line 4234 "parser_gen.cpp"
+#line 4470 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 311:
-#line 1371 "grammar.yy"
+                    case 330:
+#line 1438 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::meta, CNode{KeyValue::searchHighlights}}}};
                     }
-#line 4242 "parser_gen.cpp"
+#line 4478 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 312:
-#line 1374 "grammar.yy"
+                    case 331:
+#line 1441 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::meta, CNode{KeyValue::searchScore}}}};
                     }
-#line 4250 "parser_gen.cpp"
+#line 4486 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 313:
-#line 1377 "grammar.yy"
+                    case 332:
+#line 1444 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{
                             CNode::ObjectChildren{{KeyFieldname::meta, CNode{KeyValue::sortKey}}}};
                     }
-#line 4258 "parser_gen.cpp"
+#line 4494 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 314:
-#line 1380 "grammar.yy"
+                    case 333:
+#line 1447 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::meta, CNode{KeyValue::textScore}}}};
                     }
-#line 4266 "parser_gen.cpp"
+#line 4502 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 315:
-#line 1386 "grammar.yy"
+                    case 334:
+#line 1452 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4508 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 335:
+#line 1452 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4514 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 336:
+#line 1452 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4520 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 337:
+#line 1452 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4526 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 338:
+#line 1452 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4532 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 339:
+#line 1452 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4538 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 340:
+#line 1452 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4544 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 341:
+#line 1452 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4550 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 342:
+#line 1452 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4556 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 343:
+#line 1452 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4562 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 344:
+#line 1452 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4568 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 345:
+#line 1452 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4574 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 346:
+#line 1452 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4580 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 347:
+#line 1453 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4586 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 348:
+#line 1453 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
+                    }
+#line 4592 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 349:
+#line 1457 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::add, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 4275 "parser_gen.cpp"
+#line 4601 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 316:
-#line 1393 "grammar.yy"
+                    case 350:
+#line 1464 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::atan2, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 4284 "parser_gen.cpp"
+#line 4610 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 317:
-#line 1399 "grammar.yy"
+                    case 351:
+#line 1470 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::abs, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 4292 "parser_gen.cpp"
+#line 4618 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 318:
-#line 1404 "grammar.yy"
+                    case 352:
+#line 1475 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::ceil, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 4300 "parser_gen.cpp"
+#line 4626 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 319:
-#line 1409 "grammar.yy"
+                    case 353:
+#line 1480 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::divide,
                              CNode{CNode::ArrayChildren{YY_MOVE(yystack_[3].value.as<CNode>()),
                                                         YY_MOVE(yystack_[2].value.as<CNode>())}}}}};
                     }
-#line 4309 "parser_gen.cpp"
+#line 4635 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 320:
-#line 1415 "grammar.yy"
+                    case 354:
+#line 1486 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::exponent, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 4317 "parser_gen.cpp"
+#line 4643 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 321:
-#line 1420 "grammar.yy"
+                    case 355:
+#line 1491 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::floor, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 4325 "parser_gen.cpp"
+#line 4651 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 322:
-#line 1425 "grammar.yy"
+                    case 356:
+#line 1496 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::ln, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 4333 "parser_gen.cpp"
+#line 4659 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 323:
-#line 1430 "grammar.yy"
+                    case 357:
+#line 1501 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::log,
                              CNode{CNode::ArrayChildren{YY_MOVE(yystack_[3].value.as<CNode>()),
                                                         YY_MOVE(yystack_[2].value.as<CNode>())}}}}};
                     }
-#line 4342 "parser_gen.cpp"
+#line 4668 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 324:
-#line 1436 "grammar.yy"
+                    case 358:
+#line 1507 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::logten, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 4350 "parser_gen.cpp"
+#line 4676 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 325:
-#line 1441 "grammar.yy"
+                    case 359:
+#line 1512 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::mod,
                              CNode{CNode::ArrayChildren{YY_MOVE(yystack_[3].value.as<CNode>()),
                                                         YY_MOVE(yystack_[2].value.as<CNode>())}}}}};
                     }
-#line 4359 "parser_gen.cpp"
+#line 4685 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 326:
-#line 1447 "grammar.yy"
+                    case 360:
+#line 1518 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::multiply,
@@ -4604,292 +4977,420 @@ int ParserGen::parse() {
                             yylhs.value.as<CNode>().objectChildren()[0].second.arrayChildren();
                         array.insert(array.end(), others.begin(), others.end());
                     }
-#line 4371 "parser_gen.cpp"
+#line 4697 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 327:
-#line 1456 "grammar.yy"
+                    case 361:
+#line 1527 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::pow,
                              CNode{CNode::ArrayChildren{YY_MOVE(yystack_[3].value.as<CNode>()),
                                                         YY_MOVE(yystack_[2].value.as<CNode>())}}}}};
                     }
-#line 4380 "parser_gen.cpp"
+#line 4706 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 328:
-#line 1462 "grammar.yy"
+                    case 362:
+#line 1533 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::round,
                              CNode{CNode::ArrayChildren{YY_MOVE(yystack_[3].value.as<CNode>()),
                                                         YY_MOVE(yystack_[2].value.as<CNode>())}}}}};
                     }
-#line 4389 "parser_gen.cpp"
+#line 4715 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 329:
-#line 1468 "grammar.yy"
+                    case 363:
+#line 1539 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::sqrt, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 4397 "parser_gen.cpp"
+#line 4723 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 330:
-#line 1473 "grammar.yy"
+                    case 364:
+#line 1544 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::subtract,
                              CNode{CNode::ArrayChildren{YY_MOVE(yystack_[3].value.as<CNode>()),
                                                         YY_MOVE(yystack_[2].value.as<CNode>())}}}}};
                     }
-#line 4406 "parser_gen.cpp"
+#line 4732 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 331:
-#line 1479 "grammar.yy"
+                    case 365:
+#line 1550 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::trunc,
                              CNode{CNode::ArrayChildren{YY_MOVE(yystack_[3].value.as<CNode>()),
                                                         YY_MOVE(yystack_[2].value.as<CNode>())}}}}};
                     }
-#line 4415 "parser_gen.cpp"
+#line 4741 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 332:
-#line 1485 "grammar.yy"
+                    case 366:
+#line 1556 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
+                            {KeyFieldname::sin, YY_MOVE(yystack_[1].value.as<CNode>())}}};
+                    }
+#line 4749 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 367:
+#line 1561 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
+                            {KeyFieldname::cos, YY_MOVE(yystack_[1].value.as<CNode>())}}};
+                    }
+#line 4757 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 368:
+#line 1566 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
+                            {KeyFieldname::tan, YY_MOVE(yystack_[1].value.as<CNode>())}}};
+                    }
+#line 4765 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 369:
+#line 1571 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
+                            {KeyFieldname::sinh, YY_MOVE(yystack_[1].value.as<CNode>())}}};
+                    }
+#line 4773 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 370:
+#line 1576 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
+                            {KeyFieldname::cosh, YY_MOVE(yystack_[1].value.as<CNode>())}}};
+                    }
+#line 4781 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 371:
+#line 1581 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
+                            {KeyFieldname::tanh, YY_MOVE(yystack_[1].value.as<CNode>())}}};
+                    }
+#line 4789 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 372:
+#line 1586 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
+                            {KeyFieldname::asin, YY_MOVE(yystack_[1].value.as<CNode>())}}};
+                    }
+#line 4797 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 373:
+#line 1591 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
+                            {KeyFieldname::acos, YY_MOVE(yystack_[1].value.as<CNode>())}}};
+                    }
+#line 4805 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 374:
+#line 1596 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
+                            {KeyFieldname::atan, YY_MOVE(yystack_[1].value.as<CNode>())}}};
+                    }
+#line 4813 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 375:
+#line 1601 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
+                            {KeyFieldname::asinh, YY_MOVE(yystack_[1].value.as<CNode>())}}};
+                    }
+#line 4821 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 376:
+#line 1606 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
+                            {KeyFieldname::acosh, YY_MOVE(yystack_[1].value.as<CNode>())}}};
+                    }
+#line 4829 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 377:
+#line 1611 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
+                            {KeyFieldname::atanh, YY_MOVE(yystack_[1].value.as<CNode>())}}};
+                    }
+#line 4837 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 378:
+#line 1616 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() =
+                            CNode{CNode::ObjectChildren{{KeyFieldname::degreesToRadians,
+                                                         YY_MOVE(yystack_[1].value.as<CNode>())}}};
+                    }
+#line 4845 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 379:
+#line 1621 "src/mongo/db/cst/grammar.yy"
+                    {
+                        yylhs.value.as<CNode>() =
+                            CNode{CNode::ObjectChildren{{KeyFieldname::radiansToDegrees,
+                                                         YY_MOVE(yystack_[1].value.as<CNode>())}}};
+                    }
+#line 4853 "src/mongo/db/cst/parser_gen.cpp"
+                    break;
+
+                    case 380:
+#line 1627 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4421 "parser_gen.cpp"
+#line 4859 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 333:
-#line 1485 "grammar.yy"
+                    case 381:
+#line 1627 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4427 "parser_gen.cpp"
+#line 4865 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 334:
-#line 1485 "grammar.yy"
+                    case 382:
+#line 1627 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4433 "parser_gen.cpp"
+#line 4871 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 335:
-#line 1489 "grammar.yy"
+                    case 383:
+#line 1631 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::andExpr, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 4442 "parser_gen.cpp"
+#line 4880 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 336:
-#line 1496 "grammar.yy"
+                    case 384:
+#line 1638 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::orExpr, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 4451 "parser_gen.cpp"
+#line 4889 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 337:
-#line 1503 "grammar.yy"
+                    case 385:
+#line 1645 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::notExpr,
                              CNode{CNode::ArrayChildren{YY_MOVE(yystack_[2].value.as<CNode>())}}}}};
                     }
-#line 4460 "parser_gen.cpp"
+#line 4898 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 338:
-#line 1510 "grammar.yy"
+                    case 386:
+#line 1652 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4466 "parser_gen.cpp"
+#line 4904 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 339:
-#line 1510 "grammar.yy"
+                    case 387:
+#line 1652 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4472 "parser_gen.cpp"
+#line 4910 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 340:
-#line 1510 "grammar.yy"
+                    case 388:
+#line 1652 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4478 "parser_gen.cpp"
+#line 4916 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 341:
-#line 1510 "grammar.yy"
+                    case 389:
+#line 1652 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4484 "parser_gen.cpp"
+#line 4922 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 342:
-#line 1510 "grammar.yy"
+                    case 390:
+#line 1652 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4490 "parser_gen.cpp"
+#line 4928 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 343:
-#line 1510 "grammar.yy"
+                    case 391:
+#line 1652 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4496 "parser_gen.cpp"
+#line 4934 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 344:
-#line 1510 "grammar.yy"
+                    case 392:
+#line 1652 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4502 "parser_gen.cpp"
+#line 4940 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 345:
-#line 1511 "grammar.yy"
+                    case 393:
+#line 1653 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4508 "parser_gen.cpp"
+#line 4946 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 346:
-#line 1511 "grammar.yy"
+                    case 394:
+#line 1653 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4514 "parser_gen.cpp"
+#line 4952 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 347:
-#line 1511 "grammar.yy"
+                    case 395:
+#line 1653 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4520 "parser_gen.cpp"
+#line 4958 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 348:
-#line 1511 "grammar.yy"
+                    case 396:
+#line 1653 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4526 "parser_gen.cpp"
+#line 4964 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 349:
-#line 1511 "grammar.yy"
+                    case 397:
+#line 1653 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4532 "parser_gen.cpp"
+#line 4970 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 350:
-#line 1511 "grammar.yy"
+                    case 398:
+#line 1653 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4538 "parser_gen.cpp"
+#line 4976 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 351:
-#line 1511 "grammar.yy"
+                    case 399:
+#line 1653 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4544 "parser_gen.cpp"
+#line 4982 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 352:
-#line 1511 "grammar.yy"
+                    case 400:
+#line 1653 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4550 "parser_gen.cpp"
+#line 4988 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 353:
-#line 1512 "grammar.yy"
+                    case 401:
+#line 1654 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4556 "parser_gen.cpp"
+#line 4994 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 354:
-#line 1512 "grammar.yy"
+                    case 402:
+#line 1654 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4562 "parser_gen.cpp"
+#line 5000 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 355:
-#line 1512 "grammar.yy"
+                    case 403:
+#line 1654 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4568 "parser_gen.cpp"
+#line 5006 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 356:
-#line 1512 "grammar.yy"
+                    case 404:
+#line 1654 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4574 "parser_gen.cpp"
+#line 5012 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 357:
-#line 1512 "grammar.yy"
+                    case 405:
+#line 1654 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4580 "parser_gen.cpp"
+#line 5018 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 358:
-#line 1512 "grammar.yy"
+                    case 406:
+#line 1654 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4586 "parser_gen.cpp"
+#line 5024 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 359:
-#line 1512 "grammar.yy"
+                    case 407:
+#line 1654 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 4592 "parser_gen.cpp"
+#line 5030 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 360:
-#line 1516 "grammar.yy"
+                    case 408:
+#line 1658 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::concat, CNode{CNode::ArrayChildren{}}}}};
@@ -4898,47 +5399,47 @@ int ParserGen::parse() {
                             yylhs.value.as<CNode>().objectChildren()[0].second.arrayChildren();
                         array.insert(array.end(), others.begin(), others.end());
                     }
-#line 4604 "parser_gen.cpp"
+#line 5042 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 361:
-#line 1526 "grammar.yy"
+                    case 409:
+#line 1668 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() =
                             std::pair{KeyFieldname::formatArg, CNode{KeyValue::absentKey}};
                     }
-#line 4612 "parser_gen.cpp"
+#line 5050 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 362:
-#line 1529 "grammar.yy"
+                    case 410:
+#line 1671 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() = std::pair{
                             KeyFieldname::formatArg, YY_MOVE(yystack_[0].value.as<CNode>())};
                     }
-#line 4620 "parser_gen.cpp"
+#line 5058 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 363:
-#line 1535 "grammar.yy"
+                    case 411:
+#line 1677 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() =
                             std::pair{KeyFieldname::timezoneArg, CNode{KeyValue::absentKey}};
                     }
-#line 4628 "parser_gen.cpp"
+#line 5066 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 364:
-#line 1538 "grammar.yy"
+                    case 412:
+#line 1680 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() = std::pair{
                             KeyFieldname::timezoneArg, YY_MOVE(yystack_[0].value.as<CNode>())};
                     }
-#line 4636 "parser_gen.cpp"
+#line 5074 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 365:
-#line 1545 "grammar.yy"
+                    case 413:
+#line 1687 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::dateFromString,
@@ -4954,11 +5455,11 @@ int ParserGen::parse() {
                                  YY_MOVE(yystack_[2]
                                              .value.as<std::pair<CNode::Fieldname, CNode>>())}}}}};
                     }
-#line 4646 "parser_gen.cpp"
+#line 5084 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 366:
-#line 1554 "grammar.yy"
+                    case 414:
+#line 1696 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::dateToString,
@@ -4971,38 +5472,38 @@ int ParserGen::parse() {
                                  YY_MOVE(yystack_[2]
                                              .value.as<std::pair<CNode::Fieldname, CNode>>())}}}}};
                     }
-#line 4656 "parser_gen.cpp"
+#line 5094 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 367:
-#line 1562 "grammar.yy"
+                    case 415:
+#line 1704 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::vector<CNode>>() = CNode::ArrayChildren{};
                     }
-#line 4664 "parser_gen.cpp"
+#line 5102 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 368:
-#line 1565 "grammar.yy"
+                    case 416:
+#line 1707 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::vector<CNode>>() =
                             CNode::ArrayChildren{YY_MOVE(yystack_[0].value.as<CNode>())};
                     }
-#line 4672 "parser_gen.cpp"
+#line 5110 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 369:
-#line 1568 "grammar.yy"
+                    case 417:
+#line 1710 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::vector<CNode>>() =
                             CNode::ArrayChildren{YY_MOVE(yystack_[1].value.as<CNode>()),
                                                  YY_MOVE(yystack_[0].value.as<CNode>())};
                     }
-#line 4680 "parser_gen.cpp"
+#line 5118 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 370:
-#line 1575 "grammar.yy"
+                    case 418:
+#line 1717 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::indexOfBytes,
@@ -5013,11 +5514,11 @@ int ParserGen::parse() {
                             yylhs.value.as<CNode>().objectChildren()[0].second.arrayChildren();
                         array.insert(array.end(), others.begin(), others.end());
                     }
-#line 4692 "parser_gen.cpp"
+#line 5130 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 371:
-#line 1586 "grammar.yy"
+                    case 419:
+#line 1728 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::indexOfCP,
@@ -5028,29 +5529,29 @@ int ParserGen::parse() {
                             yylhs.value.as<CNode>().objectChildren()[0].second.arrayChildren();
                         array.insert(array.end(), others.begin(), others.end());
                     }
-#line 4704 "parser_gen.cpp"
+#line 5142 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 372:
-#line 1596 "grammar.yy"
+                    case 420:
+#line 1738 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() =
                             std::pair{KeyFieldname::charsArg, CNode{KeyValue::absentKey}};
                     }
-#line 4712 "parser_gen.cpp"
+#line 5150 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 373:
-#line 1599 "grammar.yy"
+                    case 421:
+#line 1741 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() = std::pair{
                             KeyFieldname::charsArg, YY_MOVE(yystack_[0].value.as<CNode>())};
                     }
-#line 4720 "parser_gen.cpp"
+#line 5158 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 374:
-#line 1605 "grammar.yy"
+                    case 422:
+#line 1747 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::ltrim,
@@ -5059,11 +5560,11 @@ int ParserGen::parse() {
                                  YY_MOVE(yystack_[4]
                                              .value.as<std::pair<CNode::Fieldname, CNode>>())}}}}};
                     }
-#line 4730 "parser_gen.cpp"
+#line 5168 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 375:
-#line 1613 "grammar.yy"
+                    case 423:
+#line 1755 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::rtrim,
@@ -5072,11 +5573,11 @@ int ParserGen::parse() {
                                  YY_MOVE(yystack_[4]
                                              .value.as<std::pair<CNode::Fieldname, CNode>>())}}}}};
                     }
-#line 4740 "parser_gen.cpp"
+#line 5178 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 376:
-#line 1621 "grammar.yy"
+                    case 424:
+#line 1763 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::trim,
@@ -5085,29 +5586,29 @@ int ParserGen::parse() {
                                  YY_MOVE(yystack_[4]
                                              .value.as<std::pair<CNode::Fieldname, CNode>>())}}}}};
                     }
-#line 4750 "parser_gen.cpp"
+#line 5188 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 377:
-#line 1629 "grammar.yy"
+                    case 425:
+#line 1771 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() =
                             std::pair{KeyFieldname::optionsArg, CNode{KeyValue::absentKey}};
                     }
-#line 4758 "parser_gen.cpp"
+#line 5196 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 378:
-#line 1632 "grammar.yy"
+                    case 426:
+#line 1774 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() = std::pair{
                             KeyFieldname::optionsArg, YY_MOVE(yystack_[0].value.as<CNode>())};
                     }
-#line 4766 "parser_gen.cpp"
+#line 5204 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 379:
-#line 1637 "grammar.yy"
+                    case 427:
+#line 1779 "src/mongo/db/cst/grammar.yy"
                     {
                         // Note that the order of these arguments must match the constructor for the
                         // regex expression.
@@ -5116,38 +5617,38 @@ int ParserGen::parse() {
                             {KeyFieldname::regexArg, YY_MOVE(yystack_[1].value.as<CNode>())},
                             YY_MOVE(yystack_[3].value.as<std::pair<CNode::Fieldname, CNode>>())}};
                     }
-#line 4778 "parser_gen.cpp"
+#line 5216 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 380:
-#line 1646 "grammar.yy"
+                    case 428:
+#line 1788 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::regexFind, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 4786 "parser_gen.cpp"
+#line 5224 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 381:
-#line 1652 "grammar.yy"
+                    case 429:
+#line 1794 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::regexFindAll, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 4794 "parser_gen.cpp"
+#line 5232 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 382:
-#line 1658 "grammar.yy"
+                    case 430:
+#line 1800 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::regexMatch, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 4802 "parser_gen.cpp"
+#line 5240 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 383:
-#line 1665 "grammar.yy"
+                    case 431:
+#line 1807 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::replaceOne,
@@ -5157,11 +5658,11 @@ int ParserGen::parse() {
                                  {KeyFieldname::replacementArg,
                                   YY_MOVE(yystack_[2].value.as<CNode>())}}}}}};
                     }
-#line 4813 "parser_gen.cpp"
+#line 5251 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 384:
-#line 1675 "grammar.yy"
+                    case 432:
+#line 1817 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::replaceAll,
@@ -5171,51 +5672,51 @@ int ParserGen::parse() {
                                  {KeyFieldname::replacementArg,
                                   YY_MOVE(yystack_[2].value.as<CNode>())}}}}}};
                     }
-#line 4824 "parser_gen.cpp"
+#line 5262 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 385:
-#line 1684 "grammar.yy"
+                    case 433:
+#line 1826 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::split,
                              CNode{CNode::ArrayChildren{YY_MOVE(yystack_[3].value.as<CNode>()),
                                                         YY_MOVE(yystack_[2].value.as<CNode>())}}}}};
                     }
-#line 4833 "parser_gen.cpp"
+#line 5271 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 386:
-#line 1691 "grammar.yy"
+                    case 434:
+#line 1833 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::strLenBytes, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 4842 "parser_gen.cpp"
+#line 5280 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 387:
-#line 1698 "grammar.yy"
+                    case 435:
+#line 1840 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::strLenCP, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 4851 "parser_gen.cpp"
+#line 5289 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 388:
-#line 1706 "grammar.yy"
+                    case 436:
+#line 1848 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::strcasecmp,
                              CNode{CNode::ArrayChildren{YY_MOVE(yystack_[3].value.as<CNode>()),
                                                         YY_MOVE(yystack_[2].value.as<CNode>())}}}}};
                     }
-#line 4860 "parser_gen.cpp"
+#line 5298 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 389:
-#line 1714 "grammar.yy"
+                    case 437:
+#line 1856 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::substr,
@@ -5223,11 +5724,11 @@ int ParserGen::parse() {
                                                         YY_MOVE(yystack_[3].value.as<CNode>()),
                                                         YY_MOVE(yystack_[2].value.as<CNode>())}}}}};
                     }
-#line 4869 "parser_gen.cpp"
+#line 5307 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 390:
-#line 1722 "grammar.yy"
+                    case 438:
+#line 1864 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::substrBytes,
@@ -5235,11 +5736,11 @@ int ParserGen::parse() {
                                                         YY_MOVE(yystack_[3].value.as<CNode>()),
                                                         YY_MOVE(yystack_[2].value.as<CNode>())}}}}};
                     }
-#line 4878 "parser_gen.cpp"
+#line 5316 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 391:
-#line 1730 "grammar.yy"
+                    case 439:
+#line 1872 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::substrCP,
@@ -5247,249 +5748,249 @@ int ParserGen::parse() {
                                                         YY_MOVE(yystack_[3].value.as<CNode>()),
                                                         YY_MOVE(yystack_[2].value.as<CNode>())}}}}};
                     }
-#line 4887 "parser_gen.cpp"
+#line 5325 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 392:
-#line 1737 "grammar.yy"
+                    case 440:
+#line 1879 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::toLower, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 4895 "parser_gen.cpp"
+#line 5333 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 393:
-#line 1743 "grammar.yy"
+                    case 441:
+#line 1885 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::toUpper, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 4903 "parser_gen.cpp"
+#line 5341 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 394:
-#line 1749 "grammar.yy"
+                    case 442:
+#line 1891 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{KeyValue::randVal};
                     }
-#line 4911 "parser_gen.cpp"
+#line 5349 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 395:
-#line 1752 "grammar.yy"
+                    case 443:
+#line 1894 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{KeyValue::textScore};
                     }
-#line 4919 "parser_gen.cpp"
+#line 5357 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 396:
-#line 1758 "grammar.yy"
+                    case 444:
+#line 1900 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::meta, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 4927 "parser_gen.cpp"
+#line 5365 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 397:
-#line 1764 "grammar.yy"
+                    case 445:
+#line 1906 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[1].value.as<CNode>());
                     }
-#line 4935 "parser_gen.cpp"
+#line 5373 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 398:
-#line 1769 "grammar.yy"
+                    case 446:
+#line 1911 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode::noopLeaf();
                     }
-#line 4943 "parser_gen.cpp"
+#line 5381 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 399:
-#line 1772 "grammar.yy"
+                    case 447:
+#line 1914 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[1].value.as<CNode>());
                         yylhs.value.as<CNode>().objectChildren().emplace_back(
                             YY_MOVE(yystack_[0].value.as<std::pair<CNode::Fieldname, CNode>>()));
                     }
-#line 4952 "parser_gen.cpp"
+#line 5390 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 400:
-#line 1779 "grammar.yy"
+                    case 448:
+#line 1921 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{KeyValue::intOneKey};
                     }
-#line 4960 "parser_gen.cpp"
+#line 5398 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 401:
-#line 1782 "grammar.yy"
+                    case 449:
+#line 1924 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{KeyValue::intNegOneKey};
                     }
-#line 4968 "parser_gen.cpp"
+#line 5406 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 402:
-#line 1785 "grammar.yy"
+                    case 450:
+#line 1927 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{KeyValue::longOneKey};
                     }
-#line 4976 "parser_gen.cpp"
+#line 5414 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 403:
-#line 1788 "grammar.yy"
+                    case 451:
+#line 1930 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{KeyValue::longNegOneKey};
                     }
-#line 4984 "parser_gen.cpp"
+#line 5422 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 404:
-#line 1791 "grammar.yy"
+                    case 452:
+#line 1933 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{KeyValue::doubleOneKey};
                     }
-#line 4992 "parser_gen.cpp"
+#line 5430 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 405:
-#line 1794 "grammar.yy"
+                    case 453:
+#line 1936 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{KeyValue::doubleNegOneKey};
                     }
-#line 5000 "parser_gen.cpp"
+#line 5438 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 406:
-#line 1797 "grammar.yy"
+                    case 454:
+#line 1939 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{KeyValue::decimalOneKey};
                     }
-#line 5008 "parser_gen.cpp"
+#line 5446 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 407:
-#line 1800 "grammar.yy"
+                    case 455:
+#line 1942 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{KeyValue::decimalNegOneKey};
                     }
-#line 5016 "parser_gen.cpp"
+#line 5454 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 408:
-#line 1805 "grammar.yy"
+                    case 456:
+#line 1947 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() = {
                             YY_MOVE(yystack_[1].value.as<CNode::Fieldname>()),
                             YY_MOVE(yystack_[0].value.as<CNode>())};
                     }
-#line 5024 "parser_gen.cpp"
+#line 5462 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 409:
-#line 1807 "grammar.yy"
+                    case 457:
+#line 1949 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() = {
                             YY_MOVE(yystack_[1].value.as<CNode::Fieldname>()),
                             YY_MOVE(yystack_[0].value.as<CNode>())};
                     }
-#line 5032 "parser_gen.cpp"
+#line 5470 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 410:
-#line 1813 "grammar.yy"
+                    case 458:
+#line 1955 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5038 "parser_gen.cpp"
+#line 5476 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 411:
-#line 1813 "grammar.yy"
+                    case 459:
+#line 1955 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5044 "parser_gen.cpp"
+#line 5482 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 412:
-#line 1813 "grammar.yy"
+                    case 460:
+#line 1955 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5050 "parser_gen.cpp"
+#line 5488 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 413:
-#line 1813 "grammar.yy"
+                    case 461:
+#line 1955 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5056 "parser_gen.cpp"
+#line 5494 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 414:
-#line 1813 "grammar.yy"
+                    case 462:
+#line 1955 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5062 "parser_gen.cpp"
+#line 5500 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 415:
-#line 1813 "grammar.yy"
+                    case 463:
+#line 1955 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5068 "parser_gen.cpp"
+#line 5506 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 416:
-#line 1814 "grammar.yy"
+                    case 464:
+#line 1956 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5074 "parser_gen.cpp"
+#line 5512 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 417:
-#line 1818 "grammar.yy"
+                    case 465:
+#line 1960 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{
                             CNode::ObjectChildren{{KeyFieldname::allElementsTrue,
                                                    CNode{YY_MOVE(yystack_[2].value.as<CNode>())}}}};
                     }
-#line 5082 "parser_gen.cpp"
+#line 5520 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 418:
-#line 1824 "grammar.yy"
+                    case 466:
+#line 1966 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{
                             CNode::ObjectChildren{{KeyFieldname::anyElementTrue,
                                                    CNode{YY_MOVE(yystack_[2].value.as<CNode>())}}}};
                     }
-#line 5090 "parser_gen.cpp"
+#line 5528 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 419:
-#line 1830 "grammar.yy"
+                    case 467:
+#line 1972 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::setDifference, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 5099 "parser_gen.cpp"
+#line 5537 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 420:
-#line 1838 "grammar.yy"
+                    case 468:
+#line 1980 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::setEquals,
@@ -5500,11 +6001,11 @@ int ParserGen::parse() {
                             yylhs.value.as<CNode>().objectChildren()[0].second.arrayChildren();
                         array.insert(array.end(), others.begin(), others.end());
                     }
-#line 5111 "parser_gen.cpp"
+#line 5549 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 421:
-#line 1849 "grammar.yy"
+                    case 469:
+#line 1991 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::setIntersection,
@@ -5515,20 +6016,20 @@ int ParserGen::parse() {
                             yylhs.value.as<CNode>().objectChildren()[0].second.arrayChildren();
                         array.insert(array.end(), others.begin(), others.end());
                     }
-#line 5123 "parser_gen.cpp"
+#line 5561 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 422:
-#line 1859 "grammar.yy"
+                    case 470:
+#line 2001 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::setIsSubset, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 5132 "parser_gen.cpp"
+#line 5570 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 423:
-#line 1867 "grammar.yy"
+                    case 471:
+#line 2009 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::setUnion,
@@ -5539,422 +6040,422 @@ int ParserGen::parse() {
                             yylhs.value.as<CNode>().objectChildren()[0].second.arrayChildren();
                         array.insert(array.end(), others.begin(), others.end());
                     }
-#line 5144 "parser_gen.cpp"
+#line 5582 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 424:
-#line 1877 "grammar.yy"
+                    case 472:
+#line 2019 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5150 "parser_gen.cpp"
+#line 5588 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 425:
-#line 1877 "grammar.yy"
+                    case 473:
+#line 2019 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5156 "parser_gen.cpp"
+#line 5594 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 426:
-#line 1881 "grammar.yy"
+                    case 474:
+#line 2023 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::constExpr,
                              CNode{CNode::ArrayChildren{YY_MOVE(yystack_[2].value.as<CNode>())}}}}};
                     }
-#line 5165 "parser_gen.cpp"
+#line 5603 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 427:
-#line 1888 "grammar.yy"
+                    case 475:
+#line 2030 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::literal,
                              CNode{CNode::ArrayChildren{YY_MOVE(yystack_[2].value.as<CNode>())}}}}};
                     }
-#line 5174 "parser_gen.cpp"
+#line 5612 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 428:
-#line 1895 "grammar.yy"
+                    case 476:
+#line 2037 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5180 "parser_gen.cpp"
+#line 5618 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 429:
-#line 1895 "grammar.yy"
+                    case 477:
+#line 2037 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5186 "parser_gen.cpp"
+#line 5624 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 430:
-#line 1899 "grammar.yy"
+                    case 478:
+#line 2041 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5192 "parser_gen.cpp"
+#line 5630 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 431:
-#line 1899 "grammar.yy"
+                    case 479:
+#line 2041 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5198 "parser_gen.cpp"
+#line 5636 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 432:
-#line 1903 "grammar.yy"
+                    case 480:
+#line 2045 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() =
                             CNode{YY_MOVE(yystack_[1].value.as<std::vector<CNode>>())};
                     }
-#line 5206 "parser_gen.cpp"
+#line 5644 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 433:
-#line 1909 "grammar.yy"
+                    case 481:
+#line 2051 "src/mongo/db/cst/grammar.yy"
                     {
                     }
-#line 5212 "parser_gen.cpp"
+#line 5650 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 434:
-#line 1910 "grammar.yy"
+                    case 482:
+#line 2052 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::vector<CNode>>() =
                             YY_MOVE(yystack_[0].value.as<std::vector<CNode>>());
                         yylhs.value.as<std::vector<CNode>>().emplace_back(
                             YY_MOVE(yystack_[1].value.as<CNode>()));
                     }
-#line 5221 "parser_gen.cpp"
+#line 5659 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 435:
-#line 1917 "grammar.yy"
+                    case 483:
+#line 2059 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[1].value.as<CNode>());
                     }
-#line 5229 "parser_gen.cpp"
+#line 5667 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 436:
-#line 1923 "grammar.yy"
+                    case 484:
+#line 2065 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode::noopLeaf();
                     }
-#line 5237 "parser_gen.cpp"
+#line 5675 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 437:
-#line 1926 "grammar.yy"
+                    case 485:
+#line 2068 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[1].value.as<CNode>());
                         yylhs.value.as<CNode>().objectChildren().emplace_back(
                             YY_MOVE(yystack_[0].value.as<std::pair<CNode::Fieldname, CNode>>()));
                     }
-#line 5246 "parser_gen.cpp"
+#line 5684 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 438:
-#line 1933 "grammar.yy"
+                    case 486:
+#line 2075 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() = {
                             YY_MOVE(yystack_[1].value.as<CNode::Fieldname>()),
                             YY_MOVE(yystack_[0].value.as<CNode>())};
                     }
-#line 5254 "parser_gen.cpp"
+#line 5692 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 439:
-#line 1940 "grammar.yy"
+                    case 487:
+#line 2082 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() =
                             YY_MOVE(yystack_[0].value.as<CNode::Fieldname>());
                     }
-#line 5260 "parser_gen.cpp"
+#line 5698 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 440:
-#line 1941 "grammar.yy"
+                    case 488:
+#line 2083 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() =
                             YY_MOVE(yystack_[0].value.as<CNode::Fieldname>());
                     }
-#line 5266 "parser_gen.cpp"
+#line 5704 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 441:
-#line 1942 "grammar.yy"
+                    case 489:
+#line 2084 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() =
                             YY_MOVE(yystack_[0].value.as<CNode::Fieldname>());
                     }
-#line 5272 "parser_gen.cpp"
+#line 5710 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 442:
-#line 1943 "grammar.yy"
+                    case 490:
+#line 2085 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() =
                             YY_MOVE(yystack_[0].value.as<CNode::Fieldname>());
                     }
-#line 5278 "parser_gen.cpp"
+#line 5716 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 443:
-#line 1944 "grammar.yy"
+                    case 491:
+#line 2086 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode::Fieldname>() =
                             YY_MOVE(yystack_[0].value.as<CNode::Fieldname>());
                     }
-#line 5284 "parser_gen.cpp"
+#line 5722 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 444:
-#line 1947 "grammar.yy"
+                    case 492:
+#line 2089 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5290 "parser_gen.cpp"
+#line 5728 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 445:
-#line 1947 "grammar.yy"
+                    case 493:
+#line 2089 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5296 "parser_gen.cpp"
+#line 5734 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 446:
-#line 1947 "grammar.yy"
+                    case 494:
+#line 2089 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5302 "parser_gen.cpp"
+#line 5740 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 447:
-#line 1947 "grammar.yy"
+                    case 495:
+#line 2089 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5308 "parser_gen.cpp"
+#line 5746 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 448:
-#line 1947 "grammar.yy"
+                    case 496:
+#line 2089 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5314 "parser_gen.cpp"
+#line 5752 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 449:
-#line 1947 "grammar.yy"
+                    case 497:
+#line 2089 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5320 "parser_gen.cpp"
+#line 5758 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 450:
-#line 1947 "grammar.yy"
+                    case 498:
+#line 2089 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5326 "parser_gen.cpp"
+#line 5764 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 451:
-#line 1949 "grammar.yy"
+                    case 499:
+#line 2091 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::cmp, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 5335 "parser_gen.cpp"
+#line 5773 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 452:
-#line 1954 "grammar.yy"
+                    case 500:
+#line 2096 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::eq, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 5344 "parser_gen.cpp"
+#line 5782 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 453:
-#line 1959 "grammar.yy"
+                    case 501:
+#line 2101 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::gt, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 5353 "parser_gen.cpp"
+#line 5791 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 454:
-#line 1964 "grammar.yy"
+                    case 502:
+#line 2106 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::gte, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 5362 "parser_gen.cpp"
+#line 5800 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 455:
-#line 1969 "grammar.yy"
+                    case 503:
+#line 2111 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::lt, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 5371 "parser_gen.cpp"
+#line 5809 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 456:
-#line 1974 "grammar.yy"
+                    case 504:
+#line 2116 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::lte, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 5380 "parser_gen.cpp"
+#line 5818 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 457:
-#line 1979 "grammar.yy"
+                    case 505:
+#line 2121 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::ne, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 5389 "parser_gen.cpp"
+#line 5827 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 458:
-#line 1985 "grammar.yy"
+                    case 506:
+#line 2127 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5395 "parser_gen.cpp"
+#line 5833 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 459:
-#line 1986 "grammar.yy"
+                    case 507:
+#line 2128 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5401 "parser_gen.cpp"
+#line 5839 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 460:
-#line 1987 "grammar.yy"
+                    case 508:
+#line 2129 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5407 "parser_gen.cpp"
+#line 5845 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 461:
-#line 1988 "grammar.yy"
+                    case 509:
+#line 2130 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5413 "parser_gen.cpp"
+#line 5851 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 462:
-#line 1989 "grammar.yy"
+                    case 510:
+#line 2131 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5419 "parser_gen.cpp"
+#line 5857 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 463:
-#line 1990 "grammar.yy"
+                    case 511:
+#line 2132 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5425 "parser_gen.cpp"
+#line 5863 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 464:
-#line 1991 "grammar.yy"
+                    case 512:
+#line 2133 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5431 "parser_gen.cpp"
+#line 5869 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 465:
-#line 1992 "grammar.yy"
+                    case 513:
+#line 2134 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5437 "parser_gen.cpp"
+#line 5875 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 466:
-#line 1993 "grammar.yy"
+                    case 514:
+#line 2135 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5443 "parser_gen.cpp"
+#line 5881 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 467:
-#line 1994 "grammar.yy"
+                    case 515:
+#line 2136 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = YY_MOVE(yystack_[0].value.as<CNode>());
                     }
-#line 5449 "parser_gen.cpp"
+#line 5887 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 468:
-#line 1999 "grammar.yy"
+                    case 516:
+#line 2141 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() =
                             std::pair{KeyFieldname::onErrorArg, CNode{KeyValue::absentKey}};
                     }
-#line 5457 "parser_gen.cpp"
+#line 5895 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 469:
-#line 2002 "grammar.yy"
+                    case 517:
+#line 2144 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() = std::pair{
                             KeyFieldname::onErrorArg, YY_MOVE(yystack_[0].value.as<CNode>())};
                     }
-#line 5465 "parser_gen.cpp"
+#line 5903 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 470:
-#line 2009 "grammar.yy"
+                    case 518:
+#line 2151 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() =
                             std::pair{KeyFieldname::onNullArg, CNode{KeyValue::absentKey}};
                     }
-#line 5473 "parser_gen.cpp"
+#line 5911 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 471:
-#line 2012 "grammar.yy"
+                    case 519:
+#line 2154 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<std::pair<CNode::Fieldname, CNode>>() = std::pair{
                             KeyFieldname::onNullArg, YY_MOVE(yystack_[0].value.as<CNode>())};
                     }
-#line 5481 "parser_gen.cpp"
+#line 5919 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 472:
-#line 2019 "grammar.yy"
+                    case 520:
+#line 2161 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::convert,
@@ -5966,92 +6467,92 @@ int ParserGen::parse() {
                                  YY_MOVE(yystack_[4]
                                              .value.as<std::pair<CNode::Fieldname, CNode>>())}}}}};
                     }
-#line 5492 "parser_gen.cpp"
+#line 5930 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 473:
-#line 2028 "grammar.yy"
+                    case 521:
+#line 2170 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::toBool, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 5500 "parser_gen.cpp"
+#line 5938 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 474:
-#line 2033 "grammar.yy"
+                    case 522:
+#line 2175 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::toDate, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 5508 "parser_gen.cpp"
+#line 5946 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 475:
-#line 2038 "grammar.yy"
+                    case 523:
+#line 2180 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::toDecimal, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 5516 "parser_gen.cpp"
+#line 5954 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 476:
-#line 2043 "grammar.yy"
+                    case 524:
+#line 2185 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::toDouble, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 5524 "parser_gen.cpp"
+#line 5962 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 477:
-#line 2048 "grammar.yy"
+                    case 525:
+#line 2190 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::toInt, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 5532 "parser_gen.cpp"
+#line 5970 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 478:
-#line 2053 "grammar.yy"
+                    case 526:
+#line 2195 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::toLong, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 5540 "parser_gen.cpp"
+#line 5978 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 479:
-#line 2058 "grammar.yy"
+                    case 527:
+#line 2200 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::toObjectId, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 5548 "parser_gen.cpp"
+#line 5986 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 480:
-#line 2063 "grammar.yy"
+                    case 528:
+#line 2205 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::toString, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 5556 "parser_gen.cpp"
+#line 5994 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
-                    case 481:
-#line 2068 "grammar.yy"
+                    case 529:
+#line 2210 "src/mongo/db/cst/grammar.yy"
                     {
                         yylhs.value.as<CNode>() = CNode{CNode::ObjectChildren{
                             {KeyFieldname::type, YY_MOVE(yystack_[1].value.as<CNode>())}}};
                     }
-#line 5564 "parser_gen.cpp"
+#line 6002 "src/mongo/db/cst/parser_gen.cpp"
                     break;
 
 
-#line 5568 "parser_gen.cpp"
+#line 6006 "src/mongo/db/cst/parser_gen.cpp"
 
                     default:
                         break;
@@ -6366,421 +6867,463 @@ std::string ParserGen::yysyntax_error_(const context& yyctx) const {
 }
 
 
-const short ParserGen::yypact_ninf_ = -733;
+const short ParserGen::yypact_ninf_ = -765;
 
 const signed char ParserGen::yytable_ninf_ = -1;
 
 const short ParserGen::yypact_[] = {
-    97,   -73,  -45,  -73,  -73,  -40,  85,   -733, -733, -17,  -733, -733, -733, -733, -733, -733,
-    972,  36,   52,   598,  -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733,
-    -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, 1337,
-    -733, -733, -733, -6,   -4,   290,  -2,   8,    290,  -733, 54,   -733, -733, -733, -733, -733,
-    -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733,
-    -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733,
-    -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733,
-    -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733,
-    -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733,
-    -733, -733, -733, -733, 131,  -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733,
-    -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733,
-    -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733,
-    -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733,
-    -733, -733, -733, -733, -733, -733, -733, -733, -733, -73,  73,   -733, -733, -733, -733, -733,
-    -733, 96,   -733, 112,  17,   -17,  -733, -733, -733, -733, -733, -733, -733, -733, 53,   -733,
-    -733, -9,   -733, -733, 1602, 290,  104,  -733, -733, -23,  -733, -92,  -733, -733, -22,  -733,
-    1459, -733, -733, 1459, -733, -733, -733, -733, 80,   108,  -733, -733, 82,   55,   -733, -733,
-    -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, 1093,
-    464,  -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733,
-    -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733,
-    -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733,
-    -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733,
-    -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733,
-    -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733,
-    -733, -733, -733, -733, -733, -733, -733, -733, -3,   -733, -733, 850,  -733, 1093, -733, -733,
-    88,   1093, 37,   41,   37,   44,   45,   1093, 45,   47,   57,   -733, -733, -733, 58,   45,
-    1093, 1093, 45,   45,   -733, 59,   60,   61,   1093, 62,   1093, 45,   45,   -733, 312,  63,
-    67,   45,   70,   37,   71,   -733, -733, -733, -733, -733, 72,   -733, 45,   74,   76,   45,
-    77,   81,   83,   1093, 89,   1093, 1093, 90,   93,   102,  105,  1093, 1093, 1093, 1093, 1093,
-    1093, 1093, 1093, 1093, 1093, -733, 106,  1093, 1459, 1459, -733, 1623, 114,  12,   1670, -733,
-    -733, 132,  139,  1093, 141,  1093, 1093, 155,  163,  169,  1093, 1215, 202,  211,  213,  1093,
-    178,  179,  180,  181,  187,  1093, 1093, 1215, 188,  1093, 194,  208,  222,  240,  223,  226,
-    228,  231,  232,  233,  234,  237,  238,  1093, 1093, 239,  1093, 241,  1093, 244,  242,  245,
-    246,  273,  281,  1093, 240,  251,  1093, 1093, 252,  1093, 1093, 255,  259,  1093, 261,  1093,
-    266,  275,  1093, 1093, 1093, 1093, 276,  280,  289,  291,  292,  293,  294,  296,  299,  301,
-    240,  1093, 305,  -733, -733, -733, -733, -733, -733, -733, 1093, -733, -733, -733, -733, -733,
-    -733, -733, 307,  -733, 308,  1093, -733, -733, -733, 309,  1215, -733, 320,  -733, -733, -733,
-    -733, 1093, 1093, 1093, 1093, -733, -733, -733, -733, -733, 1093, 1093, 321,  -733, 1093, -733,
-    -733, -733, 1093, 352,  -733, -733, -733, -733, -733, -733, -733, -733, -733, 1093, 1093, -733,
-    323,  -733, 1093, -733, 1093, -733, -733, 1093, 1093, 1093, 355,  -733, 1093, 1093, -733, 1093,
-    1093, -733, -733, 1093, -733, 1093, -733, -733, 1093, 1093, 1093, 1093, -733, -733, -733, -733,
-    -733, -733, -733, -733, -733, -733, 356,  1093, -733, -733, 326,  327,  330,  332,  1215, 334,
-    724,  336,  364,  322,  322,  338,  1093, 1093, 340,  344,  -733, 1093, 351,  1093, 357,  353,
-    379,  387,  391,  362,  1093, 1093, 1093, 1093, 971,  366,  367,  1093, 1093, 1093, 369,  1093,
-    372,  -733, -733, -733, -733, -733, -733, -733, 1215, -733, -733, 1093, 392,  1093, 393,  393,
-    374,  1093, 373,  376,  -733, 377,  378,  381,  380,  -733, 382,  1093, 400,  1093, 1093, 383,
-    384,  386,  388,  394,  395,  396,  397,  401,  402,  403,  399,  404,  405,  -733, -733, 1093,
-    411,  -733, 1093, 364,  392,  -733, -733, 406,  407,  -733, 408,  -733, 409,  -733, -733, 1093,
-    418,  426,  -733, 412,  413,  414,  415,  -733, -733, -733, 416,  420,  439,  -733, 443,  -733,
-    -733, 1093, -733, 392,  447,  -733, -733, -733, -733, 448,  1093, 1093, -733, -733, -733, -733,
-    -733, -733, -733, -733, 456,  457,  458,  -733, 460,  461,  462,  463,  -733, 468,  469,  -733,
-    -733, -733, -733};
+    -61,  -96,  -76,  -70,  54,   -57,  -765, -765, -765, -765, -765, -765, 36,   41,   1049, 647,
+    -21,  63,   -16,  -6,   63,   -765, 53,   -765, -765, -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, -765, -765, 1567, -765, -765, -765, 1,    -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, 282,  -765, 67,   -765,
+    -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, 98,   -765, 111,  9,    -57,  -765, -765, -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -76,  -765, -765,
+    -765, -765, -765, -765, -765, -765, 61,   -765, -765, -765, 1812, 63,   69,   -765, -765, 28,
+    -765, -48,  -765, 1697, -765, -765, 1697, -765, -765, -765, -765, 78,   110,  -765, -100, -765,
+    -765, -20,  -765, -765, 89,   -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, -765, 1177, 503,  -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, 48,   60,   -765, -765,
+    -765, -765, 919,  -765, 1177, -765, -765, 99,   -765, 1177, 1307, 1307, 37,   38,   37,   40,
+    1307, 1307, 1307, 45,   1307, 1177, 45,   47,   49,   -765, 1307, 1307, -765, -765, 1307, 52,
+    45,   1177, 1177, 45,   45,   -765, 55,   57,   64,   1177, 65,   1177, 45,   45,   -765, 361,
+    66,   71,   45,   72,   37,   77,   1307, -765, -765, -765, -765, -765, 81,   -765, 45,   82,
+    83,   45,   92,   93,   1307, 1307, 96,   1177, 100,  1177, 1177, 101,  102,  103,  108,  1307,
+    1307, 1177, 1177, 1177, 1177, 1177, 1177, 1177, 1177, 1177, 1177, -765, 109,  1177, 1697, 1697,
+    -765, 1862, 115,  -765, 1878, -765, -765, 116,  1177, -765, -765, -765, -765, -765, -765, 123,
+    129,  131,  1177, 172,  1177, 173,  174,  175,  1177, 176,  177,  179,  180,  1177, 1437, 136,
+    181,  182,  221,  224,  186,  1177, 187,  188,  193,  196,  200,  1177, 1177, 1437, 201,  1177,
+    205,  212,  216,  261,  226,  228,  229,  240,  248,  268,  270,  277,  280,  1177, 1177, 281,
+    1177, 283,  1177, 284,  285,  256,  288,  289,  319,  327,  1177, 261,  292,  1177, 1177, 293,
+    1177, 1177, 296,  297,  298,  299,  1177, 303,  1177, 306,  310,  1177, 1177, 1177, 1177, 312,
+    316,  317,  318,  322,  324,  331,  332,  333,  334,  335,  338,  261,  1177, 343,  -765, -765,
+    -765, -765, -765, 39,   -765, 1177, -765, -765, -765, -765, -765, -765, 320,  -765, -765, -765,
+    345,  -765, 347,  -765, -765, -765, 1177, -765, -765, -765, -765, 348,  1437, -765, 349,  -765,
+    -765, -765, -765, 1177, -765, -765, 1177, 1177, -765, 1177, -765, -765, -765, -765, -765, 1177,
+    1177, 350,  -765, 1177, -765, -765, -765, 1177, 385,  -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, 1177, 1177, -765, 353,  -765, 1177, -765, -765, 1177, -765, -765, 1177, 1177, 1177,
+    388,  -765, 1177, 1177, -765, 1177, 1177, -765, -765, -765, -765, 1177, -765, 1177, -765, -765,
+    1177, 1177, 1177, 1177, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765,
+    389,  1177, -765, -765, -765, -765, 355,  356,  358,  360,  1437, 359,  783,  363,  395,  403,
+    403,  369,  1177, 1177, 370,  372,  -765, 1177, 375,  1177, 380,  382,  401,  417,  418,  386,
+    1177, 1177, 1177, 1177, 1047, 387,  392,  1177, 1177, 1177, 393,  1177, 398,  -765, -765, -765,
+    -765, -765, -765, -765, 1437, -765, -765, 1177, 420,  1177, 411,  411,  399,  1177, 402,  409,
+    -765, 415,  416,  419,  412,  -765, 421,  1177, 428,  1177, 1177, 424,  425,  427,  430,  431,
+    432,  433,  435,  438,  439,  442,  444,  446,  447,  -765, -765, 1177, 414,  -765, 1177, 395,
+    420,  -765, -765, 448,  449,  -765, 450,  -765, 483,  -765, -765, 1177, 456,  461,  -765, 484,
+    494,  495,  496,  -765, -765, -765, 499,  500,  501,  -765, 502,  -765, -765, 1177, -765, 420,
+    507,  -765, -765, -765, -765, 508,  1177, 1177, -765, -765, -765, -765, -765, -765, -765, -765,
+    514,  515,  516,  -765, 517,  522,  523,  524,  -765, 532,  537,  -765, -765, -765, -765};
 
 const short ParserGen::yydefact_[] = {
-    0,   0,   0,   0,   0,   0,   0,   77,  3,   8,   2,   5,   4,   398, 6,   1,   0,   0,   0,
-    0,   89,  117, 106, 116, 113, 122, 120, 114, 109, 111, 112, 119, 107, 123, 118, 121, 108, 115,
-    110, 76,  287, 91,  90,  97,  95,  96,  94,  0,   104, 78,  80,  0,   0,   0,   0,   0,   0,
-    10,  0,   12,  13,  14,  15,  16,  17,  7,   148, 124, 187, 126, 188, 125, 149, 131, 164, 127,
-    138, 165, 166, 150, 397, 132, 151, 152, 133, 134, 167, 168, 128, 153, 154, 155, 135, 136, 169,
-    170, 156, 157, 137, 130, 129, 158, 171, 172, 173, 175, 174, 159, 176, 189, 190, 191, 192, 193,
-    160, 177, 161, 98,  101, 102, 103, 100, 99,  180, 178, 179, 181, 182, 183, 162, 139, 140, 141,
-    142, 143, 144, 184, 145, 146, 186, 185, 163, 147, 440, 441, 442, 439, 443, 0,   399, 236, 235,
-    234, 233, 232, 230, 229, 228, 195, 196, 197, 222, 221, 220, 226, 225, 224, 198, 199, 200, 201,
-    202, 83,  203, 194, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 219, 223, 227,
-    231, 216, 217, 218, 246, 247, 248, 249, 250, 255, 251, 252, 253, 256, 257, 237, 238, 240, 241,
-    242, 254, 243, 244, 245, 81,  239, 79,  0,   0,   21,  22,  23,  24,  26,  28,  0,   25,  0,
-    0,   8,   407, 406, 405, 404, 401, 400, 403, 402, 0,   408, 409, 0,   92,  19,  0,   0,   0,
-    11,  9,   0,   82,  0,   84,  85,  0,   27,  0,   68,  70,  0,   67,  69,  29,  105, 0,   0,
-    394, 395, 0,   0,   86,  88,  93,  61,  60,  57,  56,  59,  53,  52,  55,  45,  44,  47,  49,
-    48,  51,  258, 0,   46,  50,  54,  58,  40,  41,  42,  43,  62,  63,  64,  33,  34,  35,  36,
-    37,  38,  39,  30,  32,  65,  66,  265, 275, 266, 267, 268, 289, 290, 269, 332, 333, 334, 270,
-    424, 425, 273, 338, 339, 340, 341, 342, 343, 344, 345, 346, 347, 348, 349, 350, 351, 352, 353,
-    354, 355, 356, 357, 359, 358, 271, 444, 445, 446, 447, 448, 449, 450, 272, 458, 459, 460, 461,
-    462, 463, 464, 465, 466, 467, 291, 292, 293, 294, 295, 296, 297, 298, 299, 300, 301, 302, 303,
-    304, 305, 274, 410, 411, 412, 413, 414, 415, 416, 31,  18,  0,   396, 83,  280, 260, 258, 262,
-    261, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   10,  10,  10,  0,   0,   0,   0,
-    0,   0,   288, 0,   0,   0,   0,   0,   0,   0,   0,   10,  0,   0,   0,   0,   0,   0,   0,
-    10,  10,  10,  10,  10,  0,   10,  0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
-    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   10,  0,   0,   0,   0,   72,
-    0,   0,   0,   0,   259, 278, 0,   0,   0,   0,   0,   0,   0,   0,   0,   258, 0,   0,   0,
-    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   372, 0,   0,   0,
+    0,   0,   0,   0,   0,   6,   2,   75,  3,   446, 4,   1,   0,   0,   0,   0,   0,   0,   0,
+    0,   0,   8,   0,   10,  11,  12,  13,  14,  15,  5,   87,  115, 104, 114, 111, 118, 112, 107,
+    109, 110, 117, 105, 116, 119, 106, 113, 108, 74,  307, 89,  88,  95,  93,  94,  92,  0,   102,
+    76,  78,  0,   144, 197, 200, 120, 183, 122, 184, 196, 199, 198, 121, 201, 145, 127, 160, 123,
+    134, 191, 194, 161, 162, 202, 146, 445, 128, 147, 148, 129, 130, 163, 164, 124, 149, 150, 151,
+    131, 132, 165, 166, 152, 153, 133, 126, 125, 154, 203, 167, 168, 169, 171, 170, 155, 172, 185,
+    186, 187, 188, 189, 156, 190, 193, 173, 157, 96,  99,  100, 101, 98,  97,  176, 174, 175, 177,
+    178, 179, 158, 192, 195, 135, 136, 137, 138, 139, 140, 180, 141, 142, 182, 181, 159, 143, 488,
+    489, 490, 487, 491, 0,   447, 0,   244, 243, 242, 240, 239, 238, 232, 231, 230, 236, 235, 234,
+    229, 233, 237, 241, 19,  20,  21,  22,  24,  26,  0,   23,  0,   0,   6,   246, 245, 205, 206,
+    207, 208, 209, 210, 211, 212, 81,  213, 204, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223,
+    224, 225, 226, 227, 228, 256, 257, 258, 259, 260, 265, 261, 262, 263, 266, 267, 247, 248, 250,
+    251, 252, 264, 253, 254, 255, 79,  249, 77,  0,   455, 454, 453, 452, 449, 448, 451, 450, 0,
+    456, 457, 17,  0,   0,   0,   9,   7,   0,   90,  0,   25,  0,   66,  68,  0,   65,  67,  27,
+    103, 0,   0,   80,  0,   82,  83,  0,   442, 443, 0,   59,  58,  55,  54,  57,  51,  50,  53,
+    43,  42,  45,  47,  46,  49,  268, 0,   44,  48,  52,  56,  38,  39,  40,  41,  60,  61,  62,
+    31,  32,  33,  34,  35,  36,  37,  28,  30,  63,  64,  278, 292, 290, 279, 280, 309, 281, 380,
+    381, 382, 282, 472, 473, 285, 386, 387, 388, 389, 390, 391, 392, 393, 394, 395, 396, 397, 398,
+    399, 400, 401, 402, 403, 404, 405, 407, 406, 283, 492, 493, 494, 495, 496, 497, 498, 284, 506,
+    507, 508, 509, 510, 511, 512, 513, 514, 515, 310, 311, 312, 313, 314, 315, 316, 317, 318, 319,
+    320, 321, 322, 323, 324, 286, 458, 459, 460, 461, 462, 463, 464, 287, 334, 335, 336, 337, 338,
+    339, 340, 341, 342, 344, 345, 346, 343, 347, 348, 291, 29,  16,  0,   0,   84,  86,  91,  444,
+    300, 270, 268, 272, 271, 0,   273, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+    0,   0,   0,   0,   8,   0,   0,   8,   8,   0,   0,   0,   0,   0,   0,   0,   308, 0,   0,
+    0,   0,   0,   0,   0,   0,   8,   0,   0,   0,   0,   0,   0,   0,   0,   8,   8,   8,   8,
+    8,   0,   8,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   8,   0,   0,   0,   0,   70,
+    0,   0,   81,  0,   269, 295, 0,   0,   274, 276, 297, 275, 277, 298, 0,   0,   0,   0,   0,
+    0,   0,   0,   0,   0,   0,   0,   0,   0,   268, 0,   0,   0,   0,   0,   0,   0,   0,   0,
+    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   420, 0,   0,   0,   0,   0,   0,
+    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   420, 0,
     0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
-    372, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
-    0,   0,   0,   0,   0,   0,   0,   0,   0,   372, 0,   0,   75,  74,  71,  73,  20,  87,  279,
-    0,   284, 285, 283, 286, 281, 317, 315, 0,   335, 0,   0,   316, 318, 451, 0,   433, 436, 0,
-    428, 429, 430, 431, 0,   0,   0,   0,   452, 320, 321, 453, 454, 0,   0,   0,   322, 0,   324,
-    455, 456, 0,   0,   306, 307, 308, 309, 310, 311, 312, 313, 314, 0,   0,   457, 0,   336, 0,
-    380, 0,   381, 382, 0,   0,   0,   0,   419, 0,   0,   422, 0,   0,   276, 277, 0,   329, 0,
-    386, 387, 0,   0,   0,   0,   473, 474, 475, 476, 477, 478, 392, 479, 480, 393, 0,   0,   481,
-    282, 0,   0,   0,   0,   433, 0,   0,   0,   468, 361, 361, 0,   367, 367, 0,   0,   373, 0,
-    0,   258, 0,   0,   377, 0,   0,   0,   0,   258, 258, 258, 0,   0,   0,   0,   0,   0,   0,
-    0,   0,   417, 418, 263, 360, 434, 432, 435, 0,   437, 426, 0,   470, 0,   363, 363, 0,   368,
-    0,   0,   427, 0,   0,   0,   0,   337, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
-    0,   0,   0,   0,   0,   0,   0,   0,   438, 469, 0,   0,   362, 0,   468, 470, 319, 369, 0,
-    0,   323, 0,   325, 0,   327, 378, 0,   0,   0,   328, 0,   0,   0,   0,   264, 385, 388, 0,
-    0,   0,   330, 0,   331, 471, 0,   364, 470, 0,   370, 371, 374, 326, 0,   0,   0,   375, 420,
-    421, 423, 389, 390, 391, 376, 0,   0,   0,   379, 0,   0,   0,   0,   366, 0,   0,   472, 365,
-    384, 383};
+    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   420, 0,   0,   73,  72,  69,  71,  18,
+    0,   299, 0,   304, 305, 303, 306, 301, 351, 0,   373, 376, 349, 0,   383, 0,   372, 375, 374,
+    0,   350, 377, 352, 499, 0,   481, 484, 0,   476, 477, 478, 479, 0,   367, 370, 0,   0,   378,
+    0,   500, 354, 355, 501, 502, 0,   0,   0,   356, 0,   358, 503, 504, 0,   0,   325, 326, 327,
+    328, 329, 330, 331, 332, 333, 0,   0,   505, 0,   384, 0,   379, 428, 0,   429, 430, 0,   0,
+    0,   0,   467, 0,   0,   470, 0,   0,   293, 294, 366, 369, 0,   363, 0,   434, 435, 0,   0,
+    0,   0,   368, 371, 521, 522, 523, 524, 525, 526, 440, 527, 528, 441, 0,   0,   529, 85,  302,
+    296, 0,   0,   0,   0,   481, 0,   0,   0,   516, 409, 409, 0,   415, 415, 0,   0,   421, 0,
+    0,   268, 0,   0,   425, 0,   0,   0,   0,   268, 268, 268, 0,   0,   0,   0,   0,   0,   0,
+    0,   0,   465, 466, 288, 408, 482, 480, 483, 0,   485, 474, 0,   518, 0,   411, 411, 0,   416,
+    0,   0,   475, 0,   0,   0,   0,   385, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+    0,   0,   0,   0,   0,   0,   0,   0,   486, 517, 0,   0,   410, 0,   516, 518, 353, 417, 0,
+    0,   357, 0,   359, 0,   361, 426, 0,   0,   0,   362, 0,   0,   0,   0,   289, 433, 436, 0,
+    0,   0,   364, 0,   365, 519, 0,   412, 518, 0,   418, 419, 422, 360, 0,   0,   0,   423, 468,
+    469, 471, 437, 438, 439, 424, 0,   0,   0,   427, 0,   0,   0,   0,   414, 0,   0,   520, 413,
+    432, 431};
 
 const short ParserGen::yypgoto_[] = {
-    -733, 277,  -733, -733, -21,  -15,  -733, -733, -14,  -13,  -733, -240, -733, -733, 35,   -733,
-    -733, -236, -244, -210, -208, -206, -37,  -202, -31,  -46,  -24,  -197, -191, -482, -228, -733,
-    -177, -173, -169, -733, -158, -153, -221, -47,  -733, -733, -733, -733, -733, -733, 295,  -733,
-    -733, -733, -733, -733, -733, -733, -733, -733, 263,  -430, -733, -43,  -390, -149, -34,  -733,
-    -733, -733, -310, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733,
-    -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -394, -733, -733, -733, -733, -733,
-    -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733,
-    -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -733,
-    -733, -733, -733, -733, -733, -733, -733, -733, -733, -733, -232, -732, -147, -189, -452, -733,
-    -377, -139, -136, -733, -733, -733, -733, -733, -733, -733, -733, 2,    -733, 150,  -733, -733,
-    -733, -733, 283,  -733, -733, -733, -733, -733, -733, -733, -733, -733, -53,  -733};
+    -765, 218,  -765, -765, -47,  -13,  -765, -765, -12,  -11,  -765, -277, -765, -765, 76,
+    -765, -765, -245, -223, -216, -214, -209, -8,   -203, 2,    -10,  8,    -201, -199, -531,
+    -246, -765, -197, -195, -193, -765, -188, -184, -241, -55,  -765, -765, -765, -765, -765,
+    -765, 308,  -765, -765, -765, -765, -765, -765, -765, -765, -765, 336,  -459, -765, 15,
+    -417, -765, 13,   -765, -765, -765, -228, 818,  -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -356,
+    -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, -226, -764, -198, -185, -564, -765, -405, -135, -143, -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765, -765,
+    -765, -765, -765, -765, -765, -765, -765, -235, -765, 948,  -196, -765, 112,  -765, -765,
+    -765, -765, 202,  -765, -765, -765, -765, -765, -765, -765, -765, -765, -17,  -765};
 
 const short ParserGen::yydefgoto_[] = {
-    -1,  472, 260, 570, 143, 144, 261, 145, 146, 147, 473, 148, 47,  262, 474, 575, 713, 48,
-    194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 670, 205, 206, 207, 208, 209, 210,
-    211, 212, 213, 396, 590, 591, 592, 672, 215, 10,  18,  58,  59,  60,  61,  62,  63,  64,
-    244, 475, 307, 308, 309, 223, 397, 398, 487, 540, 311, 312, 313, 399, 478, 314, 315, 316,
-    317, 318, 319, 320, 321, 322, 323, 324, 325, 326, 327, 328, 329, 330, 331, 332, 333, 334,
-    525, 335, 336, 337, 338, 339, 340, 341, 342, 343, 344, 345, 346, 347, 348, 349, 350, 351,
-    352, 353, 354, 355, 356, 357, 358, 359, 360, 361, 362, 363, 364, 365, 366, 367, 368, 369,
-    370, 371, 372, 373, 374, 375, 376, 377, 378, 379, 380, 381, 716, 752, 718, 755, 611, 732,
-    400, 671, 722, 382, 383, 384, 385, 386, 387, 388, 389, 8,   16,  241, 216, 254, 49,  50,
-    252, 253, 51,  14,  19,  239, 240, 268, 149, 6,   526, 228};
+    -1,  510, 263, 629, 151, 152, 264, 153, 154, 155, 511, 156, 55,  265, 512, 634, 789, 56,
+    214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 746, 225, 226, 227, 228, 229, 230,
+    231, 232, 233, 419, 656, 657, 658, 748, 235, 6,   13,  22,  23,  24,  25,  26,  27,  28,
+    250, 513, 311, 312, 313, 179, 420, 314, 537, 595, 315, 316, 421, 422, 516, 318, 319, 320,
+    321, 322, 323, 324, 325, 326, 327, 328, 329, 330, 331, 332, 333, 334, 335, 336, 337, 580,
+    338, 339, 340, 341, 342, 343, 344, 345, 346, 347, 348, 349, 350, 351, 352, 353, 354, 355,
+    356, 357, 358, 359, 360, 361, 362, 363, 364, 365, 366, 367, 368, 369, 370, 371, 372, 373,
+    374, 375, 376, 377, 378, 379, 380, 381, 382, 383, 384, 792, 828, 794, 831, 680, 808, 423,
+    747, 798, 385, 386, 387, 388, 389, 390, 391, 392, 393, 394, 395, 396, 397, 398, 399, 400,
+    401, 402, 403, 404, 405, 406, 407, 408, 523, 524, 424, 526, 527, 8,   14,  255, 236, 273,
+    57,  58,  271, 272, 59,  10,  15,  247, 248, 276, 157, 4,   581, 184};
 
 const short ParserGen::yytable_[] = {
-    214, 44,  45,  46,  227, 11,  12,  221, 263, 588, 221, 481, 293, 226, 269, 293, 219, 488, 265,
-    219, 479, 604, 220, 271, 788, 220, 497, 498, 300, 222, 270, 300, 222, 7,   504, 306, 506, 250,
-    306, 155, 156, 157, 563, 564, 527, 528, 294, 182, 295, 294, 296, 295, 263, 296, 297, 805, 266,
-    297, 568, 298, 9,   542, 298, 544, 545, 299, 13,  251, 299, 550, 551, 552, 553, 554, 555, 556,
-    557, 558, 559, 301, 634, 562, 301, 302, 7,   15,  302, 303, 251, 17,  303, 267, 482, 578, 484,
-    580, 581, 65,  304, 217, 229, 304, 218, 305, 224, 596, 305, 310, 662, 1,   310, 602, 603, 585,
-    225, 606, 2,   3,   4,   243, 245, 246, 5,   247, 249, 523, 391, 392, 393, 621, 622, 251, 624,
-    480, 626, 52,  53,  54,  55,  56,  57,  633, 287, 189, 636, 637, 483, 639, 640, 485, 486, 643,
-    490, 645, 158, 159, 648, 649, 650, 651, 567, 160, 491, 495, 501, 502, 503, 505, 519, 230, 231,
-    663, 520, 232, 233, 522, 524, 531, 576, 534, 665, 535, 537, 167, 168, 577, 538, 579, 541, 234,
-    235, 668, 169, 170, 543, 546, 236, 237, 547, 221, 171, 582, 264, 674, 675, 676, 677, 548, 219,
-    583, 549, 561, 678, 679, 220, 584, 681, 593, 173, 242, 682, 222, 594, 595, 597, 598, 599, 600,
-    293, 293, 749, 684, 685, 601, 605, 174, 687, 238, 688, 263, 607, 689, 690, 691, 300, 300, 693,
-    694, 610, 695, 696, 306, 306, 697, 608, 698, 272, 628, 699, 700, 701, 702, 294, 294, 295, 295,
-    296, 296, 609, 612, 297, 297, 613, 704, 614, 298, 298, 615, 616, 617, 618, 299, 299, 619, 620,
-    623, 631, 625, 721, 721, 627, 629, 630, 726, 632, 301, 301, 635, 638, 302, 302, 641, 736, 303,
-    303, 642, 740, 644, 728, 743, 744, 745, 646, 747, 304, 304, 737, 738, 739, 305, 305, 647, 652,
-    310, 310, 750, 653, 753, 152, 153, 154, 758, 155, 156, 157, 654, 717, 655, 656, 657, 658, 766,
-    659, 768, 769, 660, 476, 661, 161, 162, 163, 664, 666, 667, 669, 164, 165, 166, 492, 493, 494,
-    784, 510, 511, 786, 673, 680, 683, 686, 512, 692, 703, 705, 706, 489, 707, 509, 793, 708, 710,
-    715, 496, 714, 720, 499, 500, 724, 529, 530, 725, 532, 513, 514, 507, 508, 804, 727, 731, 730,
-    521, 515, 516, 733, 729, 808, 809, 734, 735, 517, 751, 533, 741, 742, 536, 746, 539, 560, 748,
-    759, 754, 757, 760, 767, 761, 762, 764, 518, 763, 765, 770, 771, 772, 712, 773, 187, 188, 189,
-    190, 785, 774, 775, 794, 776, 777, 589, 781, 778, 779, 780, 795, 782, 783, 789, 790, 791, 792,
-    589, 571, 796, 797, 798, 799, 800, 572, 573, 574, 801, 401, 402, 403, 404, 405, 21,  22,  23,
-    24,  25,  26,  27,  28,  29,  30,  31,  32,  33,  802, 34,  35,  36,  803, 37,  38,  406, 806,
-    807, 407, 408, 409, 410, 411, 412, 413, 810, 811, 812, 414, 813, 814, 815, 816, 566, 415, 416,
-    417, 817, 818, 418, 419, 420, 421, 422, 259, 390, 787, 248, 423, 424, 425, 426, 719, 756, 709,
-    427, 428, 429, 430, 431, 432, 433, 589, 434, 435, 436, 723, 477, 437, 438, 439, 440, 441, 442,
-    443, 394, 0,   444, 445, 446, 447, 448, 449, 0,   450, 451, 0,   0,   0,   0,   0,   0,   0,
-    0,   452, 453, 454, 455, 456, 457, 458, 0,   459, 460, 461, 462, 463, 464, 465, 466, 467, 468,
-    469, 470, 471, 257, 258, 0,   0,   0,   0,   0,   0,   0,   66,  67,  68,  69,  70,  21,  22,
-    23,  24,  25,  26,  27,  28,  29,  30,  31,  32,  33,  0,   34,  35,  36,  589, 37,  38,  71,
-    0,   0,   72,  73,  74,  75,  76,  77,  78,  0,   0,   0,   79,  0,   0,   0,   0,   80,  81,
-    82,  83,  0,   0,   84,  85,  40,  86,  87,  0,   0,   0,   0,   88,  89,  90,  91,  0,   0,
-    589, 92,  93,  94,  95,  96,  97,  98,  0,   99,  100, 101, 0,   0,   102, 103, 104, 105, 106,
-    107, 108, 0,   0,   109, 110, 111, 112, 113, 114, 0,   115, 116, 117, 118, 119, 120, 121, 122,
-    0,   0,   123, 124, 125, 126, 127, 128, 129, 0,   130, 131, 132, 133, 134, 135, 136, 137, 138,
-    139, 140, 141, 142, 43,  66,  67,  68,  69,  70,  21,  22,  23,  24,  25,  26,  27,  28,  29,
-    30,  31,  32,  33,  0,   34,  35,  36,  0,   37,  38,  71,  0,   0,   72,  73,  74,  75,  76,
-    77,  78,  0,   0,   0,   79,  0,   0,   0,   0,   711, 81,  82,  83,  0,   0,   84,  85,  40,
-    86,  87,  0,   0,   0,   0,   88,  89,  90,  91,  0,   0,   0,   92,  93,  94,  95,  96,  97,
-    98,  0,   99,  100, 101, 0,   0,   102, 103, 104, 105, 106, 107, 108, 0,   0,   109, 110, 111,
-    112, 113, 114, 0,   115, 116, 117, 118, 119, 120, 121, 122, 0,   0,   123, 124, 125, 126, 127,
-    128, 129, 0,   130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 43,  401, 402,
-    403, 404, 405, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
-    0,   0,   0,   0,   406, 0,   0,   407, 408, 409, 410, 411, 412, 413, 0,   0,   0,   414, 0,
-    0,   0,   0,   0,   415, 416, 417, 0,   0,   418, 419, 0,   421, 422, 0,   0,   0,   0,   423,
-    424, 425, 426, 0,   0,   0,   427, 428, 429, 430, 431, 432, 433, 0,   434, 435, 436, 0,   0,
-    437, 438, 439, 440, 441, 442, 443, 0,   0,   444, 445, 446, 447, 448, 449, 0,   450, 451, 0,
-    0,   0,   0,   0,   0,   0,   0,   452, 453, 454, 455, 456, 457, 458, 0,   459, 460, 461, 462,
-    463, 464, 465, 466, 467, 468, 469, 470, 471, 20,  0,   21,  22,  23,  24,  25,  26,  27,  28,
-    29,  30,  31,  32,  33,  0,   34,  35,  36,  0,   37,  38,  150, 151, 0,   0,   0,   0,   0,
-    0,   0,   152, 153, 154, 0,   155, 156, 157, 707, 0,   39,  0,   0,   158, 159, 0,   0,   0,
-    40,  0,   160, 161, 162, 163, 0,   0,   0,   0,   164, 165, 166, 0,   0,   0,   0,   0,   0,
-    0,   0,   41,  0,   42,  167, 168, 0,   0,   0,   0,   0,   0,   0,   169, 170, 0,   0,   0,
-    0,   0,   0,   171, 0,   0,   0,   0,   0,   0,   0,   0,   287, 395, 0,   0,   0,   0,   0,
-    0,   0,   173, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   43,  0,
-    174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192,
-    193, 150, 151, 0,   0,   0,   0,   0,   0,   0,   152, 153, 154, 0,   155, 156, 157, 0,   0,
-    0,   0,   0,   158, 159, 0,   0,   0,   0,   0,   160, 161, 162, 163, 0,   0,   0,   0,   164,
-    165, 166, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   167, 168, 0,   0,   0,   0,
-    0,   0,   0,   169, 170, 0,   0,   0,   0,   0,   0,   171, 0,   0,   0,   0,   0,   0,   0,
-    0,   287, 395, 0,   0,   0,   0,   0,   0,   0,   173, 0,   0,   0,   0,   0,   0,   0,   0,
-    0,   0,   0,   0,   0,   0,   0,   0,   174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184,
-    185, 186, 187, 188, 189, 190, 191, 192, 193, 150, 151, 0,   0,   0,   0,   0,   0,   0,   152,
-    153, 154, 0,   155, 156, 157, 0,   0,   0,   0,   0,   158, 159, 0,   0,   0,   0,   0,   160,
-    161, 162, 163, 0,   0,   0,   0,   164, 165, 166, 0,   0,   0,   0,   0,   0,   0,   0,   0,
-    0,   0,   167, 168, 0,   0,   0,   0,   0,   0,   0,   169, 170, 0,   0,   0,   0,   0,   0,
-    171, 0,   0,   0,   0,   0,   0,   0,   0,   586, 587, 0,   0,   0,   0,   0,   0,   0,   173,
-    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   174, 175, 176,
-    177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 150, 151,
-    0,   0,   0,   0,   0,   0,   0,   152, 153, 154, 0,   155, 156, 157, 0,   0,   0,   0,   0,
-    158, 159, 0,   0,   0,   0,   0,   160, 161, 162, 163, 0,   0,   0,   0,   164, 165, 166, 0,
-    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   167, 168, 0,   0,   0,   0,   0,   0,   0,
-    169, 170, 0,   0,   0,   0,   0,   0,   171, 0,   0,   0,   0,   0,   0,   0,   0,   0,   172,
-    0,   0,   0,   0,   0,   0,   0,   173, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
-    0,   0,   0,   0,   0,   174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187,
-    188, 189, 190, 191, 192, 193, 273, 274, 0,   0,   0,   0,   0,   0,   0,   275, 276, 277, 0,
-    278, 279, 280, 0,   0,   0,   0,   0,   158, 159, 0,   0,   0,   0,   0,   160, 281, 282, 283,
-    0,   0,   0,   0,   284, 285, 286, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   167,
-    168, 0,   0,   0,   0,   0,   0,   0,   169, 170, 0,   0,   0,   0,   0,   0,   171, 0,   0,
-    0,   0,   0,   0,   0,   0,   287, 288, 0,   0,   0,   0,   0,   0,   0,   173, 0,   0,   0,
-    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   174, 0,   0,   177, 178, 179,
-    180, 181, 182, 183, 184, 185, 186, 289, 290, 291, 292, 191, 192, 193, 21,  22,  23,  24,  25,
-    26,  27,  28,  29,  30,  31,  32,  33,  0,   34,  35,  36,  0,   37,  38,  0,   21,  22,  23,
-    24,  25,  26,  27,  28,  29,  30,  31,  32,  33,  0,   34,  35,  36,  255, 37,  38,  0,   0,
-    0,   0,   0,   256, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   565, 0,   0,
-    0,   0,   0,   0,   0,   420, 21,  22,  23,  24,  25,  26,  27,  28,  29,  30,  31,  32,  33,
-    0,   34,  35,  36,  0,   37,  38,  0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
-    0,   0,   0,   0,   0,   0,   569, 0,   0,   0,   0,   0,   0,   0,   40,  0,   0,   0,   0,
-    0,   257, 258, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
-    0,   0,   0,   257, 258, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
-    0,   0,   117, 118, 119, 120, 121, 122, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
-    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   43};
+    234, 52,  53,  54,  183, 266, 268, 177, 519, 175, 177, 654, 175, 304, 413, 517, 304, 5,   310,
+    176, 539, 310, 176, 704, 409, 178, 673, 409, 178, 414, 415, 317, 551, 552, 317, 182, 297, 274,
+    7,   297, 558, 256, 560, 298, 9,   299, 298, 266, 299, 206, 300, 622, 623, 300, 11,  736, 301,
+    12,  302, 301, 303, 302, 305, 303, 306, 305, 307, 306, 864, 307, 599, 308, 601, 602, 308, 309,
+    275, 416, 309, 269, 609, 610, 611, 612, 613, 614, 615, 616, 617, 618, 739, 29,  621, 158, 7,
+    162, 163, 164, 180, 881, 1,   2,   3,   636, 185, 159, 160, 161, 181, 270, 162, 163, 164, 640,
+    237, 642, 582, 583, 249, 646, 270, 251, 252, 253, 188, 189, 165, 166, 167, 411, 412, 190, 665,
+    168, 169, 170, 651, 257, 671, 672, 417, 270, 675, 16,  17,  18,  19,  20,  21,  518, 291, 530,
+    659, 532, 191, 192, 690, 691, 536, 693, 541, 695, 542, 193, 194, 549, 626, 635, 555, 703, 556,
+    195, 706, 707, 637, 709, 710, 557, 559, 573, 638, 715, 639, 717, 574, 576, 720, 721, 722, 723,
+    578, 525, 525, 197, 586, 589, 590, 525, 525, 525, 529, 525, 531, 737, 173, 592, 593, 525, 525,
+    598, 198, 525, 740, 600, 603, 604, 605, 171, 172, 173, 174, 606, 620, 641, 643, 644, 645, 647,
+    648, 744, 649, 650, 660, 661, 662, 525, 663, 664, 666, 667, 577, 177, 750, 175, 668, 751, 752,
+    669, 753, 525, 525, 670, 674, 176, 754, 755, 676, 825, 757, 178, 525, 525, 758, 677, 304, 304,
+    267, 678, 266, 310, 310, 679, 698, 760, 761, 409, 409, 681, 763, 682, 683, 764, 317, 317, 765,
+    766, 767, 297, 297, 769, 770, 684, 771, 772, 298, 298, 299, 299, 773, 685, 774, 300, 300, 775,
+    776, 777, 778, 301, 301, 302, 302, 303, 303, 305, 305, 306, 306, 307, 307, 686, 780, 687, 308,
+    308, 238, 239, 309, 309, 688, 240, 241, 689, 692, 701, 694, 696, 697, 797, 797, 699, 700, 702,
+    802, 705, 708, 242, 243, 711, 712, 713, 714, 812, 244, 245, 716, 816, 804, 718, 819, 820, 821,
+    719, 823, 724, 813, 814, 815, 725, 726, 727, 741, 521, 521, 728, 826, 729, 829, 521, 521, 521,
+    834, 521, 730, 731, 732, 733, 734, 521, 521, 735, 842, 521, 844, 845, 738, 742, 246, 743, 745,
+    749, 756, 759, 514, 762, 768, 779, 781, 782, 783, 786, 860, 784, 791, 862, 790, 521, 564, 565,
+    793, 796, 807, 800, 801, 566, 543, 803, 869, 546, 547, 521, 521, 805, 806, 809, 810, 830, 811,
+    817, 827, 861, 521, 521, 818, 822, 880, 563, 567, 568, 824, 843, 833, 540, 835, 884, 885, 569,
+    570, 584, 585, 836, 587, 550, 840, 571, 553, 554, 837, 838, 262, 630, 839, 788, 841, 561, 562,
+    846, 847, 848, 870, 575, 849, 850, 851, 871, 852, 572, 853, 655, 854, 855, 619, 588, 856, 254,
+    591, 857, 594, 858, 859, 865, 866, 867, 655, 631, 632, 633, 425, 426, 427, 428, 429, 430, 431,
+    31,  32,  33,  34,  35,  36,  37,  38,  39,  40,  41,  42,  43,  44,  45,  46,  432, 433, 434,
+    435, 436, 868, 872, 437, 438, 439, 440, 441, 442, 443, 444, 445, 873, 874, 875, 446, 447, 876,
+    877, 878, 879, 795, 448, 449, 450, 882, 883, 451, 452, 453, 454, 455, 886, 887, 888, 889, 456,
+    457, 458, 459, 890, 891, 892, 460, 461, 462, 463, 464, 465, 466, 893, 467, 468, 469, 470, 894,
+    625, 471, 472, 473, 474, 475, 476, 477, 655, 410, 478, 479, 480, 481, 482, 483, 863, 484, 485,
+    486, 487, 832, 785, 799, 0,   0,   515, 0,   0,   488, 489, 490, 491, 492, 493, 494, 495, 496,
+    627, 497, 498, 499, 500, 501, 502, 503, 504, 505, 506, 507, 508, 509, 260, 261, 0,   0,   0,
+    0,   0,   0,   0,   60,  61,  62,  63,  64,  65,  66,  31,  32,  33,  34,  35,  36,  37,  38,
+    39,  40,  41,  42,  43,  44,  45,  46,  67,  68,  69,  70,  71,  0,   0,   72,  73,  74,  75,
+    76,  77,  78,  79,  80,  0,   0,   655, 81,  82,  0,   0,   0,   0,   83,  84,  85,  86,  0,
+    0,   87,  88,  48,  89,  90,  0,   0,   0,   0,   91,  92,  93,  94,  0,   0,   0,   95,  96,
+    97,  98,  99,  100, 101, 0,   102, 103, 104, 105, 0,   655, 106, 107, 108, 109, 110, 111, 112,
+    0,   0,   113, 114, 115, 116, 117, 118, 0,   119, 120, 121, 122, 123, 124, 125, 126, 127, 128,
+    0,   0,   129, 130, 131, 132, 133, 134, 135, 136, 137, 0,   138, 139, 140, 141, 142, 143, 144,
+    145, 146, 147, 148, 149, 150, 51,  60,  61,  62,  63,  64,  65,  66,  31,  32,  33,  34,  35,
+    36,  37,  38,  39,  40,  41,  42,  43,  44,  45,  46,  67,  68,  69,  70,  71,  0,   0,   72,
+    73,  74,  75,  76,  77,  78,  79,  80,  0,   0,   0,   81,  82,  0,   0,   0,   0,   787, 84,
+    85,  86,  0,   0,   87,  88,  48,  89,  90,  0,   0,   0,   0,   91,  92,  93,  94,  0,   0,
+    0,   95,  96,  97,  98,  99,  100, 101, 0,   102, 103, 104, 105, 0,   0,   106, 107, 108, 109,
+    110, 111, 112, 0,   0,   113, 114, 115, 116, 117, 118, 0,   119, 120, 121, 122, 123, 124, 125,
+    126, 127, 128, 0,   0,   129, 130, 131, 132, 133, 134, 135, 136, 137, 0,   138, 139, 140, 141,
+    142, 143, 144, 145, 146, 147, 148, 149, 150, 51,  425, 426, 427, 428, 429, 430, 431, 0,   0,
+    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   432, 433, 434, 435, 436,
+    0,   0,   437, 438, 439, 440, 441, 442, 443, 444, 445, 0,   0,   0,   446, 447, 0,   0,   0,
+    0,   0,   448, 449, 450, 0,   0,   451, 452, 0,   454, 455, 0,   0,   0,   0,   456, 457, 458,
+    459, 0,   0,   0,   460, 461, 462, 463, 464, 465, 466, 0,   467, 468, 469, 470, 0,   0,   471,
+    472, 473, 474, 475, 476, 477, 0,   0,   478, 479, 480, 481, 482, 483, 0,   484, 485, 486, 487,
+    0,   0,   0,   0,   0,   0,   0,   0,   488, 489, 490, 491, 492, 493, 494, 495, 496, 0,   497,
+    498, 499, 500, 501, 502, 503, 504, 505, 506, 507, 508, 509, 30,  0,   31,  32,  33,  34,  35,
+    36,  37,  38,  39,  40,  41,  42,  43,  44,  45,  46,  0,   0,   0,   186, 187, 0,   0,   0,
+    0,   0,   0,   0,   0,   0,   159, 160, 161, 0,   0,   162, 163, 164, 783, 0,   0,   47,  0,
+    188, 189, 0,   0,   0,   0,   48,  190, 165, 166, 167, 0,   0,   0,   0,   168, 169, 170, 0,
+    0,   0,   0,   0,   0,   0,   0,   0,   49,  0,   50,  191, 192, 0,   0,   0,   0,   0,   0,
+    0,   193, 194, 0,   0,   0,   0,   0,   0,   195, 0,   0,   0,   0,   0,   0,   0,   0,   0,
+    0,   291, 418, 0,   0,   0,   0,   0,   0,   0,   0,   0,   197, 0,   0,   0,   0,   0,   0,
+    0,   0,   0,   0,   0,   0,   0,   0,   0,   51,  198, 199, 200, 201, 202, 203, 204, 205, 206,
+    207, 208, 209, 210, 171, 172, 173, 174, 211, 212, 213, 186, 187, 0,   0,   0,   0,   0,   0,
+    0,   0,   0,   159, 160, 161, 0,   0,   162, 163, 164, 0,   0,   0,   0,   0,   188, 189, 0,
+    0,   0,   0,   0,   190, 165, 166, 167, 0,   522, 522, 0,   168, 169, 170, 522, 522, 522, 0,
+    522, 0,   0,   0,   0,   0,   522, 522, 191, 192, 522, 0,   0,   0,   0,   0,   0,   193, 194,
+    0,   0,   0,   0,   0,   0,   195, 0,   0,   0,   0,   0,   0,   0,   0,   522, 0,   291, 418,
+    0,   0,   0,   0,   0,   0,   0,   0,   0,   197, 522, 522, 0,   0,   0,   0,   0,   0,   0,
+    0,   0,   522, 522, 0,   0,   0,   198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209,
+    210, 171, 172, 173, 174, 211, 212, 213, 186, 187, 0,   0,   0,   0,   0,   0,   0,   0,   0,
+    159, 160, 161, 0,   0,   162, 163, 164, 0,   0,   0,   0,   0,   188, 189, 0,   0,   0,   0,
+    0,   190, 165, 166, 167, 0,   0,   528, 0,   168, 169, 170, 533, 534, 535, 0,   538, 0,   0,
+    0,   0,   0,   544, 545, 191, 192, 548, 0,   0,   0,   0,   0,   0,   193, 194, 0,   0,   0,
+    0,   0,   0,   195, 0,   0,   0,   0,   0,   0,   0,   0,   579, 0,   520, 418, 0,   0,   0,
+    0,   0,   0,   0,   0,   0,   197, 596, 597, 0,   0,   0,   0,   0,   0,   0,   0,   0,   607,
+    608, 0,   0,   0,   198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 171, 172,
+    173, 174, 211, 212, 213, 186, 187, 0,   0,   0,   0,   0,   0,   0,   0,   0,   159, 160, 161,
+    0,   0,   162, 163, 164, 0,   0,   0,   0,   0,   188, 189, 0,   0,   0,   0,   0,   190, 165,
+    166, 167, 0,   0,   0,   0,   168, 169, 170, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+    0,   0,   191, 192, 0,   0,   0,   0,   0,   0,   0,   193, 194, 0,   0,   0,   0,   0,   0,
+    195, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   652, 653, 0,   0,   0,   0,   0,   0,
+    0,   0,   0,   197, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+    0,   198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 171, 172, 173, 174, 211,
+    212, 213, 186, 187, 0,   0,   0,   0,   0,   0,   0,   0,   0,   159, 160, 161, 0,   0,   162,
+    163, 164, 0,   0,   0,   0,   0,   188, 189, 0,   0,   0,   0,   0,   190, 165, 166, 167, 0,
+    0,   0,   0,   168, 169, 170, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   191,
+    192, 0,   0,   0,   0,   0,   0,   0,   193, 194, 0,   0,   0,   0,   0,   0,   195, 0,   0,
+    0,   0,   0,   0,   0,   0,   0,   0,   0,   196, 0,   0,   0,   0,   0,   0,   0,   0,   0,
+    197, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   198, 199,
+    200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 171, 172, 173, 174, 211, 212, 213, 277,
+    278, 0,   0,   0,   0,   0,   0,   0,   0,   0,   279, 280, 281, 0,   0,   282, 283, 284, 0,
+    0,   0,   0,   0,   188, 189, 0,   0,   0,   0,   0,   190, 285, 286, 287, 0,   0,   0,   0,
+    288, 289, 290, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   191, 192, 0,   0,
+    0,   0,   0,   0,   0,   193, 194, 0,   0,   0,   0,   0,   0,   195, 0,   0,   0,   0,   0,
+    0,   0,   0,   0,   0,   291, 292, 0,   0,   0,   0,   0,   0,   0,   0,   0,   197, 31,  32,
+    33,  34,  35,  36,  37,  38,  39,  40,  41,  42,  43,  44,  45,  46,  198, 0,   0,   201, 202,
+    203, 204, 205, 206, 207, 208, 209, 210, 293, 294, 295, 296, 211, 212, 213, 0,   0,   0,   0,
+    0,   258, 0,   0,   0,   0,   0,   0,   0,   259, 31,  32,  33,  34,  35,  36,  37,  38,  39,
+    40,  41,  42,  43,  44,  45,  46,  31,  32,  33,  34,  35,  36,  37,  38,  39,  40,  41,  42,
+    43,  44,  45,  46,  0,   0,   0,   0,   0,   0,   0,   0,   0,   624, 0,   0,   0,   0,   0,
+    0,   0,   453, 0,   0,   0,   0,   0,   0,   0,   628, 0,   0,   0,   0,   0,   0,   0,   48,
+    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   260, 261, 0,   0,   0,   0,   0,
+    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+    0,   0,   0,   0,   0,   0,   0,   0,   0,   123, 124, 125, 126, 127, 128, 0,   0,   0,   0,
+    0,   0,   0,   0,   0,   260, 261, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+    0,   0,   51};
 
 const short ParserGen::yycheck_[] = {
-    47,  16,  16,  16,  57,  3,   4,   53,  244, 491, 56,  401, 256, 56,  106, 259, 53,  407, 246,
-    56,  397, 503, 53,  45,  756, 56,  416, 417, 256, 53,  251, 259, 56,  106, 424, 256, 426, 46,
-    259, 42,  43,  44,  472, 473, 438, 439, 256, 139, 256, 259, 256, 259, 288, 259, 256, 787, 79,
-    259, 46,  256, 105, 451, 259, 453, 454, 256, 106, 76,  259, 459, 460, 461, 462, 463, 464, 465,
-    466, 467, 468, 256, 532, 471, 259, 256, 106, 0,   259, 256, 76,  106, 259, 114, 402, 483, 404,
-    485, 486, 45,  256, 105, 46,  259, 106, 256, 106, 495, 259, 256, 560, 12,  259, 501, 502, 490,
-    106, 505, 19,  20,  21,  46,  24,  9,   25,  106, 71,  435, 46,  19,  46,  519, 520, 76,  522,
-    45,  524, 99,  100, 101, 102, 103, 104, 531, 105, 146, 534, 535, 105, 537, 538, 105, 105, 541,
-    105, 543, 50,  51,  546, 547, 548, 549, 46,  57,  105, 105, 105, 105, 105, 105, 105, 38,  39,
-    561, 105, 42,  43,  105, 105, 105, 46,  105, 570, 105, 105, 79,  80,  46,  105, 46,  105, 58,
-    59,  581, 88,  89,  105, 105, 65,  66,  105, 245, 96,  46,  245, 593, 594, 595, 596, 105, 245,
-    46,  105, 105, 602, 603, 245, 46,  606, 15,  114, 217, 610, 245, 11,  10,  46,  46,  46,  46,
-    472, 473, 712, 621, 622, 46,  46,  131, 626, 106, 628, 475, 46,  631, 632, 633, 472, 473, 636,
-    637, 8,   639, 640, 472, 473, 643, 46,  645, 254, 15,  648, 649, 650, 651, 472, 473, 472, 473,
-    472, 473, 46,  46,  472, 473, 46,  663, 46,  472, 473, 46,  46,  46,  46,  472, 473, 46,  46,
-    46,  13,  46,  678, 679, 46,  46,  46,  683, 13,  472, 473, 46,  46,  472, 473, 46,  692, 472,
-    473, 46,  696, 46,  685, 699, 700, 701, 46,  703, 472, 473, 693, 694, 695, 472, 473, 46,  46,
-    472, 473, 715, 46,  717, 38,  39,  40,  721, 42,  43,  44,  46,  14,  46,  46,  46,  46,  731,
-    46,  733, 734, 46,  392, 46,  58,  59,  60,  46,  45,  45,  45,  65,  66,  67,  411, 412, 413,
-    751, 50,  51,  754, 45,  45,  15,  45,  57,  15,  15,  46,  46,  408, 45,  429, 767, 46,  45,
-    16,  415, 46,  45,  418, 419, 46,  440, 441, 45,  443, 79,  80,  427, 428, 785, 45,  18,  45,
-    433, 88,  89,  15,  46,  794, 795, 15,  45,  96,  17,  444, 45,  45,  447, 45,  449, 469, 45,
-    45,  26,  46,  45,  22,  46,  46,  45,  114, 46,  46,  46,  46,  45,  672, 45,  144, 145, 146,
-    147, 27,  45,  45,  23,  46,  46,  491, 46,  45,  45,  45,  23,  46,  46,  46,  46,  46,  46,
-    503, 478, 46,  46,  46,  46,  46,  478, 478, 478, 46,  3,   4,   5,   6,   7,   8,   9,   10,
-    11,  12,  13,  14,  15,  16,  17,  18,  19,  20,  46,  22,  23,  24,  46,  26,  27,  28,  46,
-    46,  31,  32,  33,  34,  35,  36,  37,  46,  46,  46,  41,  46,  46,  46,  46,  475, 47,  48,
-    49,  46,  46,  52,  53,  54,  55,  56,  244, 259, 755, 229, 61,  62,  63,  64,  676, 719, 670,
-    68,  69,  70,  71,  72,  73,  74,  586, 76,  77,  78,  679, 394, 81,  82,  83,  84,  85,  86,
-    87,  269, -1,  90,  91,  92,  93,  94,  95,  -1,  97,  98,  -1,  -1,  -1,  -1,  -1,  -1,  -1,
-    -1,  107, 108, 109, 110, 111, 112, 113, -1,  115, 116, 117, 118, 119, 120, 121, 122, 123, 124,
-    125, 126, 127, 128, 129, -1,  -1,  -1,  -1,  -1,  -1,  -1,  3,   4,   5,   6,   7,   8,   9,
-    10,  11,  12,  13,  14,  15,  16,  17,  18,  19,  20,  -1,  22,  23,  24,  670, 26,  27,  28,
-    -1,  -1,  31,  32,  33,  34,  35,  36,  37,  -1,  -1,  -1,  41,  -1,  -1,  -1,  -1,  46,  47,
-    48,  49,  -1,  -1,  52,  53,  54,  55,  56,  -1,  -1,  -1,  -1,  61,  62,  63,  64,  -1,  -1,
-    712, 68,  69,  70,  71,  72,  73,  74,  -1,  76,  77,  78,  -1,  -1,  81,  82,  83,  84,  85,
-    86,  87,  -1,  -1,  90,  91,  92,  93,  94,  95,  -1,  97,  98,  99,  100, 101, 102, 103, 104,
-    -1,  -1,  107, 108, 109, 110, 111, 112, 113, -1,  115, 116, 117, 118, 119, 120, 121, 122, 123,
-    124, 125, 126, 127, 128, 3,   4,   5,   6,   7,   8,   9,   10,  11,  12,  13,  14,  15,  16,
-    17,  18,  19,  20,  -1,  22,  23,  24,  -1,  26,  27,  28,  -1,  -1,  31,  32,  33,  34,  35,
-    36,  37,  -1,  -1,  -1,  41,  -1,  -1,  -1,  -1,  46,  47,  48,  49,  -1,  -1,  52,  53,  54,
-    55,  56,  -1,  -1,  -1,  -1,  61,  62,  63,  64,  -1,  -1,  -1,  68,  69,  70,  71,  72,  73,
-    74,  -1,  76,  77,  78,  -1,  -1,  81,  82,  83,  84,  85,  86,  87,  -1,  -1,  90,  91,  92,
-    93,  94,  95,  -1,  97,  98,  99,  100, 101, 102, 103, 104, -1,  -1,  107, 108, 109, 110, 111,
-    112, 113, -1,  115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 3,   4,
-    5,   6,   7,   -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,
-    -1,  -1,  -1,  -1,  28,  -1,  -1,  31,  32,  33,  34,  35,  36,  37,  -1,  -1,  -1,  41,  -1,
-    -1,  -1,  -1,  -1,  47,  48,  49,  -1,  -1,  52,  53,  -1,  55,  56,  -1,  -1,  -1,  -1,  61,
-    62,  63,  64,  -1,  -1,  -1,  68,  69,  70,  71,  72,  73,  74,  -1,  76,  77,  78,  -1,  -1,
-    81,  82,  83,  84,  85,  86,  87,  -1,  -1,  90,  91,  92,  93,  94,  95,  -1,  97,  98,  -1,
-    -1,  -1,  -1,  -1,  -1,  -1,  -1,  107, 108, 109, 110, 111, 112, 113, -1,  115, 116, 117, 118,
-    119, 120, 121, 122, 123, 124, 125, 126, 127, 6,   -1,  8,   9,   10,  11,  12,  13,  14,  15,
-    16,  17,  18,  19,  20,  -1,  22,  23,  24,  -1,  26,  27,  29,  30,  -1,  -1,  -1,  -1,  -1,
-    -1,  -1,  38,  39,  40,  -1,  42,  43,  44,  45,  -1,  46,  -1,  -1,  50,  51,  -1,  -1,  -1,
-    54,  -1,  57,  58,  59,  60,  -1,  -1,  -1,  -1,  65,  66,  67,  -1,  -1,  -1,  -1,  -1,  -1,
-    -1,  -1,  75,  -1,  77,  79,  80,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  88,  89,  -1,  -1,  -1,
-    -1,  -1,  -1,  96,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  105, 106, -1,  -1,  -1,  -1,  -1,
-    -1,  -1,  114, -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  128, -1,
-    131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149,
-    150, 29,  30,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  38,  39,  40,  -1,  42,  43,  44,  -1,  -1,
-    -1,  -1,  -1,  50,  51,  -1,  -1,  -1,  -1,  -1,  57,  58,  59,  60,  -1,  -1,  -1,  -1,  65,
-    66,  67,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  79,  80,  -1,  -1,  -1,  -1,
-    -1,  -1,  -1,  88,  89,  -1,  -1,  -1,  -1,  -1,  -1,  96,  -1,  -1,  -1,  -1,  -1,  -1,  -1,
-    -1,  105, 106, -1,  -1,  -1,  -1,  -1,  -1,  -1,  114, -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,
-    -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141,
-    142, 143, 144, 145, 146, 147, 148, 149, 150, 29,  30,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  38,
-    39,  40,  -1,  42,  43,  44,  -1,  -1,  -1,  -1,  -1,  50,  51,  -1,  -1,  -1,  -1,  -1,  57,
-    58,  59,  60,  -1,  -1,  -1,  -1,  65,  66,  67,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,
-    -1,  -1,  79,  80,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  88,  89,  -1,  -1,  -1,  -1,  -1,  -1,
-    96,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  105, 106, -1,  -1,  -1,  -1,  -1,  -1,  -1,  114,
-    -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  131, 132, 133,
-    134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 29,  30,
-    -1,  -1,  -1,  -1,  -1,  -1,  -1,  38,  39,  40,  -1,  42,  43,  44,  -1,  -1,  -1,  -1,  -1,
-    50,  51,  -1,  -1,  -1,  -1,  -1,  57,  58,  59,  60,  -1,  -1,  -1,  -1,  65,  66,  67,  -1,
-    -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  79,  80,  -1,  -1,  -1,  -1,  -1,  -1,  -1,
-    88,  89,  -1,  -1,  -1,  -1,  -1,  -1,  96,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  106,
-    -1,  -1,  -1,  -1,  -1,  -1,  -1,  114, -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,
-    -1,  -1,  -1,  -1,  -1,  131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144,
-    145, 146, 147, 148, 149, 150, 29,  30,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  38,  39,  40,  -1,
-    42,  43,  44,  -1,  -1,  -1,  -1,  -1,  50,  51,  -1,  -1,  -1,  -1,  -1,  57,  58,  59,  60,
-    -1,  -1,  -1,  -1,  65,  66,  67,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  79,
-    80,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  88,  89,  -1,  -1,  -1,  -1,  -1,  -1,  96,  -1,  -1,
-    -1,  -1,  -1,  -1,  -1,  -1,  105, 106, -1,  -1,  -1,  -1,  -1,  -1,  -1,  114, -1,  -1,  -1,
-    -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  131, -1,  -1,  134, 135, 136,
-    137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 8,   9,   10,  11,  12,
-    13,  14,  15,  16,  17,  18,  19,  20,  -1,  22,  23,  24,  -1,  26,  27,  -1,  8,   9,   10,
-    11,  12,  13,  14,  15,  16,  17,  18,  19,  20,  -1,  22,  23,  24,  46,  26,  27,  -1,  -1,
-    -1,  -1,  -1,  54,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  46,  -1,  -1,
-    -1,  -1,  -1,  -1,  -1,  54,  8,   9,   10,  11,  12,  13,  14,  15,  16,  17,  18,  19,  20,
-    -1,  22,  23,  24,  -1,  26,  27,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,
-    -1,  -1,  -1,  -1,  -1,  -1,  46,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  54,  -1,  -1,  -1,  -1,
-    -1,  128, 129, -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,
-    -1,  -1,  -1,  128, 129, -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,
-    -1,  -1,  99,  100, 101, 102, 103, 104, -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,
-    -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  128};
+    55,  14,  14,  14,  21,  250, 252, 17,  425, 17,  20,  542, 20,  259, 114, 420, 262, 113, 259,
+    17,  437, 262, 20,  587, 259, 17,  557, 262, 20,  270, 50,  259, 449, 450, 262, 20,  259, 85,
+    114, 262, 457, 237, 459, 259, 114, 259, 262, 292, 262, 149, 259, 510, 511, 262, 0,   619, 259,
+    114, 259, 262, 259, 262, 259, 262, 259, 262, 259, 262, 832, 262, 487, 259, 489, 490, 262, 259,
+    124, 273, 262, 51,  497, 498, 499, 500, 501, 502, 503, 504, 505, 506, 51,  50,  509, 114, 114,
+    47,  48,  49,  114, 863, 161, 162, 163, 520, 51,  42,  43,  44,  114, 81,  47,  48,  49,  530,
+    113, 532, 472, 473, 51,  536, 81,  23,  11,  114, 55,  56,  63,  64,  65,  51,  20,  62,  549,
+    70,  71,  72,  541, 76,  555, 556, 51,  81,  559, 107, 108, 109, 110, 111, 112, 50,  113, 113,
+    16,  113, 85,  86,  573, 574, 113, 576, 113, 578, 113, 94,  95,  113, 51,  51,  113, 586, 113,
+    102, 589, 590, 51,  592, 593, 113, 113, 113, 51,  598, 51,  600, 113, 113, 603, 604, 605, 606,
+    113, 426, 427, 124, 113, 113, 113, 432, 433, 434, 428, 436, 430, 620, 156, 113, 113, 442, 443,
+    113, 141, 446, 629, 113, 113, 113, 113, 154, 155, 156, 157, 113, 113, 51,  51,  51,  51,  51,
+    51,  646, 51,  51,  51,  51,  13,  470, 12,  51,  51,  51,  468, 251, 659, 251, 51,  662, 663,
+    51,  665, 484, 485, 51,  51,  251, 671, 672, 51,  788, 675, 251, 495, 496, 679, 51,  510, 511,
+    251, 51,  513, 510, 511, 10,  16,  690, 691, 510, 511, 51,  695, 51,  51,  698, 510, 511, 701,
+    702, 703, 510, 511, 706, 707, 51,  709, 710, 510, 511, 510, 511, 715, 51,  717, 510, 511, 720,
+    721, 722, 723, 510, 511, 510, 511, 510, 511, 510, 511, 510, 511, 510, 511, 51,  737, 51,  510,
+    511, 42,  43,  510, 511, 51,  47,  48,  51,  51,  14,  51,  51,  51,  754, 755, 51,  51,  14,
+    759, 51,  51,  63,  64,  51,  51,  51,  51,  768, 70,  71,  51,  772, 761, 51,  775, 776, 777,
+    51,  779, 51,  769, 770, 771, 51,  51,  51,  50,  426, 427, 51,  791, 51,  793, 432, 433, 434,
+    797, 436, 51,  51,  51,  51,  51,  442, 443, 51,  807, 446, 809, 810, 51,  50,  114, 50,  50,
+    50,  50,  16,  412, 50,  16,  16,  51,  51,  50,  50,  827, 51,  17,  830, 51,  470, 55,  56,
+    15,  50,  19,  51,  50,  62,  441, 50,  843, 444, 445, 484, 485, 51,  50,  16,  16,  24,  50,
+    50,  18,  25,  495, 496, 50,  50,  861, 462, 85,  86,  50,  21,  51,  438, 50,  870, 871, 94,
+    95,  474, 475, 50,  477, 448, 50,  102, 451, 452, 51,  51,  250, 516, 51,  748, 51,  460, 461,
+    51,  51,  50,  22,  466, 50,  50,  50,  22,  51,  124, 51,  542, 50,  50,  507, 478, 50,  185,
+    481, 51,  483, 51,  51,  51,  51,  51,  557, 516, 516, 516, 3,   4,   5,   6,   7,   8,   9,
+    10,  11,  12,  13,  14,  15,  16,  17,  18,  19,  20,  21,  22,  23,  24,  25,  26,  27,  28,
+    29,  30,  51,  51,  33,  34,  35,  36,  37,  38,  39,  40,  41,  51,  51,  51,  45,  46,  51,
+    51,  51,  51,  752, 52,  53,  54,  51,  51,  57,  58,  59,  60,  61,  51,  51,  51,  51,  66,
+    67,  68,  69,  51,  51,  51,  73,  74,  75,  76,  77,  78,  79,  51,  81,  82,  83,  84,  51,
+    513, 87,  88,  89,  90,  91,  92,  93,  652, 262, 96,  97,  98,  99,  100, 101, 831, 103, 104,
+    105, 106, 795, 746, 755, -1,  -1,  413, -1,  -1,  115, 116, 117, 118, 119, 120, 121, 122, 123,
+    515, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, -1,  -1,  -1,
+    -1,  -1,  -1,  -1,  3,   4,   5,   6,   7,   8,   9,   10,  11,  12,  13,  14,  15,  16,  17,
+    18,  19,  20,  21,  22,  23,  24,  25,  26,  27,  28,  29,  30,  -1,  -1,  33,  34,  35,  36,
+    37,  38,  39,  40,  41,  -1,  -1,  746, 45,  46,  -1,  -1,  -1,  -1,  51,  52,  53,  54,  -1,
+    -1,  57,  58,  59,  60,  61,  -1,  -1,  -1,  -1,  66,  67,  68,  69,  -1,  -1,  -1,  73,  74,
+    75,  76,  77,  78,  79,  -1,  81,  82,  83,  84,  -1,  788, 87,  88,  89,  90,  91,  92,  93,
+    -1,  -1,  96,  97,  98,  99,  100, 101, -1,  103, 104, 105, 106, 107, 108, 109, 110, 111, 112,
+    -1,  -1,  115, 116, 117, 118, 119, 120, 121, 122, 123, -1,  125, 126, 127, 128, 129, 130, 131,
+    132, 133, 134, 135, 136, 137, 138, 3,   4,   5,   6,   7,   8,   9,   10,  11,  12,  13,  14,
+    15,  16,  17,  18,  19,  20,  21,  22,  23,  24,  25,  26,  27,  28,  29,  30,  -1,  -1,  33,
+    34,  35,  36,  37,  38,  39,  40,  41,  -1,  -1,  -1,  45,  46,  -1,  -1,  -1,  -1,  51,  52,
+    53,  54,  -1,  -1,  57,  58,  59,  60,  61,  -1,  -1,  -1,  -1,  66,  67,  68,  69,  -1,  -1,
+    -1,  73,  74,  75,  76,  77,  78,  79,  -1,  81,  82,  83,  84,  -1,  -1,  87,  88,  89,  90,
+    91,  92,  93,  -1,  -1,  96,  97,  98,  99,  100, 101, -1,  103, 104, 105, 106, 107, 108, 109,
+    110, 111, 112, -1,  -1,  115, 116, 117, 118, 119, 120, 121, 122, 123, -1,  125, 126, 127, 128,
+    129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 3,   4,   5,   6,   7,   8,   9,   -1,  -1,
+    -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  26,  27,  28,  29,  30,
+    -1,  -1,  33,  34,  35,  36,  37,  38,  39,  40,  41,  -1,  -1,  -1,  45,  46,  -1,  -1,  -1,
+    -1,  -1,  52,  53,  54,  -1,  -1,  57,  58,  -1,  60,  61,  -1,  -1,  -1,  -1,  66,  67,  68,
+    69,  -1,  -1,  -1,  73,  74,  75,  76,  77,  78,  79,  -1,  81,  82,  83,  84,  -1,  -1,  87,
+    88,  89,  90,  91,  92,  93,  -1,  -1,  96,  97,  98,  99,  100, 101, -1,  103, 104, 105, 106,
+    -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  115, 116, 117, 118, 119, 120, 121, 122, 123, -1,  125,
+    126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 8,   -1,  10,  11,  12,  13,  14,
+    15,  16,  17,  18,  19,  20,  21,  22,  23,  24,  25,  -1,  -1,  -1,  31,  32,  -1,  -1,  -1,
+    -1,  -1,  -1,  -1,  -1,  -1,  42,  43,  44,  -1,  -1,  47,  48,  49,  50,  -1,  -1,  51,  -1,
+    55,  56,  -1,  -1,  -1,  -1,  59,  62,  63,  64,  65,  -1,  -1,  -1,  -1,  70,  71,  72,  -1,
+    -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  80,  -1,  82,  85,  86,  -1,  -1,  -1,  -1,  -1,  -1,
+    -1,  94,  95,  -1,  -1,  -1,  -1,  -1,  -1,  102, -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,
+    -1,  113, 114, -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  124, -1,  -1,  -1,  -1,  -1,  -1,
+    -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  138, 141, 142, 143, 144, 145, 146, 147, 148, 149,
+    150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 31,  32,  -1,  -1,  -1,  -1,  -1,  -1,
+    -1,  -1,  -1,  42,  43,  44,  -1,  -1,  47,  48,  49,  -1,  -1,  -1,  -1,  -1,  55,  56,  -1,
+    -1,  -1,  -1,  -1,  62,  63,  64,  65,  -1,  426, 427, -1,  70,  71,  72,  432, 433, 434, -1,
+    436, -1,  -1,  -1,  -1,  -1,  442, 443, 85,  86,  446, -1,  -1,  -1,  -1,  -1,  -1,  94,  95,
+    -1,  -1,  -1,  -1,  -1,  -1,  102, -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  470, -1,  113, 114,
+    -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  124, 484, 485, -1,  -1,  -1,  -1,  -1,  -1,  -1,
+    -1,  -1,  495, 496, -1,  -1,  -1,  141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152,
+    153, 154, 155, 156, 157, 158, 159, 160, 31,  32,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,
+    42,  43,  44,  -1,  -1,  47,  48,  49,  -1,  -1,  -1,  -1,  -1,  55,  56,  -1,  -1,  -1,  -1,
+    -1,  62,  63,  64,  65,  -1,  -1,  427, -1,  70,  71,  72,  432, 433, 434, -1,  436, -1,  -1,
+    -1,  -1,  -1,  442, 443, 85,  86,  446, -1,  -1,  -1,  -1,  -1,  -1,  94,  95,  -1,  -1,  -1,
+    -1,  -1,  -1,  102, -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  470, -1,  113, 114, -1,  -1,  -1,
+    -1,  -1,  -1,  -1,  -1,  -1,  124, 484, 485, -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  495,
+    496, -1,  -1,  -1,  141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155,
+    156, 157, 158, 159, 160, 31,  32,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  42,  43,  44,
+    -1,  -1,  47,  48,  49,  -1,  -1,  -1,  -1,  -1,  55,  56,  -1,  -1,  -1,  -1,  -1,  62,  63,
+    64,  65,  -1,  -1,  -1,  -1,  70,  71,  72,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,
+    -1,  -1,  85,  86,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  94,  95,  -1,  -1,  -1,  -1,  -1,  -1,
+    102, -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  113, 114, -1,  -1,  -1,  -1,  -1,  -1,
+    -1,  -1,  -1,  124, -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,
+    -1,  141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158,
+    159, 160, 31,  32,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  42,  43,  44,  -1,  -1,  47,
+    48,  49,  -1,  -1,  -1,  -1,  -1,  55,  56,  -1,  -1,  -1,  -1,  -1,  62,  63,  64,  65,  -1,
+    -1,  -1,  -1,  70,  71,  72,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  85,
+    86,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  94,  95,  -1,  -1,  -1,  -1,  -1,  -1,  102, -1,  -1,
+    -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  114, -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,
+    124, -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  141, 142,
+    143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 31,
+    32,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  42,  43,  44,  -1,  -1,  47,  48,  49,  -1,
+    -1,  -1,  -1,  -1,  55,  56,  -1,  -1,  -1,  -1,  -1,  62,  63,  64,  65,  -1,  -1,  -1,  -1,
+    70,  71,  72,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  85,  86,  -1,  -1,
+    -1,  -1,  -1,  -1,  -1,  94,  95,  -1,  -1,  -1,  -1,  -1,  -1,  102, -1,  -1,  -1,  -1,  -1,
+    -1,  -1,  -1,  -1,  -1,  113, 114, -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  124, 10,  11,
+    12,  13,  14,  15,  16,  17,  18,  19,  20,  21,  22,  23,  24,  25,  141, -1,  -1,  144, 145,
+    146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, -1,  -1,  -1,  -1,
+    -1,  51,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  59,  10,  11,  12,  13,  14,  15,  16,  17,  18,
+    19,  20,  21,  22,  23,  24,  25,  10,  11,  12,  13,  14,  15,  16,  17,  18,  19,  20,  21,
+    22,  23,  24,  25,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  51,  -1,  -1,  -1,  -1,  -1,
+    -1,  -1,  59,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  51,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  59,
+    -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  138, 139, -1,  -1,  -1,  -1,  -1,
+    -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,
+    -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  107, 108, 109, 110, 111, 112, -1,  -1,  -1,  -1,
+    -1,  -1,  -1,  -1,  -1,  138, 139, -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,
+    -1,  -1,  138};
 
 const short ParserGen::yystos_[] = {
-    0,   12,  19,  20,  21,  25,  325, 106, 309, 105, 199, 309, 309, 106, 319, 0,   310, 106, 200,
-    320, 6,   8,   9,   10,  11,  12,  13,  14,  15,  16,  17,  18,  19,  20,  22,  23,  24,  26,
-    27,  46,  54,  75,  77,  128, 159, 162, 163, 166, 171, 314, 315, 318, 99,  100, 101, 102, 103,
-    104, 201, 202, 203, 204, 205, 206, 207, 45,  3,   4,   5,   6,   7,   28,  31,  32,  33,  34,
-    35,  36,  37,  41,  46,  47,  48,  49,  52,  53,  55,  56,  61,  62,  63,  64,  68,  69,  70,
-    71,  72,  73,  74,  76,  77,  78,  81,  82,  83,  84,  85,  86,  87,  90,  91,  92,  93,  94,
-    95,  97,  98,  99,  100, 101, 102, 103, 104, 107, 108, 109, 110, 111, 112, 113, 115, 116, 117,
-    118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 158, 159, 161, 162, 163, 165, 324, 29,  30,
-    38,  39,  40,  42,  43,  44,  50,  51,  57,  58,  59,  60,  65,  66,  67,  79,  80,  88,  89,
-    96,  106, 114, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146,
-    147, 148, 149, 150, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 184, 185, 186, 187,
-    188, 189, 190, 191, 192, 193, 198, 312, 105, 106, 176, 178, 179, 180, 213, 106, 106, 213, 326,
-    327, 46,  38,  39,  42,  43,  58,  59,  65,  66,  106, 321, 322, 311, 309, 46,  208, 24,  9,
-    106, 200, 71,  46,  76,  316, 317, 313, 46,  54,  128, 129, 155, 156, 160, 167, 171, 213, 184,
-    79,  114, 323, 106, 192, 45,  309, 29,  30,  38,  39,  40,  42,  43,  44,  58,  59,  60,  65,
-    66,  67,  105, 106, 144, 145, 146, 147, 172, 173, 174, 175, 177, 181, 182, 184, 186, 187, 188,
-    190, 191, 192, 210, 211, 212, 215, 218, 219, 220, 223, 224, 225, 226, 227, 228, 229, 230, 231,
-    232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 245, 246, 247, 248, 249, 250, 251,
-    252, 253, 254, 255, 256, 257, 258, 259, 260, 261, 262, 263, 264, 265, 266, 267, 268, 269, 270,
-    271, 272, 273, 274, 275, 276, 277, 278, 279, 280, 281, 282, 283, 284, 285, 286, 287, 288, 289,
-    290, 291, 301, 302, 303, 304, 305, 306, 307, 308, 210, 46,  19,  46,  316, 106, 193, 214, 215,
-    221, 298, 3,   4,   5,   6,   7,   28,  31,  32,  33,  34,  35,  36,  37,  41,  47,  48,  49,
-    52,  53,  54,  55,  56,  61,  62,  63,  64,  68,  69,  70,  71,  72,  73,  74,  76,  77,  78,
-    81,  82,  83,  84,  85,  86,  87,  90,  91,  92,  93,  94,  95,  97,  98,  107, 108, 109, 110,
-    111, 112, 113, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 155, 164, 168,
-    209, 179, 311, 222, 298, 45,  214, 220, 105, 220, 105, 105, 216, 214, 216, 105, 105, 326, 326,
-    326, 105, 216, 214, 214, 216, 216, 105, 105, 105, 214, 105, 214, 216, 216, 326, 50,  51,  57,
-    79,  80,  88,  89,  96,  114, 105, 105, 216, 105, 220, 105, 244, 326, 244, 244, 326, 326, 105,
-    326, 216, 105, 105, 216, 105, 105, 216, 217, 105, 214, 105, 214, 214, 105, 105, 105, 105, 214,
-    214, 214, 214, 214, 214, 214, 214, 214, 214, 326, 105, 214, 211, 211, 46,  168, 46,  46,  46,
-    157, 158, 159, 162, 163, 169, 46,  46,  214, 46,  214, 214, 46,  46,  46,  298, 105, 106, 183,
-    193, 194, 195, 196, 15,  11,  10,  214, 46,  46,  46,  46,  46,  214, 214, 183, 46,  214, 46,
-    46,  46,  8,   296, 46,  46,  46,  46,  46,  46,  46,  46,  46,  214, 214, 46,  214, 46,  214,
-    46,  15,  46,  46,  13,  13,  214, 296, 46,  214, 214, 46,  214, 214, 46,  46,  214, 46,  214,
-    46,  46,  214, 214, 214, 214, 46,  46,  46,  46,  46,  46,  46,  46,  46,  46,  296, 214, 46,
-    214, 45,  45,  214, 45,  183, 299, 197, 45,  214, 214, 214, 214, 214, 214, 45,  214, 214, 15,
-    214, 214, 45,  214, 214, 214, 214, 214, 15,  214, 214, 214, 214, 214, 214, 214, 214, 214, 214,
-    15,  214, 46,  46,  45,  46,  299, 45,  46,  165, 170, 46,  16,  292, 14,  294, 294, 45,  214,
-    300, 300, 46,  45,  214, 45,  298, 46,  45,  18,  297, 15,  15,  45,  214, 298, 298, 298, 214,
-    45,  45,  214, 214, 214, 45,  214, 45,  183, 214, 17,  293, 214, 26,  295, 295, 46,  214, 45,
-    45,  46,  46,  46,  45,  46,  214, 22,  214, 214, 46,  46,  45,  45,  45,  45,  46,  46,  45,
-    45,  45,  46,  46,  46,  214, 27,  214, 292, 293, 46,  46,  46,  46,  214, 23,  23,  46,  46,
-    46,  46,  46,  46,  46,  46,  214, 293, 46,  46,  214, 214, 46,  46,  46,  46,  46,  46,  46,
-    46,  46};
+    0,   161, 162, 163, 355, 113, 209, 114, 339, 114, 349, 0,   114, 210, 340, 350, 107, 108, 109,
+    110, 111, 112, 211, 212, 213, 214, 215, 216, 217, 50,  8,   10,  11,  12,  13,  14,  15,  16,
+    17,  18,  19,  20,  21,  22,  23,  24,  25,  51,  59,  80,  82,  138, 169, 172, 173, 176, 181,
+    344, 345, 348, 3,   4,   5,   6,   7,   8,   9,   26,  27,  28,  29,  30,  33,  34,  35,  36,
+    37,  38,  39,  40,  41,  45,  46,  51,  52,  53,  54,  57,  58,  60,  61,  66,  67,  68,  69,
+    73,  74,  75,  76,  77,  78,  79,  81,  82,  83,  84,  87,  88,  89,  90,  91,  92,  93,  96,
+    97,  98,  99,  100, 101, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 115, 116, 117, 118,
+    119, 120, 121, 122, 123, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 168,
+    169, 171, 172, 173, 175, 354, 114, 42,  43,  44,  47,  48,  49,  63,  64,  65,  70,  71,  72,
+    154, 155, 156, 157, 186, 188, 189, 190, 223, 114, 114, 223, 356, 357, 51,  31,  32,  55,  56,
+    62,  85,  86,  94,  95,  102, 114, 124, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151,
+    152, 153, 158, 159, 160, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 194, 195, 196,
+    197, 198, 199, 200, 201, 202, 203, 208, 342, 113, 42,  43,  47,  48,  63,  64,  70,  71,  114,
+    351, 352, 51,  218, 23,  11,  114, 210, 341, 339, 76,  51,  59,  138, 139, 165, 166, 170, 177,
+    181, 223, 194, 51,  81,  346, 347, 343, 85,  124, 353, 31,  32,  42,  43,  44,  47,  48,  49,
+    63,  64,  65,  70,  71,  72,  113, 114, 154, 155, 156, 157, 182, 183, 184, 185, 187, 191, 192,
+    194, 196, 197, 198, 200, 201, 202, 220, 221, 222, 225, 228, 229, 230, 233, 234, 235, 236, 237,
+    238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 254, 255, 256, 257,
+    258, 259, 260, 261, 262, 263, 264, 265, 266, 267, 268, 269, 270, 271, 272, 273, 274, 275, 276,
+    277, 278, 279, 280, 281, 282, 283, 284, 285, 286, 287, 288, 289, 290, 291, 292, 293, 294, 295,
+    296, 297, 298, 299, 300, 310, 311, 312, 313, 314, 315, 316, 317, 318, 319, 320, 321, 322, 323,
+    324, 325, 326, 327, 328, 329, 330, 331, 332, 333, 336, 220, 51,  20,  114, 202, 50,  339, 51,
+    114, 203, 224, 230, 231, 307, 336, 3,   4,   5,   6,   7,   8,   9,   26,  27,  28,  29,  30,
+    33,  34,  35,  36,  37,  38,  39,  40,  41,  45,  46,  52,  53,  54,  57,  58,  59,  60,  61,
+    66,  67,  68,  69,  73,  74,  75,  76,  77,  78,  79,  81,  82,  83,  84,  87,  88,  89,  90,
+    91,  92,  93,  96,  97,  98,  99,  100, 101, 103, 104, 105, 106, 115, 116, 117, 118, 119, 120,
+    121, 122, 123, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 165, 174, 178,
+    219, 189, 346, 232, 307, 50,  224, 113, 203, 231, 334, 335, 336, 337, 338, 338, 230, 113, 230,
+    113, 338, 338, 338, 113, 226, 338, 224, 226, 113, 113, 356, 338, 338, 356, 356, 338, 113, 226,
+    224, 224, 226, 226, 113, 113, 113, 224, 113, 224, 226, 226, 356, 55,  56,  62,  85,  86,  94,
+    95,  102, 124, 113, 113, 226, 113, 230, 113, 338, 253, 356, 253, 253, 356, 356, 113, 356, 226,
+    113, 113, 226, 113, 113, 226, 227, 338, 338, 113, 224, 113, 224, 224, 113, 113, 113, 113, 338,
+    338, 224, 224, 224, 224, 224, 224, 224, 224, 224, 224, 356, 113, 224, 221, 221, 51,  178, 51,
+    341, 51,  167, 168, 169, 172, 173, 179, 51,  224, 51,  51,  51,  224, 51,  224, 51,  51,  51,
+    224, 51,  51,  51,  51,  307, 113, 114, 193, 203, 204, 205, 206, 16,  51,  51,  13,  12,  51,
+    224, 51,  51,  51,  51,  51,  224, 224, 193, 51,  224, 51,  51,  51,  10,  305, 51,  51,  51,
+    51,  51,  51,  51,  51,  51,  224, 224, 51,  224, 51,  224, 51,  51,  16,  51,  51,  14,  14,
+    224, 305, 51,  224, 224, 51,  224, 224, 51,  51,  51,  51,  224, 51,  224, 51,  51,  224, 224,
+    224, 224, 51,  51,  51,  51,  51,  51,  51,  51,  51,  51,  51,  51,  305, 224, 51,  51,  224,
+    50,  50,  50,  224, 50,  193, 308, 207, 50,  224, 224, 224, 224, 224, 224, 50,  224, 224, 16,
+    224, 224, 50,  224, 224, 224, 224, 224, 16,  224, 224, 224, 224, 224, 224, 224, 224, 224, 224,
+    16,  224, 51,  51,  50,  51,  308, 50,  51,  175, 180, 51,  17,  301, 15,  303, 303, 50,  224,
+    309, 309, 51,  50,  224, 50,  307, 51,  50,  19,  306, 16,  16,  50,  224, 307, 307, 307, 224,
+    50,  50,  224, 224, 224, 50,  224, 50,  193, 224, 18,  302, 224, 24,  304, 304, 51,  224, 50,
+    50,  51,  51,  51,  50,  51,  224, 21,  224, 224, 51,  51,  50,  50,  50,  50,  51,  51,  50,
+    50,  50,  51,  51,  51,  224, 25,  224, 301, 302, 51,  51,  51,  51,  224, 22,  22,  51,  51,
+    51,  51,  51,  51,  51,  51,  224, 302, 51,  51,  224, 224, 51,  51,  51,  51,  51,  51,  51,
+    51,  51};
 
 const short ParserGen::yyr1_[] = {
-    0,   154, 325, 325, 325, 325, 325, 199, 200, 200, 327, 326, 201, 201, 201, 201, 201, 201, 207,
-    202, 203, 213, 213, 213, 213, 204, 205, 206, 208, 208, 167, 167, 210, 211, 211, 211, 211, 211,
-    211, 211, 211, 211, 211, 211, 211, 211, 211, 211, 211, 211, 211, 211, 211, 211, 211, 211, 211,
-    211, 211, 211, 211, 211, 211, 211, 211, 211, 211, 155, 156, 156, 156, 212, 209, 209, 168, 168,
-    309, 310, 310, 314, 314, 312, 312, 311, 311, 316, 317, 317, 315, 318, 318, 318, 313, 313, 166,
-    166, 166, 162, 158, 158, 158, 158, 158, 158, 159, 160, 171, 171, 171, 171, 171, 171, 171, 171,
-    171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 161, 161, 161, 161, 161, 161, 161, 161, 161,
-    161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161,
-    161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161,
-    161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161,
-    161, 161, 161, 161, 184, 184, 184, 184, 184, 184, 184, 184, 184, 184, 185, 198, 186, 187, 188,
-    190, 191, 192, 172, 173, 174, 175, 177, 181, 182, 176, 176, 176, 176, 178, 178, 178, 178, 179,
-    179, 179, 179, 180, 180, 180, 180, 189, 189, 193, 193, 193, 193, 193, 193, 193, 193, 193, 193,
-    193, 193, 193, 193, 193, 193, 193, 193, 193, 193, 193, 298, 298, 214, 214, 214, 216, 217, 215,
-    215, 215, 215, 215, 215, 215, 215, 215, 215, 218, 219, 219, 220, 221, 222, 222, 169, 157, 157,
-    157, 157, 163, 164, 223, 223, 223, 223, 223, 223, 223, 223, 223, 223, 223, 223, 223, 223, 223,
-    223, 223, 224, 224, 224, 224, 224, 224, 224, 224, 224, 225, 226, 277, 278, 279, 280, 281, 282,
-    283, 284, 285, 286, 287, 288, 289, 290, 291, 227, 227, 227, 228, 229, 230, 234, 234, 234, 234,
-    234, 234, 234, 234, 234, 234, 234, 234, 234, 234, 234, 234, 234, 234, 234, 234, 234, 234, 235,
-    294, 294, 295, 295, 236, 237, 300, 300, 300, 238, 239, 296, 296, 240, 247, 257, 297, 297, 244,
-    241, 242, 243, 245, 246, 248, 249, 250, 251, 252, 253, 254, 255, 256, 323, 323, 321, 319, 320,
-    320, 322, 322, 322, 322, 322, 322, 322, 322, 324, 324, 301, 301, 301, 301, 301, 301, 301, 302,
-    303, 304, 305, 306, 307, 308, 231, 231, 232, 233, 183, 183, 194, 194, 195, 299, 299, 196, 197,
-    197, 170, 165, 165, 165, 165, 165, 258, 258, 258, 258, 258, 258, 258, 259, 260, 261, 262, 263,
-    264, 265, 266, 266, 266, 266, 266, 266, 266, 266, 266, 266, 292, 292, 293, 293, 267, 268, 269,
-    270, 271, 272, 273, 274, 275, 276};
+    0,   164, 355, 355, 355, 209, 210, 210, 357, 356, 211, 211, 211, 211, 211, 211, 217, 212, 213,
+    223, 223, 223, 223, 214, 215, 216, 218, 218, 177, 177, 220, 221, 221, 221, 221, 221, 221, 221,
+    221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221, 221,
+    221, 221, 221, 221, 221, 221, 221, 221, 165, 166, 166, 166, 222, 219, 219, 178, 178, 339, 340,
+    340, 344, 344, 342, 342, 341, 341, 346, 347, 347, 345, 348, 348, 348, 343, 343, 176, 176, 176,
+    172, 168, 168, 168, 168, 168, 168, 169, 170, 181, 181, 181, 181, 181, 181, 181, 181, 181, 181,
+    181, 181, 181, 181, 181, 181, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171,
+    171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171,
+    171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171,
+    171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171,
+    171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 171, 194, 194, 194, 194, 194,
+    194, 194, 194, 194, 194, 195, 208, 196, 197, 198, 200, 201, 202, 182, 183, 184, 185, 187, 191,
+    192, 186, 186, 186, 186, 188, 188, 188, 188, 189, 189, 189, 189, 190, 190, 190, 190, 199, 199,
+    203, 203, 203, 203, 203, 203, 203, 203, 203, 203, 203, 203, 203, 203, 203, 203, 203, 203, 203,
+    203, 203, 307, 307, 224, 224, 224, 224, 334, 334, 335, 335, 336, 336, 336, 336, 336, 336, 336,
+    336, 336, 336, 226, 227, 225, 225, 228, 229, 229, 230, 337, 338, 338, 231, 232, 232, 179, 167,
+    167, 167, 167, 173, 174, 233, 233, 233, 233, 233, 233, 233, 233, 233, 233, 233, 233, 233, 233,
+    233, 233, 234, 234, 234, 234, 234, 234, 234, 234, 234, 318, 318, 318, 318, 318, 318, 318, 318,
+    318, 318, 318, 318, 318, 318, 318, 235, 331, 286, 287, 288, 289, 290, 291, 292, 293, 294, 295,
+    296, 297, 298, 299, 300, 319, 320, 321, 322, 323, 324, 325, 326, 327, 328, 329, 330, 332, 333,
+    236, 236, 236, 237, 238, 239, 243, 243, 243, 243, 243, 243, 243, 243, 243, 243, 243, 243, 243,
+    243, 243, 243, 243, 243, 243, 243, 243, 243, 244, 303, 303, 304, 304, 245, 246, 309, 309, 309,
+    247, 248, 305, 305, 249, 256, 266, 306, 306, 253, 250, 251, 252, 254, 255, 257, 258, 259, 260,
+    261, 262, 263, 264, 265, 353, 353, 351, 349, 350, 350, 352, 352, 352, 352, 352, 352, 352, 352,
+    354, 354, 310, 310, 310, 310, 310, 310, 310, 311, 312, 313, 314, 315, 316, 317, 240, 240, 241,
+    242, 193, 193, 204, 204, 205, 308, 308, 206, 207, 207, 180, 175, 175, 175, 175, 175, 267, 267,
+    267, 267, 267, 267, 267, 268, 269, 270, 271, 272, 273, 274, 275, 275, 275, 275, 275, 275, 275,
+    275, 275, 275, 301, 301, 302, 302, 276, 277, 278, 279, 280, 281, 282, 283, 284, 285};
 
 const signed char ParserGen::yyr2_[] = {
-    0, 2, 2, 2, 2, 2, 2,  3,  0,  4, 0, 2, 1, 1, 1, 1, 1, 1,  5,  3, 7, 1, 1, 1, 1, 2, 2, 4, 0,
-    2, 2, 2, 1, 1, 1, 1,  1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1,  1,  1,  1, 1, 1, 1, 3, 1, 2, 2, 2,  3,  0, 2, 2, 1, 1, 3, 0, 2, 1, 2,
-    5, 5, 1, 1, 1, 0, 2,  1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1,  1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1,  1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1,  1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1,  1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1,  1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1, 1, 1, 1, 1, 1, 1, 0, 2, 1,
-    1, 1, 4, 5, 1, 1, 1,  1,  1,  1, 1, 1, 1, 1, 1, 4, 4, 3,  3,  0, 2, 2, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1,  1,  1,  1, 1, 1, 1, 1, 1, 1, 4, 4,  4,  4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
-    7, 4, 4, 4, 7, 4, 7,  8,  7,  7, 4, 7, 7, 1, 1, 1, 4, 4,  6,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1,  1,  1,  1, 1, 1, 6, 0, 2, 0, 2, 11, 10, 0, 1, 2, 8, 8, 0, 2, 8, 8, 8,
-    0, 2, 7, 4, 4, 4, 11, 11, 7,  4, 4, 7, 8, 8, 8, 4, 4, 1,  1,  4, 3, 0, 2, 1, 1, 1, 1, 1, 1,
-    1, 1, 2, 2, 1, 1, 1,  1,  1,  1, 1, 6, 6, 4, 8, 8, 4, 8,  1,  1, 6, 6, 1, 1, 1, 1, 3, 0, 2,
-    3, 0, 2, 2, 1, 1, 1,  1,  1,  1, 1, 1, 1, 1, 1, 1, 4, 4,  4,  4, 4, 4, 4, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 0, 2, 0,  2,  11, 4, 4, 4, 4, 4, 4, 4, 4, 4};
+    0, 2, 2, 2, 2, 3, 0, 4, 0, 2, 1,  1,  1,  1, 1, 1, 5, 3, 7, 1, 1, 1, 1, 2,  2,  4, 0, 2, 2, 2,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 1,  2,  2,  2, 3, 0, 2, 2, 1, 1, 3, 0, 2, 1,  2,  5, 5, 1, 1, 1,
+    0, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1, 1, 1, 0, 2,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1,  1, 1, 1, 1, 1, 4, 5, 1, 1, 1, 4,  4,  3, 3, 1, 1, 3,
+    0, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  4, 4, 4, 4, 4,
+    4, 4, 4, 4, 1, 1, 1, 1, 1, 1, 1,  1,  1,  1, 1, 1, 1, 1, 1, 4, 4, 4, 4, 7,  4,  4, 4, 7, 4, 7,
+    8, 7, 7, 4, 7, 7, 4, 4, 4, 4, 4,  4,  4,  4, 4, 4, 4, 4, 4, 4, 1, 1, 1, 4,  4,  6, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1,  1, 1, 1, 1, 1, 6, 0, 2, 0, 2, 11, 10, 0, 1, 2, 8, 8,
+    0, 2, 8, 8, 8, 0, 2, 7, 4, 4, 4,  11, 11, 7, 4, 4, 7, 8, 8, 8, 4, 4, 1, 1,  4,  3, 0, 2, 1, 1,
+    1, 1, 1, 1, 1, 1, 2, 2, 1, 1, 1,  1,  1,  1, 1, 6, 6, 4, 8, 8, 4, 8, 1, 1,  6,  6, 1, 1, 1, 1,
+    3, 0, 2, 3, 0, 2, 2, 1, 1, 1, 1,  1,  1,  1, 1, 1, 1, 1, 1, 4, 4, 4, 4, 4,  4,  4, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 0, 2, 0, 2, 11, 4,  4,  4, 4, 4, 4, 4, 4, 4};
 
 
 #if YYDEBUG || 1
@@ -6790,6 +7333,8 @@ const char* const ParserGen::yytname_[] = {"\"EOF\"",
                                            "error",
                                            "\"invalid token\"",
                                            "ABS",
+                                           "ACOS",
+                                           "ACOSH",
                                            "ADD",
                                            "\"allElementsTrue\"",
                                            "AND",
@@ -6798,7 +7343,6 @@ const char* const ParserGen::yytname_[] = {"\"EOF\"",
                                            "\"coll argument\"",
                                            "\"date argument\"",
                                            "\"dateString argument\"",
-                                           "\"filter\"",
                                            "\"find argument\"",
                                            "\"format argument\"",
                                            "\"input argument\"",
@@ -6806,15 +7350,16 @@ const char* const ParserGen::yytname_[] = {"\"EOF\"",
                                            "\"onNull argument\"",
                                            "\"options argument\"",
                                            "\"pipeline argument\"",
-                                           "\"q\"",
-                                           "\"query\"",
                                            "\"regex argument\"",
                                            "\"replacement argument\"",
                                            "\"size argument\"",
-                                           "\"sort argument\"",
                                            "\"timezone argument\"",
                                            "\"to argument\"",
+                                           "ASIN",
+                                           "ASINH",
+                                           "ATAN",
                                            "ATAN2",
+                                           "ATANH",
                                            "\"false\"",
                                            "\"true\"",
                                            "CEIL",
@@ -6822,11 +7367,14 @@ const char* const ParserGen::yytname_[] = {"\"EOF\"",
                                            "CONCAT",
                                            "CONST_EXPR",
                                            "CONVERT",
+                                           "COS",
+                                           "COSH",
                                            "DATE_FROM_STRING",
                                            "DATE_TO_STRING",
                                            "\"-1 (decimal)\"",
                                            "\"1 (decimal)\"",
                                            "\"zero (decimal)\"",
+                                           "DEGREES_TO_RADIANS",
                                            "DIVIDE",
                                            "\"-1 (double)\"",
                                            "\"1 (double)\"",
@@ -6865,6 +7413,7 @@ const char* const ParserGen::yytname_[] = {"\"EOF\"",
                                            "NOT",
                                            "OR",
                                            "POW",
+                                           "RADIANS_TO_DEGREES",
                                            "\"randVal\"",
                                            "\"recordId\"",
                                            "REGEX_FIND",
@@ -6883,6 +7432,8 @@ const char* const ParserGen::yytname_[] = {"\"EOF\"",
                                            "\"setUnion\"",
                                            "\"slice\"",
                                            "\"sortKey\"",
+                                           "SIN",
+                                           "SINH",
                                            "SPLIT",
                                            "SQRT",
                                            "STAGE_INHIBIT_OPTIMIZATION",
@@ -6900,6 +7451,8 @@ const char* const ParserGen::yytname_[] = {"\"EOF\"",
                                            "SUBSTR_BYTES",
                                            "SUBSTR_CP",
                                            "SUBTRACT",
+                                           "TAN",
+                                           "TANH",
                                            "\"textScore\"",
                                            "TO_BOOL",
                                            "TO_DATE",
@@ -7012,7 +7565,6 @@ const char* const ParserGen::yytname_[] = {"\"EOF\"",
                                            "maths",
                                            "meta",
                                            "add",
-                                           "atan2",
                                            "boolExprs",
                                            "and",
                                            "or",
@@ -7095,6 +7647,27 @@ const char* const ParserGen::yytname_[] = {"\"EOF\"",
                                            "setIntersection",
                                            "setIsSubset",
                                            "setUnion",
+                                           "trig",
+                                           "sin",
+                                           "cos",
+                                           "tan",
+                                           "sinh",
+                                           "cosh",
+                                           "tanh",
+                                           "asin",
+                                           "acos",
+                                           "atan",
+                                           "asinh",
+                                           "acosh",
+                                           "atanh",
+                                           "atan2",
+                                           "degreesToRadians",
+                                           "radiansToDegrees",
+                                           "nonArrayExpression",
+                                           "nonArrayCompoundExpression",
+                                           "nonArrayNonObjCompoundExpression",
+                                           "expressionSingletonArray",
+                                           "singleArgExpression",
                                            "match",
                                            "predicates",
                                            "compoundMatchExprs",
@@ -7120,37 +7693,40 @@ const char* const ParserGen::yytname_[] = {"\"EOF\"",
 
 #if YYDEBUG
 const short ParserGen::yyrline_[] = {
-    0,    333,  333,  336,  339,  342,  345,  352,  358,  359,  367,  367,  370,  370,  370,  370,
-    370,  370,  373,  383,  389,  399,  399,  399,  399,  403,  408,  413,  432,  435,  442,  445,
-    451,  465,  466,  467,  468,  469,  470,  471,  472,  473,  474,  475,  476,  479,  482,  485,
-    488,  491,  494,  497,  500,  503,  506,  509,  512,  515,  518,  521,  524,  527,  530,  531,
-    532,  533,  534,  539,  547,  560,  561,  578,  585,  589,  597,  600,  606,  612,  615,  621,
-    624,  633,  634,  640,  643,  650,  653,  657,  666,  674,  675,  676,  679,  682,  689,  689,
-    689,  692,  700,  703,  706,  709,  712,  715,  721,  727,  746,  749,  752,  755,  758,  761,
-    764,  767,  770,  773,  776,  779,  782,  785,  788,  791,  794,  797,  805,  808,  811,  814,
-    817,  820,  823,  826,  829,  832,  835,  838,  841,  844,  847,  850,  853,  856,  859,  862,
-    865,  868,  871,  874,  877,  880,  883,  886,  889,  892,  895,  898,  901,  904,  907,  910,
-    913,  916,  919,  922,  925,  928,  931,  934,  937,  940,  943,  946,  949,  952,  955,  958,
-    961,  964,  967,  970,  973,  976,  979,  982,  985,  988,  991,  994,  997,  1000, 1003, 1006,
-    1009, 1012, 1019, 1024, 1027, 1030, 1033, 1036, 1039, 1042, 1045, 1048, 1054, 1068, 1082, 1088,
-    1094, 1100, 1106, 1112, 1118, 1124, 1130, 1136, 1142, 1148, 1154, 1160, 1163, 1166, 1169, 1175,
-    1178, 1181, 1184, 1190, 1193, 1196, 1199, 1205, 1208, 1211, 1214, 1220, 1223, 1229, 1230, 1231,
-    1232, 1233, 1234, 1235, 1236, 1237, 1238, 1239, 1240, 1241, 1242, 1243, 1244, 1245, 1246, 1247,
-    1248, 1249, 1256, 1257, 1264, 1264, 1264, 1269, 1276, 1282, 1282, 1282, 1282, 1282, 1283, 1283,
-    1283, 1283, 1283, 1287, 1291, 1295, 1304, 1312, 1318, 1321, 1328, 1335, 1335, 1335, 1335, 1339,
-    1345, 1351, 1351, 1351, 1351, 1351, 1351, 1351, 1351, 1351, 1351, 1351, 1351, 1351, 1352, 1352,
-    1352, 1352, 1356, 1359, 1362, 1365, 1368, 1371, 1374, 1377, 1380, 1386, 1393, 1399, 1404, 1409,
-    1415, 1420, 1425, 1430, 1436, 1441, 1447, 1456, 1462, 1468, 1473, 1479, 1485, 1485, 1485, 1489,
-    1496, 1503, 1510, 1510, 1510, 1510, 1510, 1510, 1510, 1511, 1511, 1511, 1511, 1511, 1511, 1511,
-    1511, 1512, 1512, 1512, 1512, 1512, 1512, 1512, 1516, 1526, 1529, 1535, 1538, 1544, 1553, 1562,
-    1565, 1568, 1574, 1585, 1596, 1599, 1605, 1613, 1621, 1629, 1632, 1637, 1646, 1652, 1658, 1664,
-    1674, 1684, 1691, 1698, 1705, 1713, 1721, 1729, 1737, 1743, 1749, 1752, 1758, 1764, 1769, 1772,
-    1779, 1782, 1785, 1788, 1791, 1794, 1797, 1800, 1805, 1807, 1813, 1813, 1813, 1813, 1813, 1813,
-    1814, 1818, 1824, 1830, 1837, 1848, 1859, 1866, 1877, 1877, 1881, 1888, 1895, 1895, 1899, 1899,
-    1903, 1909, 1910, 1917, 1923, 1926, 1933, 1940, 1941, 1942, 1943, 1944, 1947, 1947, 1947, 1947,
-    1947, 1947, 1947, 1949, 1954, 1959, 1964, 1969, 1974, 1979, 1985, 1986, 1987, 1988, 1989, 1990,
-    1991, 1992, 1993, 1994, 1999, 2002, 2009, 2012, 2018, 2028, 2033, 2038, 2043, 2048, 2053, 2058,
-    2063, 2068};
+    0,    349,  349,  352,  355,  362,  368,  369,  377,  377,  380,  380,  380,  380,  380,  380,
+    383,  393,  399,  409,  409,  409,  409,  413,  418,  423,  442,  445,  452,  455,  461,  475,
+    476,  477,  478,  479,  480,  481,  482,  483,  484,  485,  486,  489,  492,  495,  498,  501,
+    504,  507,  510,  513,  516,  519,  522,  525,  528,  531,  534,  537,  540,  541,  542,  543,
+    544,  549,  557,  570,  571,  588,  595,  599,  607,  610,  616,  622,  625,  631,  634,  643,
+    644,  650,  653,  660,  663,  667,  676,  684,  685,  686,  689,  692,  699,  699,  699,  702,
+    710,  713,  716,  719,  722,  725,  731,  737,  756,  759,  762,  765,  768,  771,  774,  777,
+    780,  783,  786,  789,  792,  795,  798,  801,  809,  812,  815,  818,  821,  824,  827,  830,
+    833,  836,  839,  842,  845,  848,  851,  854,  857,  860,  863,  866,  869,  872,  875,  878,
+    881,  884,  887,  890,  893,  896,  899,  902,  905,  908,  911,  914,  917,  920,  923,  926,
+    929,  932,  935,  938,  941,  944,  947,  950,  953,  956,  959,  962,  965,  968,  971,  974,
+    977,  980,  983,  986,  989,  992,  995,  998,  1001, 1004, 1007, 1010, 1013, 1016, 1019, 1022,
+    1025, 1028, 1031, 1034, 1037, 1040, 1043, 1046, 1049, 1052, 1055, 1058, 1065, 1070, 1073, 1076,
+    1079, 1082, 1085, 1088, 1091, 1094, 1100, 1114, 1128, 1134, 1140, 1146, 1152, 1158, 1164, 1170,
+    1176, 1182, 1188, 1194, 1200, 1206, 1209, 1212, 1215, 1221, 1224, 1227, 1230, 1236, 1239, 1242,
+    1245, 1251, 1254, 1257, 1260, 1266, 1269, 1275, 1276, 1277, 1278, 1279, 1280, 1281, 1282, 1283,
+    1284, 1285, 1286, 1287, 1288, 1289, 1290, 1291, 1292, 1293, 1294, 1295, 1302, 1303, 1310, 1310,
+    1310, 1310, 1314, 1314, 1318, 1318, 1322, 1322, 1322, 1322, 1322, 1322, 1322, 1323, 1323, 1323,
+    1328, 1335, 1341, 1341, 1345, 1349, 1353, 1362, 1369, 1374, 1374, 1379, 1385, 1388, 1395, 1402,
+    1402, 1402, 1402, 1406, 1412, 1418, 1418, 1418, 1418, 1418, 1418, 1418, 1418, 1418, 1418, 1418,
+    1418, 1419, 1419, 1419, 1419, 1423, 1426, 1429, 1432, 1435, 1438, 1441, 1444, 1447, 1452, 1452,
+    1452, 1452, 1452, 1452, 1452, 1452, 1452, 1452, 1452, 1452, 1452, 1453, 1453, 1457, 1464, 1470,
+    1475, 1480, 1486, 1491, 1496, 1501, 1507, 1512, 1518, 1527, 1533, 1539, 1544, 1550, 1556, 1561,
+    1566, 1571, 1576, 1581, 1586, 1591, 1596, 1601, 1606, 1611, 1616, 1621, 1627, 1627, 1627, 1631,
+    1638, 1645, 1652, 1652, 1652, 1652, 1652, 1652, 1652, 1653, 1653, 1653, 1653, 1653, 1653, 1653,
+    1653, 1654, 1654, 1654, 1654, 1654, 1654, 1654, 1658, 1668, 1671, 1677, 1680, 1686, 1695, 1704,
+    1707, 1710, 1716, 1727, 1738, 1741, 1747, 1755, 1763, 1771, 1774, 1779, 1788, 1794, 1800, 1806,
+    1816, 1826, 1833, 1840, 1847, 1855, 1863, 1871, 1879, 1885, 1891, 1894, 1900, 1906, 1911, 1914,
+    1921, 1924, 1927, 1930, 1933, 1936, 1939, 1942, 1947, 1949, 1955, 1955, 1955, 1955, 1955, 1955,
+    1956, 1960, 1966, 1972, 1979, 1990, 2001, 2008, 2019, 2019, 2023, 2030, 2037, 2037, 2041, 2041,
+    2045, 2051, 2052, 2059, 2065, 2068, 2075, 2082, 2083, 2084, 2085, 2086, 2089, 2089, 2089, 2089,
+    2089, 2089, 2089, 2091, 2096, 2101, 2106, 2111, 2116, 2121, 2127, 2128, 2129, 2130, 2131, 2132,
+    2133, 2134, 2135, 2136, 2141, 2144, 2151, 2154, 2160, 2170, 2175, 2180, 2185, 2190, 2195, 2200,
+    2205, 2210};
 
 void ParserGen::yy_stack_print_() const {
     *yycdebug_ << "Stack now";
@@ -7171,8 +7747,8 @@ void ParserGen::yy_reduce_print_(int yyrule) const {
 #endif  // YYDEBUG
 
 
-#line 57 "grammar.yy"
+#line 57 "src/mongo/db/cst/grammar.yy"
 }  // namespace mongo
-#line 6872 "parser_gen.cpp"
+#line 7400 "src/mongo/db/cst/parser_gen.cpp"
 
-#line 2072 "grammar.yy"
+#line 2214 "src/mongo/db/cst/grammar.yy"

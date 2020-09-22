@@ -120,6 +120,8 @@
 // error messages.
 %token
     ABS
+    ACOS
+    ACOSH
     ADD
     ALL_ELEMENTS_TRUE "allElementsTrue"
     AND
@@ -128,7 +130,6 @@
     ARG_COLL "coll argument"
     ARG_DATE "date argument"
     ARG_DATE_STRING "dateString argument"
-    ARG_FILTER "filter"
     ARG_FIND "find argument"
     ARG_FORMAT "format argument"
     ARG_INPUT "input argument"
@@ -136,15 +137,16 @@
     ARG_ON_NULL "onNull argument"
     ARG_OPTIONS "options argument"
     ARG_PIPELINE "pipeline argument"
-    ARG_Q "q"
-    ARG_QUERY "query"
     ARG_REGEX "regex argument"
     ARG_REPLACEMENT "replacement argument"
     ARG_SIZE "size argument"
-    ARG_SORT "sort argument"
     ARG_TIMEZONE "timezone argument"
     ARG_TO "to argument"
+    ASIN
+    ASINH
+    ATAN
     ATAN2
+    ATANH
     BOOL_FALSE "false"
     BOOL_TRUE "true"
     CEIL
@@ -152,11 +154,14 @@
     CONCAT
     CONST_EXPR
     CONVERT
+    COS
+    COSH
     DATE_FROM_STRING
     DATE_TO_STRING
     DECIMAL_NEGATIVE_ONE "-1 (decimal)"
     DECIMAL_ONE "1 (decimal)"
     DECIMAL_ZERO "zero (decimal)"
+    DEGREES_TO_RADIANS
     DIVIDE
     DOUBLE_NEGATIVE_ONE "-1 (double)"
     DOUBLE_ONE "1 (double)"
@@ -195,6 +200,7 @@
     NOT
     OR
     POW
+    RADIANS_TO_DEGREES
     RAND_VAL "randVal"
     RECORD_ID "recordId"
     REGEX_FIND
@@ -213,6 +219,8 @@
     SET_UNION "setUnion"
     SLICE "slice"
     SORT_KEY "sortKey"
+    SIN
+    SINH
     SPLIT
     SQRT
     STAGE_INHIBIT_OPTIMIZATION
@@ -230,6 +238,8 @@
     SUBSTR_BYTES
     SUBSTR_CP
     SUBTRACT
+    TAN
+    TANH
     TEXT_SCORE "textScore"
     TO_BOOL
     TO_DATE
@@ -272,7 +282,6 @@
 %token <Timestamp> TIMESTAMP "Timestamp"
 %token <UserMinKey> MIN_KEY "minKey"
 %token <UserMaxKey> MAX_KEY "maxKey"
-%token START_PIPELINE START_MATCH START_SORT
 
 //
 // Semantic values (aka the C++ types produced by the actions).
@@ -300,7 +309,7 @@
 // Aggregate expressions
 %nterm <CNode> expression compoundNonObjectExpression exprFixedTwoArg exprFixedThreeArg
 %nterm <CNode> arrayManipulation slice expressionArray expressionObject expressionFields maths meta
-%nterm <CNode> add atan2 boolExprs and or not literalEscapes const literal stringExps concat
+%nterm <CNode> add boolExprs and or not literalEscapes const literal stringExps concat
 %nterm <CNode> dateFromString dateToString indexOfBytes indexOfCP ltrim regexFind regexFindAll
 %nterm <CNode> regexMatch regexArgs replaceOne replaceAll rtrim split strLenBytes strLenCP
 %nterm <CNode> strcasecmp substr substrBytes substrCP toLower toUpper trim
@@ -314,6 +323,10 @@
 %nterm <CNode> setExpression allElementsTrue anyElementTrue setDifference setEquals
 %nterm <CNode> setIntersection setIsSubset setUnion
 
+%nterm <CNode> trig sin cos tan sinh cosh tanh asin acos atan asinh acosh atanh atan2
+%nterm <CNode> degreesToRadians radiansToDegrees
+%nterm <CNode> nonArrayExpression nonArrayCompoundExpression nonArrayNonObjCompoundExpression
+%nterm <CNode> expressionSingletonArray singleArgExpression
 // Match expressions.
 %nterm <CNode> match predicates compoundMatchExprs predValue additionalExprs
 %nterm <std::pair<CNode::Fieldname, CNode>> predicate logicalExpr operatorExpression notExpr
@@ -324,25 +337,22 @@
 %nterm <std::pair<CNode::Fieldname, CNode>> sortSpec
 
 %start start;
+// Sentinel tokens to indicate the starting point in the grammar.
+%token START_PIPELINE START_MATCH START_SORT
+
 //
 // Grammar rules
 //
 %%
 
 start:
-    ARG_PIPELINE pipeline {
+    START_PIPELINE pipeline {
         *cst = $pipeline;
     }
-    | ARG_FILTER match {
+    | START_MATCH match {
         *cst = $match;
     }
-    | ARG_QUERY match {
-        *cst = $match;
-    }
-    | ARG_Q match {
-        *cst = $match;
-    }
-    | ARG_SORT sortSpecs {
+    | START_SORT sortSpecs {
         *cst = $sortSpecs;
     }
 ;
@@ -791,12 +801,6 @@ arg:
     | ARG_REPLACEMENT {
         $$ = "replacement";
     }
-    | ARG_FILTER {
-        $$ = UserFieldname{"filter"};
-    }
-    | ARG_Q {
-        $$ = UserFieldname{"q"};
-    }
 ;
 
 aggExprAsUserFieldname:
@@ -1011,6 +1015,48 @@ aggExprAsUserFieldname:
     }
     | SET_UNION {
         $$ = UserFieldname{"$setUnion"};
+    }
+    | SIN {
+        $$ = UserFieldname{"$sin"};
+    }
+    | COS {
+        $$ = UserFieldname{"$cos"};
+    }
+    | TAN {
+        $$ = UserFieldname{"$tan"};
+    }
+    | SINH {
+        $$ = UserFieldname{"$sinh"};
+    }
+    | COSH {
+        $$ = UserFieldname{"$cosh"};
+    }
+    | TANH {
+        $$ = UserFieldname{"$tanh"};
+    }
+    | ASIN {
+        $$ = UserFieldname{"$asin"};
+    }
+    | ACOS {
+        $$ = UserFieldname{"$acos"};
+    }
+    | ATAN {
+        $$ = UserFieldname{"$atan"};
+    }
+    | ASINH {
+        $$ = UserFieldname{"$asinh"};
+    }
+    | ACOSH {
+        $$ = UserFieldname{"$acosh"};
+    }
+    | ATANH {
+        $$ = UserFieldname{"$atanh"};
+    }
+    | DEGREES_TO_RADIANS {
+        $$ = UserFieldname{"$degreesToRadians"};
+    }
+    | RADIANS_TO_DEGREES {
+        $$ = UserFieldname{"$radiansToDegrees"};
     }
 ;
 
@@ -1261,7 +1307,20 @@ expressions:
 ;
 
 expression:
-    simpleValue | expressionObject | compoundNonObjectExpression
+    simpleValue | expressionObject | expressionArray | nonArrayNonObjCompoundExpression
+;
+
+nonArrayExpression:
+    simpleValue | nonArrayCompoundExpression
+;
+
+nonArrayCompoundExpression:
+    expressionObject | nonArrayNonObjCompoundExpression
+;
+
+nonArrayNonObjCompoundExpression:
+    arrayManipulation | maths | meta | boolExprs | literalEscapes | compExprs | typeExpression
+    | stringExps | setExpression | trig
 ;
 
 // Helper rule for expressions which take exactly two expression arguments.
@@ -1279,8 +1338,7 @@ exprFixedThreeArg:
 ;
 
 compoundNonObjectExpression:
-    arrayManipulation | expressionArray | maths | meta | boolExprs
-    | literalEscapes | compExprs | typeExpression | stringExps | setExpression
+    expressionArray | nonArrayNonObjCompoundExpression
 ;
 
 arrayManipulation:
@@ -1305,6 +1363,15 @@ expressionArray:
         $$ = CNode{$expressions};
     }
 ;
+
+// Helper rule for expressions which can take as an argument an array with exactly one element.
+expressionSingletonArray:
+    START_ARRAY expression END_ARRAY {
+        $$ = CNode{CNode::ArrayChildren{$expression}};
+    }
+;
+
+singleArgExpression: nonArrayExpression | expressionSingletonArray;
 
 // These are objects occuring in Expressions outside of $const/$literal. They may contain further
 // Expressions.
@@ -1348,7 +1415,7 @@ idAsProjectionPath:
 ;
 
 maths:
-    add | atan2 | abs | ceil | divide | exponent | floor | ln | log | logten | mod | multiply | pow
+    add | abs | ceil | divide | exponent | floor | ln | log | logten | mod | multiply | pow
 | round | sqrt | subtract | trunc
 ;
 
@@ -1380,6 +1447,10 @@ meta:
     | START_OBJECT META TEXT_SCORE END_OBJECT {
         $$ = CNode{CNode::ObjectChildren{{KeyFieldname::meta, CNode{KeyValue::textScore}}}};
     }
+
+trig:
+    sin | cos | tan | sinh | cosh | tanh | asin | acos | atan | atan2 | asinh | acosh | atanh
+| degreesToRadians | radiansToDegrees
 ;
 
 add:
@@ -1481,6 +1552,77 @@ trunc:
                                           CNode{CNode::ArrayChildren{$expr1, $expr2}}}}};
      }
 ;
+sin:
+    START_OBJECT SIN singleArgExpression END_OBJECT {
+        $$ = CNode{CNode::ObjectChildren{{KeyFieldname::sin, $singleArgExpression}}};
+    }
+;
+cos:
+    START_OBJECT COS singleArgExpression END_OBJECT {
+        $$ = CNode{CNode::ObjectChildren{{KeyFieldname::cos, $singleArgExpression}}};
+    }
+;
+tan:
+    START_OBJECT TAN singleArgExpression END_OBJECT {
+        $$ = CNode{CNode::ObjectChildren{{KeyFieldname::tan, $singleArgExpression}}};
+    }
+;
+sinh:
+    START_OBJECT SINH singleArgExpression END_OBJECT {
+        $$ = CNode{CNode::ObjectChildren{{KeyFieldname::sinh, $singleArgExpression}}};
+    }
+;
+cosh:
+    START_OBJECT COSH singleArgExpression END_OBJECT {
+        $$ = CNode{CNode::ObjectChildren{{KeyFieldname::cosh, $singleArgExpression}}};
+    }
+;
+tanh:
+    START_OBJECT TANH singleArgExpression END_OBJECT {
+        $$ = CNode{CNode::ObjectChildren{{KeyFieldname::tanh, $singleArgExpression}}};
+    }
+;
+asin:
+    START_OBJECT ASIN singleArgExpression END_OBJECT {
+        $$ = CNode{CNode::ObjectChildren{{KeyFieldname::asin, $singleArgExpression}}};
+    }
+;
+acos:
+    START_OBJECT ACOS singleArgExpression END_OBJECT {
+        $$ = CNode{CNode::ObjectChildren{{KeyFieldname::acos, $singleArgExpression}}};
+    }
+;
+atan:
+    START_OBJECT ATAN singleArgExpression END_OBJECT {
+        $$ = CNode{CNode::ObjectChildren{{KeyFieldname::atan, $singleArgExpression}}};
+    }
+;
+asinh:
+    START_OBJECT ASINH singleArgExpression END_OBJECT {
+        $$ = CNode{CNode::ObjectChildren{{KeyFieldname::asinh, $singleArgExpression}}};
+    }
+;
+acosh:
+    START_OBJECT ACOSH singleArgExpression END_OBJECT {
+        $$ = CNode{CNode::ObjectChildren{{KeyFieldname::acosh, $singleArgExpression}}};
+    }
+;
+atanh:
+    START_OBJECT ATANH singleArgExpression END_OBJECT {
+        $$ = CNode{CNode::ObjectChildren{{KeyFieldname::atanh, $singleArgExpression}}};
+    }
+;
+degreesToRadians:
+    START_OBJECT DEGREES_TO_RADIANS singleArgExpression END_OBJECT {
+        $$ = CNode{CNode::ObjectChildren{{KeyFieldname::degreesToRadians, $singleArgExpression}}};
+    }
+;
+radiansToDegrees:
+    START_OBJECT RADIANS_TO_DEGREES singleArgExpression END_OBJECT {
+        $$ = CNode{CNode::ObjectChildren{{KeyFieldname::radiansToDegrees, $singleArgExpression}}};
+    }
+;
+
 boolExprs:
     and | or | not
 ;
