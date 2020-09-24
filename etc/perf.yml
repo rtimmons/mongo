@@ -1133,6 +1133,7 @@ buildvariants:
     platform: linux
     infrastructure_provisioning: microbenchmarks
     mongodb_setup: microbenchmarks_standalone
+    storageEngine: inMemory
     project_dir: &project_dir perf
   run_on:
   - "centos6-perf"
@@ -1199,6 +1200,7 @@ buildvariants:
     platform: linux
     infrastructure_provisioning: microbenchmarks
     mongodb_setup: microbenchmarks_replica
+    storageEngine: inMemory
     project_dir: *project_dir
   run_on:
   - "centos6-perf"
