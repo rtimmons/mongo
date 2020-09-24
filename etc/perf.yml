@@ -1037,7 +1037,7 @@ tasks:
         includeFilter1: "agg_query_comparison"
         includeFilter2: "core regression"
         excludeFilter: "single_threaded"
-        threads: "1 2 4 8",
+        threads: "1 2 4 8"
         readCmd: false
     - func: f_run_analysis
 - name: agg-query-comparison_dsi
