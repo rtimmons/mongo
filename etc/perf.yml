@@ -4,26 +4,27 @@ stepback: false
 variables:
   ###
   # Leave this section uncommented to enable compile.
-  _real_remote_file: &_remote_file
-      ${project_dir}/${version_id}/${revision}/${platform}/mongodb${compile-variant|}-${version_id}.tar.gz
-  _real_compile: &_compile
-    - variant: linux-wt-standalone
-      name: compile
-  _real_expansions: &_expansion_updates
-    []
+  # _real_remote_file: &_remote_file
+  #     ${project_dir}/${version_id}/${revision}/${platform}/mongodb${compile-variant|}-${version_id}.tar.gz
+  # _real_compile: &_compile
+  #   - variant: linux-wt-standalone
+  #     name: compile
+  # _real_expansions: &_expansion_updates
+  #   []
   ###
 
   ###
   # **Or**: Leave this section uncommented to bypass/skip compile.
-  # # This file ↓ came from a microbenchmarks waterfall run.
-  # # https://evergreen.mongodb.com/version/performance_996dcdc3d96346d71f012388eccc79c691619340
-  # # Artifacts eventually expire. If this fails, grab the compile artifacts url and update this.
-  # _skip_remote_file: &_remote_file
-  #     perf/performance_996dcdc3d96346d71f012388eccc79c691619340/996dcdc3d96346d71f012388eccc79c691619340/mongodb-performance_996dcdc3d96346d71f012388eccc79c691619340.tar.gz
-  # _skip_compile: &_compile
-  #     []
-  # _skip_expansions: &_expansion_updates
-  #   []
+  # This file ↓ came from a microbenchmarks waterfall run.
+  # https://evergreen.mongodb.com/version/performance_996dcdc3d96346d71f012388eccc79c691619340
+  # Artifacts eventually expire. If this fails, grab the compile artifacts url and update this.
+  _skip_remote_file: &_remote_file
+      perf/5f6ca2392fbabe40badf39c4/c39af144b2370be0537410d9bc79be66a1a5f3c7/linux/mongodb-5f6ca2392fbabe40badf39c4.tar.gz
+  _skip_compile: &_compile
+      []
+  _skip_expansions: &_expansion_updates
+    - key: mongodb_binary_archive
+      value: https://mciuploads.s3.amazonaws.com/perf/5f6ca2392fbabe40badf39c4/c39af144b2370be0537410d9bc79be66a1a5f3c7/linux/mongodb-5f6ca2392fbabe40badf39c4.tar.gz
   ###
 
   _src_dir: &src_dir src/mongo
@@ -738,9 +739,9 @@ tasks:
         test_control: microbenchmarks
         test_control_params: |
           {include_filter_1: query,
-           include_filter_2: core regression
+           include_filter_2: core regression,
            exclude_filter: single_threaded,
-           threads: 1 2 4 8
+           threads: "1 2 4 8",
            read_cmd: 'false'}
 
 
@@ -764,9 +765,9 @@ tasks:
         test_control: microbenchmarks
         test_control_params: |
           {include_filter_1: query_identityview,
-           include_filter_2: core regression
+           include_filter_2: core regression,
            exclude_filter: single_threaded,
-           threads: 1 2 4 8
+           threads: "1 2 4 8",
            read_cmd: 'true'}
 
 
@@ -790,9 +791,9 @@ tasks:
         test_control: microbenchmarks
         test_control_params: |
           {include_filter_1: aggregation_identityview,
-           include_filter_2: regression
+           include_filter_2: regression,
            exclude_filter: none,
-           threads: "1"
+           threads: "1",
            read_cmd: 'true'}
 
 - name: where
@@ -815,9 +816,9 @@ tasks:
         test_control: microbenchmarks
         test_control_params: |
           {include_filter_1: where,
-           include_filter_2: core regression
+           include_filter_2: core regression,
            exclude_filter: single_threaded,
-           threads: "1 2 4 8"
+           threads: "1 2 4 8",
            read_cmd: 'false'}
 
 - name: update
@@ -840,9 +841,9 @@ tasks:
         test_control: microbenchmarks
         test_control_params: |
           {include_filter_1: update,
-           include_filter_2: core regression
+           include_filter_2: core regression,
            exclude_filter: single_threaded,
-           threads: "1 2 4 8"
+           threads: "1 2 4 8",
            read_cmd: 'false'}
 
 
@@ -866,9 +867,9 @@ tasks:
         test_control: microbenchmarks
         test_control_params: |
           {include_filter_1: insert,
-           include_filter_2: core regression
+           include_filter_2: core regression,
            exclude_filter: single_threaded,
-           threads: "1 2 4 8"
+           threads: "1 2 4 8",
            read_cmd: 'false'}
 
 
@@ -892,9 +893,9 @@ tasks:
         test_control: microbenchmarks
         test_control_params: |
           {include_filter_1: wildcard_read,
-           include_filter_2: core regression
+           include_filter_2: core regression,
            exclude_filter: single_threaded,
-           threads: "1 2 4 8"
+           threads: "1 2 4 8",
            read_cmd: 'false'}
 
 
@@ -918,9 +919,9 @@ tasks:
         test_control: microbenchmarks
         test_control_params: |
           {include_filter_1: wildcard_write,
-           include_filter_2: core regression
+           include_filter_2: core regression,
            exclude_filter: single_threaded,
-           threads: "1 2 4 8"
+           threads: "1 2 4 8",
            read_cmd: 'false'}
 
 
@@ -944,9 +945,9 @@ tasks:
         test_control: microbenchmarks
         test_control_params: |
           {include_filter_1: geo,
-           include_filter_2: core regression
+           include_filter_2: core regression,
            exclude_filter: single_threaded,
-           threads: "1 2 4 8"
+           threads: "1 2 4 8",
            read_cmd: 'false'}
 
 
@@ -970,9 +971,9 @@ tasks:
         test_control: microbenchmarks
         test_control_params: |
           {include_filter_1: command multi remove mixed,
-           include_filter_2: core regression
+           include_filter_2: core regression,
            exclude_filter: single_threaded,
-           threads: "1 2 4 8"
+           threads: "1 2 4 8",
            read_cmd: 'false'}
 
 
@@ -996,9 +997,9 @@ tasks:
         test_control: microbenchmarks
         test_control_params: |
           {include_filter_1: single_threaded,
-           include_filter_2: core regression
+           include_filter_2: core regression,
            exclude_filter: none,
-           threads: "1"
+           threads: "1",
            read_cmd: 'false'}
 
 - name: aggregation
@@ -1021,7 +1022,7 @@ tasks:
         test_control: microbenchmarks
         test_control_params: |
           {include_filter_1: aggregation,
-           include_filter_2: regression
+           include_filter_2: regression,
            exclude_filter: js,
            threads: "1"
            read_cmd: 'false'}
@@ -1036,7 +1037,7 @@ tasks:
         includeFilter1: "agg_query_comparison"
         includeFilter2: "core regression"
         excludeFilter: "single_threaded"
-        threads: "1 2 4 8"
+        threads: "1 2 4 8",
         readCmd: false
     - func: f_run_analysis
 - name: agg-query-comparison_dsi
@@ -1047,9 +1048,9 @@ tasks:
         test_control: microbenchmarks
         test_control_params: |
           {include_filter_1: agg_query_comparison,
-           include_filter_2: core regression
+           include_filter_2: core regression,
            exclude_filter: single_threaded,
-           threads: "1 2 4 8"
+           threads: "1 2 4 8",
            read_cmd: 'false'}
 
 
@@ -1073,9 +1074,9 @@ tasks:
         test_control: microbenchmarks
         test_control_params: |
           {include_filter_1: pipeline-updates,
-           include_filter_2: regression
+           include_filter_2: regression,
            exclude_filter: none,
-           threads: "1 2 4 8"
+           threads: "1 2 4 8",
            read_cmd: 'true'}
 
 
@@ -1099,9 +1100,9 @@ tasks:
         test_control: microbenchmarks
         test_control_params: |
           {include_filter_1: js,
-           include_filter_2: aggregation
+           include_filter_2: aggregation,
            exclude_filter: none,
-           threads: "1 2 4 8"
+           threads: "1 2 4 8",
            read_cmd: 'true'}
 
 
