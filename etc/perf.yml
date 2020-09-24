@@ -51,6 +51,10 @@ modules:
   repo: git@github.com:mongodb/mongo-tools.git
   prefix: mongo-tools/src/github.com/mongodb
   branch: master
+- name: mongo-perf
+  repo: git@github.com:mongodb/mongo-perf.git
+  prefix: ../../src
+  branch: master
 
 ###
 # Same in every DSI project
