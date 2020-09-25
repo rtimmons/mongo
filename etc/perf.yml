@@ -1028,7 +1028,7 @@ tasks:
           {include_filter_1: aggregation,
            include_filter_2: regression,
            exclude_filter: js,
-           threads: "1"
+           threads: "1",
            read_cmd: 'false'}
 
 
