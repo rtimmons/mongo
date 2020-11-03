@@ -13,6 +13,7 @@ API
 APIs
 ARG
 ARGS
+ASAN
 ASM
 Addr
 Ailamaki
@@ -345,6 +346,7 @@ Redistributions
 Refactor
 Resize
 RocksDB
+Runtime
 SIMD
 SLIST
 SLVG

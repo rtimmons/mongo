@@ -82,6 +82,7 @@ MONGO_FAIL_POINT_DEFINE(hangIndexBuildOnStepUp);
 MONGO_FAIL_POINT_DEFINE(hangAfterSettingUpResumableIndexBuild);
 MONGO_FAIL_POINT_DEFINE(hangIndexBuildBeforeCommit);
 MONGO_FAIL_POINT_DEFINE(hangBeforeBuildingIndex);
+MONGO_FAIL_POINT_DEFINE(hangBeforeBuildingIndexSecond);
 MONGO_FAIL_POINT_DEFINE(hangIndexBuildBeforeWaitingUntilMajorityOpTime);
 MONGO_FAIL_POINT_DEFINE(failSetUpResumeIndexBuild);
 
@@ -2381,13 +2382,15 @@ void IndexBuildsCoordinator::_awaitLastOpTimeBeforeInterceptorsMajorityCommitted
 void IndexBuildsCoordinator::_buildIndex(OperationContext* opCtx,
                                          std::shared_ptr<ReplIndexBuildState> replState,
                                          const IndexBuildOptions& indexBuildOptions) {
-    if (MONGO_unlikely(hangBeforeBuildingIndex.shouldFail())) {
-        LOGV2(4940900,
-              "Hanging before building index due to hangBeforeBuildingIndex failpoint",
-              "buildUUID"_attr = replState->buildUUID);
 
-        hangBeforeBuildingIndex.pauseWhileSet();
-    }
+    auto failPointHang = [buildUUID = replState->buildUUID](FailPoint* fp) {
+        if (MONGO_unlikely(fp->shouldFail())) {
+            LOGV2(4940900, "Hanging before building index", "buildUUID"_attr = buildUUID);
+            fp->pauseWhileSet();
+        }
+    };
+    failPointHang(&hangBeforeBuildingIndex);
+    failPointHang(&hangBeforeBuildingIndexSecond);
 
     // Read without a timestamp. When we commit, we block writes which guarantees all writes are
     // visible.
@@ -2588,6 +2591,22 @@ IndexBuildsCoordinator::CommitResult IndexBuildsCoordinator::_insertKeysFromSide
     if (IndexBuildAction::kOplogCommit == action) {
         replState->onOplogCommit(isPrimary);
     }
+
+    // While we are still holding the RSTL and before returning, ensure the metrics collected for
+    // this index build are attributed to the primary that commits or aborts the index build.
+    auto metricsGuard = makeGuard([&]() {
+        if (!isPrimary) {
+            return;
+        }
+
+        auto& collector = ResourceConsumption::MetricsCollector::get(opCtx);
+        bool wasCollecting = collector.endScopedCollecting();
+        if (!wasCollecting || !ResourceConsumption::isMetricsAggregationEnabled()) {
+            return;
+        }
+
+        ResourceConsumption::get(opCtx).merge(opCtx, collector.getDbName(), collector.getMetrics());
+    });
 
     // The collection object should always exist while an index build is registered.
     CollectionWriter collection(opCtx, replState->collectionUUID);

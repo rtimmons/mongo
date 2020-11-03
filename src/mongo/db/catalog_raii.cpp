@@ -92,8 +92,8 @@ AutoGetCollection::AutoGetCollection(OperationContext* opCtx,
     // This may not be the case if an operation already has a snapshot open before acquiring an
     // exclusive lock.
     if (modeColl == MODE_X) {
-        invariant(!opCtx->recoveryUnit()->inActiveTxn(),
-                  str::stream() << "Snapshot opened before acquiring X lock for " << *nss);
+        invariant(!opCtx->recoveryUnit()->isActive(),
+                  str::stream() << "Snapshot opened before acquiring X lock for " << nsOrUUID);
     }
 
     _collLock.emplace(opCtx, nsOrUUID, modeColl, deadline);
@@ -207,7 +207,8 @@ AutoGetCollectionLockFree::AutoGetCollectionLockFree(OperationContext* opCtx,
                                                      const NamespaceStringOrUUID& nsOrUUID,
                                                      AutoGetCollectionViewMode viewMode,
                                                      Date_t deadline)
-    : _globalLock(
+    : _lockFreeReadsBlock(opCtx),
+      _globalLock(
           opCtx, MODE_IS, deadline, Lock::InterruptBehavior::kThrow, true /* skipRSTLLock */) {
 
     // Wait for a configured amount of time after acquiring locks if the failpoint is enabled
@@ -239,8 +240,6 @@ AutoGetCollectionLockFree::AutoGetCollectionLockFree(OperationContext* opCtx,
         return;
     }
 
-    // TODO (SERVER-51320): this code will invariant in ViewCatalog::lookup() because it takes a
-    // CollectionLock that expects a DBLock to be held on the database already.
     _view = viewCatalog->lookup(opCtx, _resolvedNss.ns());
     uassert(ErrorCodes::CommandNotSupportedOnView,
             str::stream() << "Namespace " << _resolvedNss.ns() << " is a view, not a collection",

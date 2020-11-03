@@ -183,7 +183,7 @@ function runTest(
     primary, testCase, testFunc, dbName, collName, {useTransaction, useRetryableWrite} = {}) {
     const testOpts =
         makeTestOptions(primary, testCase, dbName, collName, useTransaction, useRetryableWrite);
-    jsTest.log("Testing command " + tojson(testOpts.command));
+    jsTest.log("Testing testOpts: " + tojson(testOpts) + " with testFunc " + testFunc.name);
 
     if (testCase.explicitlyCreateCollection) {
         createCollectionAndInsertDocs(testOpts.primaryDB, collName, testCase.isCapped);
@@ -268,9 +268,9 @@ function testWriteIsAcceptedIfSentAfterMigrationHasAborted(testCase, testOpts) {
     // committed the abort decision. Otherwise, the command below is expected to block and then get
     // rejected.
     assert.soon(() => {
-        const mtab =
+        const mtabs =
             testOpts.primaryDB.adminCommand({serverStatus: 1}).tenantMigrationAccessBlocker;
-        return mtab[tenantId].access === TenantMigrationUtil.accessState.kAllow;
+        return mtabs[tenantId].state === TenantMigrationUtil.accessState.kAborted;
     });
 
     runCommand(testOpts);
@@ -472,18 +472,20 @@ const testCases = {
         }
     },
     appendOplogNote: {skip: isNotRunOnUserDatabase},
-    applyOps: {
-        explicitlyCreateCollection: true,
-        command: function(dbName, collName) {
-            return {applyOps: [{op: "i", ns: dbName + "." + collName, o: {_id: 0}}]};
-        },
-        assertCommandSucceeded: function(db, dbName, collName) {
-            assert.eq(countDocs(db, collName, {_id: 0}), 1);
-        },
-        assertCommandFailed: function(db, dbName, collName) {
-            assert.eq(countDocs(db, collName, {_id: 0}), 0);
-        }
-    },
+
+    // TODO (SERVER-51753): Handle applyOps running concurrently with a tenant migration.
+    // applyOps: {
+    //     explicitlyCreateCollection: true,
+    //     command: function(dbName, collName) {
+    //         return {applyOps: [{op: "i", ns: dbName + "." + collName, o: {_id: 0}}]};
+    //     },
+    //     assertCommandSucceeded: function(db, dbName, collName) {
+    //         assert.eq(countDocs(db, collName, {_id: 0}), 1);
+    //     },
+    //     assertCommandFailed: function(db, dbName, collName) {
+    //         assert.eq(countDocs(db, collName, {_id: 0}), 0);
+    //     }
+    // },
     authenticate: {skip: isAuthCommand},
     availableQueryOptions: {skip: isNotWriteCommand},
     buildInfo: {skip: isNotWriteCommand},
@@ -697,7 +699,6 @@ const testCases = {
     flushRouterConfig: {skip: isNotRunOnUserDatabase},
     fsync: {skip: isNotRunOnUserDatabase},
     fsyncUnlock: {skip: isNotRunOnUserDatabase},
-    geoSearch: {skip: isNotWriteCommand},
     getCmdLineOpts: {skip: isNotRunOnUserDatabase},
     getDatabaseVersion: {skip: isNotRunOnUserDatabase},
     getDefaultRWConcern: {skip: isNotRunOnUserDatabase},

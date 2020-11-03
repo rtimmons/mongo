@@ -62,19 +62,23 @@ struct CommonStats {
 
 using PlanStageStats = BasePlanStageStats<CommonStats>;
 
-struct ScanStats : public SpecificStats {
+struct ScanStats final : public SpecificStats {
     SpecificStats* clone() const final {
         return new ScanStats(*this);
     }
 
-    uint64_t estimateObjectSizeInBytes() const {
+    uint64_t estimateObjectSizeInBytes() const final {
         return sizeof(*this);
+    }
+
+    void accumulate(PlanSummaryStats& stats) const final {
+        stats.totalDocsExamined += numReads;
     }
 
     size_t numReads{0};
 };
 
-struct IndexScanStats : public SpecificStats {
+struct IndexScanStats final : public SpecificStats {
     SpecificStats* clone() const final {
         return new IndexScanStats(*this);
     }
@@ -83,32 +87,49 @@ struct IndexScanStats : public SpecificStats {
         return sizeof(*this);
     }
 
+    void accumulate(PlanSummaryStats& stats) const final {
+        stats.totalKeysExamined += numReads;
+    }
+
     size_t numReads{0};
 };
 
-struct FilterStats : public SpecificStats {
+struct FilterStats final : public SpecificStats {
     SpecificStats* clone() const final {
         return new FilterStats(*this);
     }
 
-    uint64_t estimateObjectSizeInBytes() const {
+    uint64_t estimateObjectSizeInBytes() const final {
         return sizeof(*this);
     }
 
     size_t numTested{0};
 };
 
-struct LimitSkipStats : public SpecificStats {
+struct LimitSkipStats final : public SpecificStats {
     SpecificStats* clone() const final {
         return new LimitSkipStats(*this);
     }
 
-    uint64_t estimateObjectSizeInBytes() const {
+    uint64_t estimateObjectSizeInBytes() const final {
         return sizeof(*this);
     }
 
     boost::optional<long long> limit;
     boost::optional<long long> skip;
+};
+
+struct UniqueStats : public SpecificStats {
+    SpecificStats* clone() const final {
+        return new UniqueStats(*this);
+    }
+
+    uint64_t estimateObjectSizeInBytes() const final {
+        return sizeof(*this);
+    }
+
+    unsigned int dupsTested = 0;
+    unsigned int dupsDropped = 0;
 };
 
 /**

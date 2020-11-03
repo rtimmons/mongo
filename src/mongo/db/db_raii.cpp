@@ -244,7 +244,7 @@ AutoGetCollectionForReadBase<AutoGetCollectionType>::AutoGetCollectionForReadBas
 
         if (readSource == RecoveryUnit::ReadSource::kMajorityCommitted) {
             replCoord->waitUntilSnapshotCommitted(opCtx, *minSnapshot);
-            uassertStatusOK(opCtx->recoveryUnit()->obtainMajorityCommittedSnapshot());
+            uassertStatusOK(opCtx->recoveryUnit()->majorityCommittedSnapshotAvailable());
         }
 
         {
@@ -263,7 +263,7 @@ AutoGetCollectionForReadLockFree::AutoGetCollectionForReadLockFree(
     Date_t deadline) {
     // Supported lock-free reads should never have an open storage snapshot prior to calling
     // this helper. The storage snapshot and in-memory state fetched here must be consistent.
-    invariant(supportsLockFreeRead(opCtx) && !opCtx->recoveryUnit()->inActiveTxn());
+    invariant(supportsLockFreeRead(opCtx) && !opCtx->recoveryUnit()->isActive());
 
     while (true) {
         // AutoGetCollectionForReadBase can choose a read source based on the current replication

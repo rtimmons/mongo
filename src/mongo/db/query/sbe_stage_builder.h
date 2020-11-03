@@ -117,12 +117,14 @@ private:
     std::unique_ptr<sbe::PlanStage> buildSkip(const QuerySolutionNode* root);
     std::unique_ptr<sbe::PlanStage> buildSort(const QuerySolutionNode* root);
     std::unique_ptr<sbe::PlanStage> buildSortKeyGeneraror(const QuerySolutionNode* root);
+    std::unique_ptr<sbe::PlanStage> buildSortMerge(const QuerySolutionNode* root);
     std::unique_ptr<sbe::PlanStage> buildProjectionSimple(const QuerySolutionNode* root);
     std::unique_ptr<sbe::PlanStage> buildProjectionCovered(const QuerySolutionNode* root);
     std::unique_ptr<sbe::PlanStage> buildProjectionDefault(const QuerySolutionNode* root);
     std::unique_ptr<sbe::PlanStage> buildOr(const QuerySolutionNode* root);
     std::unique_ptr<sbe::PlanStage> buildText(const QuerySolutionNode* root);
     std::unique_ptr<sbe::PlanStage> buildReturnKey(const QuerySolutionNode* root);
+    std::unique_ptr<sbe::PlanStage> buildEof(const QuerySolutionNode* root);
 
     std::unique_ptr<sbe::PlanStage> makeLoopJoinForFetch(
         std::unique_ptr<sbe::PlanStage> inputStage,

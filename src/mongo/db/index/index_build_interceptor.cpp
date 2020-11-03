@@ -53,6 +53,7 @@
 namespace mongo {
 
 MONGO_FAIL_POINT_DEFINE(hangDuringIndexBuildDrainYield);
+MONGO_FAIL_POINT_DEFINE(hangDuringIndexBuildDrainYieldSecond);
 MONGO_FAIL_POINT_DEFINE(hangIndexBuildDuringDrainWritesPhase);
 MONGO_FAIL_POINT_DEFINE(hangIndexBuildDuringDrainWritesPhaseSecond);
 
@@ -189,12 +190,11 @@ Status IndexBuildInterceptor::drainWritesIntoIndex(OperationContext* opCtx,
     invariant(kBatchMaxMB <= std::numeric_limits<int32_t>::max() / kMB);
     const int32_t kBatchMaxBytes = kBatchMaxMB * kMB;
 
-    // Indicates that there are no more visible records in the side table.
-    bool atEof = false;
-
     // In a single WriteUnitOfWork, scan the side table up to the batch or memory limit, apply the
     // keys to the index, and delete the side table records.
-    auto applySingleBatch = [&] {
+    // Returns true if the cursor has reached the end of the table, false if there are more records,
+    // and an error Status otherwise.
+    auto applySingleBatch = [&]() -> StatusWith<bool> {
         WriteUnitOfWork wuow(opCtx);
 
         int32_t batchSize = 0;
@@ -206,14 +206,9 @@ Status IndexBuildInterceptor::drainWritesIntoIndex(OperationContext* opCtx,
         // table matters.
         std::vector<RecordId> recordsAddedToIndex;
 
-        while (!atEof) {
+        auto record = cursor->next();
+        while (record) {
             opCtx->checkForInterrupt();
-
-            auto record = cursor->next();
-            if (!record) {
-                atEof = true;
-                break;
-            }
 
             RecordId currentRecordId = record->id;
             BSONObj unownedDoc = record->data.toBson();
@@ -251,6 +246,8 @@ Status IndexBuildInterceptor::drainWritesIntoIndex(OperationContext* opCtx,
             if (batchSize == kBatchMaxSize) {
                 break;
             }
+
+            record = cursor->next();
         }
 
         // Delete documents from the side table as soon as they have been inserted into the index.
@@ -260,8 +257,8 @@ Status IndexBuildInterceptor::drainWritesIntoIndex(OperationContext* opCtx,
         }
 
         if (batchSize == 0) {
-            invariant(atEof);
-            return Status::OK();
+            invariant(!record);
+            return true;
         }
 
         wuow.commit();
@@ -277,16 +274,20 @@ Status IndexBuildInterceptor::drainWritesIntoIndex(OperationContext* opCtx,
 
         // Account for more writes coming in during a batch.
         progress->setTotalWhileRunning(_sideWritesCounter->loadRelaxed() - appliedAtStart);
-        return Status::OK();
+        return false;
     };
+
+    // Indicates that there are no more visible records in the side table.
+    bool atEof = false;
 
     // Apply batches of side writes until the last record in the table is seen.
     while (!atEof) {
-        if (auto status =
-                writeConflictRetry(opCtx, "index build drain", coll->ns().ns(), applySingleBatch);
-            !status.isOK()) {
-            return status;
+        auto swAtEof =
+            writeConflictRetry(opCtx, "index build drain", coll->ns().ns(), applySingleBatch);
+        if (!swAtEof.isOK()) {
+            return swAtEof.getStatus();
         }
+        atEof = swAtEof.getValue();
     }
 
     progress->finished();
@@ -382,15 +383,19 @@ void IndexBuildInterceptor::_yield(OperationContext* opCtx, const Yieldable* yie
     // Track the number of yields in CurOp.
     CurOp::get(opCtx)->yielded();
 
-    hangDuringIndexBuildDrainYield.executeIf(
-        [&](auto&&) {
-            LOGV2(20690, "Hanging index build during drain yield");
-            hangDuringIndexBuildDrainYield.pauseWhileSet();
-        },
-        [&](auto&& config) {
-            return config.getStringField("namespace") ==
-                _indexCatalogEntry->getNSSFromCatalog(opCtx).ns();
-        });
+    auto failPointHang = [opCtx, indexCatalogEntry = _indexCatalogEntry](FailPoint* fp) {
+        fp->executeIf(
+            [fp](auto&&) {
+                LOGV2(20690, "Hanging index build during drain yield");
+                fp->pauseWhileSet();
+            },
+            [opCtx, indexCatalogEntry](auto&& config) {
+                return config.getStringField("namespace") ==
+                    indexCatalogEntry->getNSSFromCatalog(opCtx).ns();
+            });
+    };
+    failPointHang(&hangDuringIndexBuildDrainYield);
+    failPointHang(&hangDuringIndexBuildDrainYieldSecond);
 
     locker->restoreLockState(opCtx, snapshot);
     yieldable->restore();
