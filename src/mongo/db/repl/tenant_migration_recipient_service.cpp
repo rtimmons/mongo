@@ -64,6 +64,8 @@
 namespace mongo {
 namespace repl {
 namespace {
+const std::string kTTLIndexName = "TenantMigrationRecipientTTLIndex";
+const Backoff kExponentialBackoff(Seconds(1), Milliseconds::max());
 constexpr StringData kOplogBufferPrefix = "repl.migration.oplog_"_sd;
 
 NamespaceString getOplogBufferNs(const UUID& migrationUUID) {
@@ -177,6 +179,31 @@ ThreadPool::Limits TenantMigrationRecipientService::getThreadPoolLimits() const 
     ThreadPool::Limits limits;
     limits.maxThreads = maxTenantMigrationRecipientThreadPoolSize;
     return limits;
+}
+
+ExecutorFuture<void> TenantMigrationRecipientService::_rebuildService(
+    std::shared_ptr<executor::ScopedTaskExecutor> executor, const CancelationToken& token) {
+    return AsyncTry([this] {
+               auto nss = getStateDocumentsNS();
+
+               AllowOpCtxWhenServiceRebuildingBlock allowOpCtxBlock(Client::getCurrent());
+               auto opCtxHolder = cc().makeOperationContext();
+               auto opCtx = opCtxHolder.get();
+               DBDirectClient client(opCtx);
+
+               BSONObj result;
+               client.runCommand(
+                   nss.db().toString(),
+                   BSON("createIndexes"
+                        << nss.coll().toString() << "indexes"
+                        << BSON_ARRAY(BSON("key" << BSON("expireAt" << 1) << "name" << kTTLIndexName
+                                                 << "expireAfterSeconds" << 0))),
+                   result);
+               uassertStatusOK(getStatusFromCommandResult(result));
+           })
+        .until([token](Status status) { return status.isOK() || token.isCanceled(); })
+        .withBackoffBetweenIterations(kExponentialBackoff)
+        .on(**executor, CancelationToken::uncancelable());
 }
 
 std::shared_ptr<PrimaryOnlyService::Instance> TenantMigrationRecipientService::constructInstance(
@@ -510,11 +537,13 @@ SemiFuture<void> TenantMigrationRecipientService::Instance::_initializeStateDoc(
 }
 
 void TenantMigrationRecipientService::Instance::_getStartOpTimesFromDonor(WithLock lk) {
-    if (_isCloneCompletedMarkerSet(lk)) {
-        invariant(_stateDoc.getStartApplyingDonorOpTime().has_value());
-        invariant(_stateDoc.getStartFetchingDonorOpTime().has_value());
+    if (_sharedData->isResuming()) {
+        // We are resuming a migration.
         return;
     }
+    // We only expect to already have start optimes populated if we are resuming a migration.
+    invariant(!_stateDoc.getStartApplyingDonorOpTime().has_value());
+    invariant(!_stateDoc.getStartFetchingDonorOpTime().has_value());
     // Get the last oplog entry at the read concern majority optime in the remote oplog.  It
     // does not matter which tenant it is for.
     auto oplogOpTimeFields =
@@ -601,7 +630,7 @@ void TenantMigrationRecipientService::Instance::_startOplogFetcher() {
     options.dropCollectionAtStartup = false;
     options.dropCollectionAtShutdown = false;
     options.useTemporaryCollection = false;
-    stdx::lock_guard lk(_mutex);
+    stdx::unique_lock lk(_mutex);
     invariant(_stateDoc.getStartFetchingDonorOpTime());
     _donorOplogBuffer = std::make_unique<OplogBufferCollection>(
         StorageInterface::get(opCtx.get()), getOplogBufferNs(getMigrationUUID()), options);
@@ -612,12 +641,16 @@ void TenantMigrationRecipientService::Instance::_startOplogFetcher() {
     _dataReplicatorExternalState = std::make_unique<DataReplicatorExternalStateTenantMigration>();
     auto startFetchOpTime = *_stateDoc.getStartFetchingDonorOpTime();
     auto resumingFromOplogBuffer = false;
-    if (_isCloneCompletedMarkerSet(lk)) {
-        auto topOfOplogBuffer = _donorOplogBuffer->lastObjectPushed(opCtx.get());
-        if (topOfOplogBuffer) {
+    if (_sharedData->isResuming()) {
+        // Release the mutex lock since we acquire a collection mode IS lock when checking the last
+        // object pushed in the oplog buffer.
+        lk.unlock();
+        // If the oplog buffer already contains fetched documents, we must be resuming a migration.
+        if (auto topOfOplogBuffer = _donorOplogBuffer->lastObjectPushed(opCtx.get())) {
             startFetchOpTime = uassertStatusOK(OpTime::parseFromOplogEntry(topOfOplogBuffer.get()));
             resumingFromOplogBuffer = true;
         }
+        lk.lock();
     }
     OplogFetcher::Config oplogFetcherConfig(
         startFetchOpTime,

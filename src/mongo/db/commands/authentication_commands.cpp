@@ -47,7 +47,6 @@
 #include "mongo/db/auth/authentication_session.h"
 #include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/auth/privilege.h"
-#include "mongo/db/auth/sasl_options.h"
 #include "mongo/db/auth/security_key.h"
 #include "mongo/db/auth/user_name.h"
 #include "mongo/db/client.h"
@@ -173,8 +172,6 @@ public:
     }
 } cmdLogout;
 
-bool _isX509AuthDisabled;
-
 #ifdef MONGO_CONFIG_SSL
 constexpr auto kX509AuthenticationDisabledMessage = "x.509 authentication is disabled."_sd;
 
@@ -224,7 +221,7 @@ void _authenticateX509(OperationContext* opCtx, UserName& user, StringData dbnam
 
     // Handle internal cluster member auth, only applies to server-server connections
     if (sslConfiguration->isClusterMember(clientName)) {
-        uassertStatusOK(authCounter.incClusterAuthenticateReceived("MONGODB-X509"));
+        authCounter.getMechanismCounter("MONGODB-X509").incClusterAuthenticateReceived();
 
         int clusterAuthMode = serverGlobalParams.clusterAuthMode.load();
 
@@ -248,14 +245,15 @@ void _authenticateX509(OperationContext* opCtx, UserName& user, StringData dbnam
                               "certificate with cluster membership");
             }
 
-
-            uassertStatusOK(authCounter.incClusterAuthenticateSuccessful("MONGODB-X509"));
+            authCounter.getMechanismCounter("MONGODB-X509").incClusterAuthenticateSuccessful();
         }
 
         authorizationSession->grantInternalAuthorization(client);
     } else {
         // Handle normal client authentication, only applies to client-server connections
-        uassert(ErrorCodes::BadValue, kX509AuthenticationDisabledMessage, !_isX509AuthDisabled);
+        uassert(ErrorCodes::BadValue,
+                kX509AuthenticationDisabledMessage,
+                !isX509AuthDisabled(opCtx->getServiceContext()));
         uassertStatusOK(authorizationSession->addAndAuthorizeUser(opCtx, user));
     }
 }
@@ -300,7 +298,8 @@ AuthenticateReply authCommand(OperationContext* opCtx, const AuthenticateCommand
     }
 
     try {
-        uassertStatusOK(authCounter.incAuthenticateReceived(mechanism));
+        auto mechCounter = authCounter.getMechanismCounter("MONGODB-X509");
+        mechCounter.incAuthenticateReceived();
 
         _authenticate(opCtx, mechanism, user, dbname);
         audit::logAuthentication(opCtx->getClient(), mechanism, user, ErrorCodes::OK);
@@ -314,7 +313,7 @@ AuthenticateReply authCommand(OperationContext* opCtx, const AuthenticateCommand
                   "remote"_attr = opCtx->getClient()->session()->remote());
         }
 
-        uassertStatusOK(authCounter.incAuthenticateSuccessful(mechanism));
+        mechCounter.incAuthenticateSuccessful();
 
         return AuthenticateReply(user.getUser().toString(), user.getDB().toString());
 
@@ -369,12 +368,6 @@ public:
 
 }  // namespace
 
-void disableAuthMechanism(StringData authMechanism) {
-    if (authMechanism == kX509AuthMechanism) {
-        _isX509AuthDisabled = true;
-    }
-}
-
 void doSpeculativeAuthenticate(OperationContext* opCtx,
                                BSONObj cmdObj,
                                BSONObjBuilder* result) try {
@@ -396,13 +389,15 @@ void doSpeculativeAuthenticate(OperationContext* opCtx,
 
 
     const auto mechanism = authCmdObj.getMechanism().toString();
-
-    // Run will make sure an audit entry happens. Let it reach that point.
-    authCounter.incSpeculativeAuthenticateReceived(mechanism).ignore();
+    try {
+        authCounter.getMechanismCounter(mechanism).incSpeculativeAuthenticateReceived();
+    } catch (...) {
+        // Run will make sure an audit entry happens. Let it reach that point.
+    }
 
     auto authReply = authCommand(opCtx, authCmdObj);
 
-    uassertStatusOK(authCounter.incSpeculativeAuthenticateSuccessful(mechanism));
+    authCounter.getMechanismCounter(mechanism).incSpeculativeAuthenticateSuccessful();
     result->append(auth::kSpeculativeAuthenticate, authReply.toBSON());
 } catch (...) {
     // Treat failure like we never even got a speculative start.

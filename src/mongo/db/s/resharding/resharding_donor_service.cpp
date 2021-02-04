@@ -43,6 +43,7 @@
 #include "mongo/db/persistent_task_store.h"
 #include "mongo/db/repl/repl_client_info.h"
 #include "mongo/db/s/resharding/resharding_data_copy_util.h"
+#include "mongo/db/s/resharding/resharding_metrics.h"
 #include "mongo/db/s/resharding/resharding_server_parameters_gen.h"
 #include "mongo/db/s/resharding_util.h"
 #include "mongo/db/s/sharding_state.h"
@@ -219,6 +220,17 @@ void ReshardingDonorService::DonorStateMachine::interrupt(Status status) {
     if (!_completionPromise.getFuture().isReady()) {
         _completionPromise.setError(status);
     }
+}
+
+boost::optional<BSONObj> ReshardingDonorService::DonorStateMachine::reportForCurrentOp(
+    MongoProcessInterface::CurrentOpConnectionsMode connMode,
+    MongoProcessInterface::CurrentOpSessionsMode sessionMode) noexcept {
+    ReshardingMetrics::ReporterOptions options(ReshardingMetrics::ReporterOptions::Role::kDonor,
+                                               _id,
+                                               _donorDoc.getNss(),
+                                               _donorDoc.getReshardingKey().toBSON(),
+                                               false);
+    return ReshardingMetrics::get(cc().getServiceContext())->reportForCurrentOp(options);
 }
 
 void ReshardingDonorService::DonorStateMachine::onReshardingFieldsChanges(
@@ -428,11 +440,12 @@ void ReshardingDonorService::DonorStateMachine::_transitionState(
     emplaceMinFetchTimestampIfExists(replacementDoc, minFetchTimestamp);
     emplaceAbortReasonIfExists(replacementDoc, abortReason);
 
+    auto newState = replacementDoc.getState();
     _updateDonorDocument(std::move(replacementDoc));
 
     LOGV2_INFO(5279505,
                "Transitioned resharding donor state",
-               "newState"_attr = DonorState_serializer(replacementDoc.getState()),
+               "newState"_attr = DonorState_serializer(newState),
                "oldState"_attr = DonorState_serializer(_donorDoc.getState()),
                "ns"_attr = _donorDoc.getNss(),
                "collectionUUID"_attr = _donorDoc.getExistingUUID(),

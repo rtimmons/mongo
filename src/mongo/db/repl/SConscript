@@ -65,6 +65,7 @@ env.Library(
         'repl_server_parameters',
         'repl_settings',
         'tenant_migration_access_blocker',
+        'tenant_migration_utils',
         'timestamp_block',
     ],
 )
@@ -1247,9 +1248,9 @@ env.Library(
     ],
     LIBDEPS_PRIVATE=[
         '$BUILD_DIR/mongo/db/commands/server_status',
-        '$BUILD_DIR/mongo/db/repl/speculative_authenticate',
         '$BUILD_DIR/mongo/db/stats/counters',
         '$BUILD_DIR/mongo/transport/message_compressor',
+        'hello_auth',
         'primary_only_service',
         'replication_auth',
         'split_horizon',
@@ -1342,6 +1343,7 @@ env.Library(
         'tenant_migration_access_blocker_util.cpp',
         'tenant_migration_donor_access_blocker.cpp',
         'tenant_migration_donor_op_observer.cpp',
+        'tenant_migration_recipient_access_blocker.cpp',
     ],
     LIBDEPS=[
         '$BUILD_DIR/mongo/base',
@@ -1498,6 +1500,7 @@ env.CppUnitTest(
         'tenant_oplog_batcher_test.cpp',
         'vote_requester_test.cpp',
         'wait_for_majority_service_test.cpp',
+        'tenant_migration_recipient_access_blocker_test.cpp',
         'tenant_migration_recipient_entry_helpers_test.cpp',
         'tenant_migration_recipient_service_test.cpp',
     ],
@@ -1726,14 +1729,14 @@ env.Library(
 )
 
 env.Library(
-    target='speculative_authenticate',
+    target='hello_auth',
     source=[
-        'speculative_auth.cpp',
+        'hello_auth.cpp',
     ],
     LIBDEPS_PRIVATE=[
         '$BUILD_DIR/mongo/base',
         '$BUILD_DIR/mongo/db/auth/authservercommon',
-        '$BUILD_DIR/mongo/db/commands/authentication_commands',
+        '$BUILD_DIR/mongo/db/stats/counters',
     ],
 )
 
