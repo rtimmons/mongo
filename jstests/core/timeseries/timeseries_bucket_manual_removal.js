@@ -22,17 +22,14 @@ if (!TimeseriesTest.timeseriesCollectionsEnabled(db.getMongo())) {
     return;
 }
 
-const testDB = db.getSiblingDB(jsTestName());
-
-const coll = testDB.getCollection('t');
-const bucketsColl = testDB.getCollection('system.buckets.' + coll.getName());
+const coll = db.timeseries_bucket_manual_removal;
+const bucketsColl = db.getCollection('system.buckets.' + coll.getName());
 
 const timeFieldName = 'time';
 
 coll.drop();
-assert.commandWorked(
-    testDB.createCollection(coll.getName(), {timeseries: {timeField: timeFieldName}}));
-assert.contains(bucketsColl.getName(), testDB.getCollectionNames());
+assert.commandWorked(db.createCollection(coll.getName(), {timeseries: {timeField: timeFieldName}}));
+assert.contains(bucketsColl.getName(), db.getCollectionNames());
 
 const docs1 = [
     {
@@ -55,7 +52,7 @@ const docs2 = [
     },
 ];
 
-assert.commandWorked(coll.insert(docs1));
+assert.commandWorked(coll.insert(docs1, {ordered: false}));
 assert.docEq(coll.find().toArray(), docs1);
 let buckets = bucketsColl.find().toArray();
 assert.eq(buckets.length, 1, 'Expected one bucket but found ' + tojson(buckets));
@@ -66,7 +63,7 @@ assert.docEq(coll.find().toArray(), []);
 buckets = bucketsColl.find().toArray();
 assert.eq(buckets.length, 0, 'Expected no buckets but found ' + tojson(buckets));
 
-assert.commandWorked(coll.insert(docs2));
+assert.commandWorked(coll.insert(docs2, {ordered: false}));
 assert.docEq(coll.find().toArray(), docs2);
 buckets = bucketsColl.find().toArray();
 assert.eq(buckets.length, 1, 'Expected one bucket but found ' + tojson(buckets));

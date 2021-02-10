@@ -83,7 +83,7 @@ public:
     /**
      * This resets the unpacker to prepare to unpack a new bucket described by the given document.
      */
-    void reset(Document&& bucket);
+    void reset(BSONObj&& bucket);
 
     Behavior behavior() const {
         return _unpackerBehavior;
@@ -93,33 +93,44 @@ public:
         return _spec;
     }
 
-    const Document& bucket() const {
+    const BSONObj& bucket() const {
         return _bucket;
     }
 
+    bool includeMetaField() const {
+        return _includeMetaField;
+    }
+
+    bool includeTimeField() const {
+        return _includeTimeField;
+    }
+
+    void setBucketSpecAndBehavior(BucketSpec&& bucketSpec, Behavior behavior);
+
 private:
-    const BucketSpec _spec;
-    const Behavior _unpackerBehavior;
+    BucketSpec _spec;
+    Behavior _unpackerBehavior;
 
     // Iterates the timestamp section of the bucket to drive the unpacking iteration.
-    boost::optional<FieldIterator> _timeFieldIter;
+    boost::optional<BSONObjIterator> _timeFieldIter;
 
     // A flag used to mark that the timestamp value should be materialized in measurements.
-    const bool _includeTimeField;
-
-    // Since the metadata value is the same across all materialized measurements we can cache the
-    // metadata value in the reset phase and use it to materialize the metadata in each measurement.
-    Value _metaValue;
+    bool _includeTimeField;
 
     // A flag used to mark that a bucket's metadata value should be materialized in measurements.
-    const bool _includeMetaField;
+    bool _includeMetaField;
 
     // The bucket being unpacked.
-    Document _bucket;
+    BSONObj _bucket;
+
+    // Since the metadata value is the same across all materialized measurements we can cache the
+    // metadata BSONElement in the reset phase and use it to materialize the metadata in each
+    // measurement.
+    BSONElement _metaValue;
 
     // Iterators used to unpack the columns of the above bucket that are populated during the reset
     // phase according to the provided 'Behavior' and 'BucketSpec'.
-    std::vector<std::pair<std::string, FieldIterator>> _fieldIters;
+    std::vector<std::pair<std::string, BSONObjIterator>> _fieldIters;
 };
 
 class DocumentSourceInternalUnpackBucket : public DocumentSource {
@@ -138,6 +149,14 @@ public:
 
     const char* getSourceName() const override {
         return kStageName.rawData();
+    }
+
+    bool includeMetaField() const {
+        return _bucketUnpacker.includeMetaField();
+    }
+
+    bool includeTimeField() const {
+        return _bucketUnpacker.includeTimeField();
     }
 
     StageConstraints constraints(Pipeline::SplitState pipeState) const final {
@@ -160,6 +179,16 @@ public:
 
     Pipeline::SourceContainer::iterator doOptimizeAt(Pipeline::SourceContainer::iterator itr,
                                                      Pipeline::SourceContainer* container) final;
+
+    /*
+     * Given a source container and an iterator pointing to the unpack stage, attempt to internalize
+     * a following $project, and update the state for 'container' and '_bucketUnpacker'.
+     */
+    void internalizeProject(Pipeline::SourceContainer::iterator itr,
+                            Pipeline::SourceContainer* container);
+
+    BSONObj buildProjectToInternalize(Pipeline::SourceContainer::iterator itr,
+                                      Pipeline::SourceContainer* container) const;
 
 private:
     GetNextResult doGetNext() final;

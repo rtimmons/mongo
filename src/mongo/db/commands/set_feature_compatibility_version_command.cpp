@@ -56,7 +56,6 @@
 #include "mongo/db/s/active_migrations_registry.h"
 #include "mongo/db/s/config/sharding_catalog_manager.h"
 #include "mongo/db/s/migration_util.h"
-#include "mongo/db/s/shard_metadata_util.h"
 #include "mongo/db/s/sharding_state.h"
 #include "mongo/db/server_options.h"
 #include "mongo/db/views/view_catalog.h"
@@ -247,8 +246,14 @@ public:
         if (actualVersion < requestedVersion) {
             checkInitialSyncFinished(opCtx);
 
+            // Start transition to 'requestedVersion' by updating the local FCV document to a
+            // 'kUpgrading' state.
             FeatureCompatibilityVersion::updateFeatureCompatibilityVersionDocument(
-                opCtx, actualVersion, requestedVersion, isFromConfigServer);
+                opCtx,
+                actualVersion,
+                requestedVersion,
+                isFromConfigServer,
+                true /* setTargetVersion */);
 
             // If the 'useSecondaryDelaySecs' feature flag is enabled in the upgraded FCV, issue a
             // reconfig to change the 'slaveDelay' field to 'secondaryDelaySecs'.
@@ -330,12 +335,14 @@ public:
             }
 
             hangWhileUpgrading.pauseWhileSet(opCtx);
-            // Completed transition to requestedVersion.
+            // Complete transition by updating the local FCV document to the fully upgraded
+            // requestedVersion.
             FeatureCompatibilityVersion::updateFeatureCompatibilityVersionDocument(
                 opCtx,
                 serverGlobalParams.featureCompatibility.getVersion(),
                 requestedVersion,
-                isFromConfigServer);
+                isFromConfigServer,
+                false /* setTargetVersion */);
         } else {
             // Time-series collections are only supported in 5.0. If the user tries to downgrade the
             // cluster to an earlier version, they must first remove all time-series collections.
@@ -357,8 +364,14 @@ public:
 
             checkInitialSyncFinished(opCtx);
 
+            // Start transition to 'requestedVersion' by updating the local FCV document to a
+            // 'kDowngrading' state.
             FeatureCompatibilityVersion::updateFeatureCompatibilityVersionDocument(
-                opCtx, actualVersion, requestedVersion, isFromConfigServer);
+                opCtx,
+                actualVersion,
+                requestedVersion,
+                isFromConfigServer,
+                true /* setTargetVersion */);
 
             // If the 'useSecondaryDelaySecs' feature flag is disabled in the downgraded FCV, issue
             // a reconfig to change the 'secondaryDelaySecs' field to 'slaveDelay'.
@@ -409,14 +422,6 @@ public:
             if (failDowngrading.shouldFail())
                 return false;
 
-            if (serverGlobalParams.clusterRole == ClusterRole::ShardServer) {
-                if (requestedVersion < FeatureCompatibilityParams::Version::kVersion49) {
-                    // SERVER-52632: Remove once 5.0 becomes the LastLTS
-                    shardmetadatautil::downgradeShardConfigDatabasesEntriesToPre49(opCtx);
-                    shardmetadatautil::downgradeShardConfigCollectionEntriesToPre49(opCtx);
-                }
-            }
-
             if (serverGlobalParams.clusterRole == ClusterRole::ConfigServer) {
                 // Downgrade shards before config finishes its downgrade.
                 uassertStatusOK(
@@ -441,12 +446,14 @@ public:
             }
 
             hangWhileDowngrading.pauseWhileSet(opCtx);
-            // Completed transition to requestedVersion.
+            // Complete transition by updating the local FCV document to the fully downgraded
+            // requestedVersion.
             FeatureCompatibilityVersion::updateFeatureCompatibilityVersionDocument(
                 opCtx,
                 serverGlobalParams.featureCompatibility.getVersion(),
                 requestedVersion,
-                isFromConfigServer);
+                isFromConfigServer,
+                false /* setTargetVersion */);
 
             if (request.getDowngradeOnDiskChanges()) {
                 invariant(requestedVersion == FeatureCompatibilityParams::kLastContinuous);
@@ -491,21 +498,11 @@ private:
                     continue;
                 }
 
-                // Construct a dropIndexes command to drop the indexes in 'haystackIndexes'.
-                BSONObjBuilder dropIndexesCmd;
-                dropIndexesCmd.append("dropIndexes", collName.nss()->coll());
-                BSONArrayBuilder indexNames;
+                std::vector<std::string> indexNames;
                 for (auto&& haystackIndex : haystackIndexes) {
-                    indexNames.append(haystackIndex->indexName());
+                    indexNames.emplace_back(haystackIndex->indexName());
                 }
-                dropIndexesCmd.append("index", indexNames.arr());
-
-                BSONObjBuilder response;  // This response is ignored.
-                uassertStatusOK(
-                    dropIndexes(opCtx,
-                                *collName.nss(),
-                                CommandHelpers::appendMajorityWriteConcern(dropIndexesCmd.obj()),
-                                &response));
+                dropIndexes(opCtx, *collName.nss(), indexNames);
             }
         }
     }

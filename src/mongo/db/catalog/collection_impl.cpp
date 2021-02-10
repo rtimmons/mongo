@@ -329,6 +329,11 @@ void CollectionImpl::init(OperationContext* opCtx) {
                               "validatorStatus"_attr = _validator.getStatus());
     }
 
+    if (collectionOptions.clusteredIndex) {
+        invariant(_shared->_recordStore->keyFormat() == KeyFormat::String);
+        _clustered = true;
+    }
+
     getIndexCatalog()->init(opCtx).transitional_ignore();
     _initialized = true;
 }
@@ -622,10 +627,22 @@ Status CollectionImpl::insertDocumentForBulkLoader(
 
     dassert(opCtx->lockState()->isCollectionLockedForMode(ns(), MODE_IX));
 
+    RecordId recordId;
+    if (isClustered()) {
+        // Collections clustered by _id require ObjectId values.
+        BSONElement oidElem;
+        bool foundId = doc.getObjectID(oidElem);
+        uassert(ErrorCodes::BadValue,
+                str::stream() << "Document " << redact(doc) << " is missing the '_id' field",
+                foundId);
+        invariant(_shared->_recordStore->keyFormat() == KeyFormat::String);
+        recordId = RecordId(oidElem.OID().view().view(), OID::kOIDSize);
+    }
+
     // Using timestamp 0 for these inserts, which are non-oplog so we don't have an appropriate
     // timestamp to use.
-    StatusWith<RecordId> loc =
-        _shared->_recordStore->insertRecord(opCtx, doc.objdata(), doc.objsize(), Timestamp());
+    StatusWith<RecordId> loc = _shared->_recordStore->insertRecord(
+        opCtx, recordId, doc.objdata(), doc.objsize(), Timestamp());
 
     if (!loc.isOK())
         return loc.getStatus();
@@ -692,15 +709,16 @@ Status CollectionImpl::_insertDocuments(OperationContext* opCtx,
         const auto& doc = it->doc;
 
         RecordId recordId;
-        if (_shared->_recordStore->isClustered()) {
-            // Extract the ObjectId from the document's _id field.
+        if (isClustered()) {
+            // Collections clustered by _id require ObjectId values.
             BSONElement oidElem;
             bool foundId = doc.getObjectID(oidElem);
             uassert(ErrorCodes::BadValue,
                     str::stream() << "Document " << redact(doc) << " is missing the '_id' field",
                     foundId);
 
-            recordId = RecordId(oidElem.OID());
+            invariant(_shared->_recordStore->keyFormat() == KeyFormat::String);
+            recordId = RecordId(oidElem.OID().view().view(), OID::kOIDSize);
         }
 
         if (MONGO_unlikely(corruptDocumentOnInsert.shouldFail())) {
@@ -722,12 +740,9 @@ Status CollectionImpl::_insertDocuments(OperationContext* opCtx,
     int recordIndex = 0;
     for (auto it = begin; it != end; it++) {
         RecordId loc = records[recordIndex++].id;
-        if (_shared->_recordStore->isClustered()) {
-            invariant(RecordId::min<OID>() < loc);
-            invariant(loc < RecordId::max<OID>());
-        } else {
-            invariant(RecordId::min<int64_t>() < loc);
-            invariant(loc < RecordId::max<int64_t>());
+        if (_shared->_recordStore->keyFormat() == KeyFormat::Long) {
+            invariant(RecordId::minLong() < loc);
+            invariant(loc < RecordId::maxLong());
         }
 
         BsonRecord bsonRecord = {loc, Timestamp(it->oplogSlot.getTimestamp()), &(it->doc)};
@@ -960,6 +975,10 @@ StatusWith<RecordData> CollectionImpl::updateDocumentWithDamages(
 
 bool CollectionImpl::isTemporary(OperationContext* opCtx) const {
     return DurableCatalog::get(opCtx)->getCollectionOptions(opCtx, getCatalogId()).temp;
+}
+
+bool CollectionImpl::isClustered() const {
+    return _clustered;
 }
 
 bool CollectionImpl::getRecordPreImages() const {

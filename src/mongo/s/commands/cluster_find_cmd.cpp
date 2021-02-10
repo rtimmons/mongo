@@ -32,6 +32,7 @@
 #include <boost/optional.hpp>
 
 #include "mongo/client/read_preference.h"
+#include "mongo/db/auth/authorization_checks.h"
 #include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/commands.h"
 #include "mongo/db/matcher/extensions_callback_noop.h"
@@ -145,8 +146,8 @@ public:
          */
         void doCheckAuthorization(OperationContext* opCtx) const final {
             auto hasTerm = _request.body.hasField(kTermField);
-            uassertStatusOK(
-                AuthorizationSession::get(opCtx->getClient())->checkAuthForFind(ns(), hasTerm));
+            uassertStatusOK(auth::checkAuthForFind(
+                AuthorizationSession::get(opCtx->getClient()), ns(), hasTerm));
         }
 
         void explain(OperationContext* opCtx,
@@ -198,11 +199,11 @@ public:
                 auto viewAggregationCommand =
                     OpMsgRequest::fromDBAndBody(_dbName, aggCmdOnView).body;
 
-                auto aggRequestOnView = uassertStatusOK(aggregation_request_helper::parseFromBSON(
+                auto aggRequestOnView = aggregation_request_helper::parseFromBSON(
                     ns(),
                     viewAggregationCommand,
                     verbosity,
-                    APIParameters::get(opCtx).getAPIStrict().value_or(false)));
+                    APIParameters::get(opCtx).getAPIStrict().value_or(false));
 
                 // An empty PrivilegeVector is acceptable because these privileges are only checked
                 // on getMore and explain will not open a cursor.
@@ -264,11 +265,11 @@ public:
                 auto viewAggregationCommand =
                     OpMsgRequest::fromDBAndBody(_dbName, aggCmdOnView).body;
 
-                auto aggRequestOnView = uassertStatusOK(aggregation_request_helper::parseFromBSON(
+                auto aggRequestOnView = aggregation_request_helper::parseFromBSON(
                     ns(),
                     viewAggregationCommand,
                     boost::none,
-                    APIParameters::get(opCtx).getAPIStrict().value_or(false)));
+                    APIParameters::get(opCtx).getAPIStrict().value_or(false));
 
                 auto bodyBuilder = result->getBodyBuilder();
                 uassertStatusOK(ClusterAggregate::retryOnViewError(

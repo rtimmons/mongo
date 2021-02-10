@@ -36,6 +36,7 @@
 #include "mongo/db/commands.h"
 #include "mongo/db/curop.h"
 #include "mongo/db/s/drop_database_coordinator.h"
+#include "mongo/db/s/drop_database_legacy.h"
 #include "mongo/db/s/sharding_state.h"
 #include "mongo/logv2/log.h"
 #include "mongo/s/grid.h"
@@ -45,24 +46,16 @@
 namespace mongo {
 namespace {
 
-DropDatabaseReply dropDatabaseLegacy(OperationContext* opCtx, StringData dbName) {
-    const auto configShard = Grid::get(opCtx)->shardRegistry()->getConfigShard();
-    auto cmdResponse = uassertStatusOK(configShard->runCommandWithFixedRetryAttempts(
-        opCtx,
-        ReadPreferenceSetting(ReadPreference::PrimaryOnly),
-        "admin",
-        CommandHelpers::appendMajorityWriteConcern(BSON("_configsvrDropDatabase" << dbName),
-                                                   opCtx->getWriteConcern()),
-        Shard::RetryPolicy::kIdempotent));
-
-    uassertStatusOK(Shard::CommandResponse::getEffectiveStatus(cmdResponse));
-
-    return DropDatabaseReply::parse(IDLParserErrorContext("dropDatabase-reply"),
-                                    cmdResponse.response);
-}
-
 class ShardsvrDropDatabaseCommand final : public TypedCommand<ShardsvrDropDatabaseCommand> {
 public:
+    using Request = ShardsvrDropDatabase;
+    using Response = DropDatabaseReply;
+
+    std::string help() const override {
+        return "Internal command, which is exported by the primary sharding server. Do not call "
+               "directly. Drops a database.";
+    }
+
     bool acceptsAnyApiVersionParameters() const override {
         return true;
     }
@@ -70,14 +63,6 @@ public:
     AllowedOnSecondary secondaryAllowed(ServiceContext*) const override {
         return Command::AllowedOnSecondary::kNever;
     }
-
-    std::string help() const override {
-        return "Internal command, which is exported by the primary sharding server. Do not call "
-               "directly. Drops a database.";
-    }
-
-    using Request = ShardsvrDropDatabase;
-    using Response = DropDatabaseReply;
 
     class Invocation final : public InvocationBase {
     public:
@@ -94,11 +79,16 @@ public:
 
             const auto dbName = request().getDbName();
 
-            if (!feature_flags::gShardingFullDDLSupport.isEnabled(
-                    serverGlobalParams.featureCompatibility) ||
-                feature_flags::gDisableIncompleteShardingDDLSupport.isEnabled(
-                    serverGlobalParams.featureCompatibility)) {
+            bool useNewPath = [&] {
+                // TODO (SERVER-53092): Use the FCV lock in order to "reserve" operation as running
+                // in new or legacy mode
+                return feature_flags::gShardingFullDDLSupport.isEnabled(
+                           serverGlobalParams.featureCompatibility) &&
+                    !feature_flags::gDisableIncompleteShardingDDLSupport.isEnabled(
+                        serverGlobalParams.featureCompatibility);
+            }();
 
+            if (!useNewPath) {
                 LOGV2_DEBUG(
                     5281110, 1, "Running legacy drop database procedure", "database"_attr = dbName);
                 return dropDatabaseLegacy(opCtx, dbName);

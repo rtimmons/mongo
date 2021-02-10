@@ -30,6 +30,7 @@
 #include "mongo/db/repl/hello_auth.h"
 
 #include "mongo/client/authenticate.h"
+#include "mongo/db/auth/authentication_session.h"
 #include "mongo/db/auth/sasl_command_constants.h"
 #include "mongo/db/auth/sasl_commands.h"
 #include "mongo/db/auth/sasl_mechanism_registry.h"
@@ -38,37 +39,33 @@
 
 namespace mongo {
 
-void handleHelloAuth(OperationContext* opCtx, BSONObj cmdObj, BSONObjBuilder* result) {
-    auto ssme = cmdObj[auth::kSaslSupportedMechanisms];
-    if (ssme.type() == BSONType::String) {
-        UserName userName = uassertStatusOK(UserName::parse(ssme.String()));
-
-        authCounter.incSaslSupportedMechanismsReceived();
-
-        auto& saslMechanismRegistry = SASLServerMechanismRegistry::get(opCtx->getServiceContext());
-        saslMechanismRegistry.advertiseMechanismNamesForUser(opCtx, userName, result);
+void handleHelloAuth(OperationContext* opCtx, const HelloCommand& cmd, BSONObjBuilder* result) {
+    // saslSupportedMechs: UserName -> List[String]
+    if (auto userName = cmd.getSaslSupportedMechs()) {
+        AuthenticationSession::doStep(
+            opCtx, AuthenticationSession::StepType::kSaslSupportedMechanisms, [&](auto session) {
+                auto& saslMechanismRegistry =
+                    SASLServerMechanismRegistry::get(opCtx->getServiceContext());
+                saslMechanismRegistry.advertiseMechanismNamesForUser(opCtx, *userName, result);
+            });
     }
 
-    auto sae = cmdObj[auth::kSpeculativeAuthenticate];
-    if (sae.eoo()) {
+    // speculativeAuthenticate: SaslStart -> SaslReply or Authenticate -> AuthenticateReply
+    auto specAuth = cmd.getSpeculativeAuthenticate();
+    if (!specAuth) {
         return;
     }
 
     uassert(ErrorCodes::BadValue,
-            str::stream() << "hello." << auth::kSpeculativeAuthenticate << " must be an Object",
-            sae.type() == Object);
-    auto specAuth = sae.Obj();
-
-    uassert(ErrorCodes::BadValue,
             str::stream() << "hello." << auth::kSpeculativeAuthenticate
                           << " must be a non-empty Object",
-            !specAuth.isEmpty());
-    auto specCmd = specAuth.firstElementFieldNameStringData();
+            !specAuth->isEmpty());
+    auto specCmd = specAuth->firstElementFieldNameStringData();
 
     if (specCmd == saslStartCommandName) {
-        doSpeculativeSaslStart(opCtx, specAuth, result);
+        doSpeculativeSaslStart(opCtx, *specAuth, result);
     } else if (specCmd == auth::kAuthenticateCommand) {
-        doSpeculativeAuthenticate(opCtx, specAuth, result);
+        doSpeculativeAuthenticate(opCtx, *specAuth, result);
     } else {
         uasserted(51769,
                   str::stream() << "hello." << auth::kSpeculativeAuthenticate

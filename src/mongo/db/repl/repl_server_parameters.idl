@@ -380,7 +380,7 @@ server_parameters:
         cpp_vartype: AtomicWord<int>
         cpp_varname: tenantMigrationGarbageCollectionDelayMS
         default:
-            expr: 48 * 60 * 60 * 1000
+            expr: 15 * 60 * 1000
 
     tenantMigrationExternalKeysRemovalDelaySecs:
         description: >-
@@ -452,6 +452,16 @@ server_parameters:
         cpp_vartype: bool
         cpp_varname: tenantMigrationDisableX509Auth
         default: false
+
+    tenantMigrationExcludeDonorHostTimeoutMS:
+        description: >-
+            Period of time, in milliseconds, that a donor host should be excluded for.
+        set_at: startup
+        cpp_vartype: int
+        cpp_varname: tenantMigrationExcludeDonorHostTimeoutMS
+        default: 60000
+        validator:
+            gte: 1
 
 feature_flags:
     featureFlagTenantMigrations:

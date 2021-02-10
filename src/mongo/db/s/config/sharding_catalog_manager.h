@@ -326,14 +326,6 @@ public:
     void enableSharding(OperationContext* opCtx, StringData dbName, const ShardId& primaryShard);
 
     /**
-     * Retrieves all databases for a shard.
-     *
-     * Returns a !OK status if an error occurs.
-     */
-    StatusWith<std::vector<std::string>> getDatabasesForShard(OperationContext* opCtx,
-                                                              const ShardId& shardId);
-
-    /**
      * Updates metadata in config.databases collection to show the given primary database on its
      * new shard.
      */
@@ -342,27 +334,6 @@ public:
     //
     // Collection Operations
     //
-
-    /**
-     * Drops the specified collection from the collection metadata store.
-     *
-     * Throws a DBException for any failures. These are some of the known failures:
-     *  - NamespaceNotFound - Collection does not exist
-     */
-    void dropCollection(OperationContext* opCtx, const NamespaceString& nss);
-
-    /**
-     * Ensures that a namespace that has received a dropCollection, but no longer has an entry in
-     * config.collections, has cleared all relevant metadata entries for the corresponding
-     * collection. As part of this, sends dropCollection and setShardVersion to all shards -- in
-     * case shards didn't receive these commands as part of the original dropCollection.
-     *
-     * This function does not guarantee that all shards will eventually receive setShardVersion,
-     * unless the client infinitely retries until hearing back success. This function does, however,
-     * increase the likelihood of shards having received setShardVersion.
-     */
-
-    void ensureDropCollectionCompleted(OperationContext* opCtx, const NamespaceString& nss);
 
     /**
      * Refines the shard key of an existing collection with namespace 'nss'. Here, 'shardKey'
@@ -627,9 +598,6 @@ private:
     //
 
     Mutex _mutex = MONGO_MAKE_LATCH("ShardingCatalogManager::_mutex");
-
-    // True if shutDown() has been called. False, otherwise.
-    bool _inShutdown{false};  // (M)
 
     // True if startup() has been called.
     bool _started{false};  // (M)

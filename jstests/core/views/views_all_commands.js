@@ -119,6 +119,7 @@ let viewsCommandTests = {
     _shardsvrDropCollection: {skip: isAnInternalCommand},
     _shardsvrDropCollectionParticipant: {skip: isAnInternalCommand},
     _shardsvrCreateCollection: {skip: isAnInternalCommand},
+    _shardsvrCreateCollectionParticipant: {skip: isAnInternalCommand},
     _shardsvrDropDatabase: {skip: isAnInternalCommand},
     _shardsvrDropDatabaseParticipant: {skip: isAnInternalCommand},
     _shardsvrMovePrimary: {skip: isAnInternalCommand},
@@ -248,7 +249,7 @@ let viewsCommandTests = {
     dropAllUsersFromDatabase: {skip: isUnrelated},
     dropConnections: {skip: isUnrelated},
     dropDatabase: {command: {dropDatabase: 1}},
-    dropIndexes: {command: {dropIndexes: "view"}, expectFailure: true},
+    dropIndexes: {command: {dropIndexes: "view", index: "a_1"}, expectFailure: true},
     dropRole: {
         command: {dropRole: "testrole"},
         setup: function(conn) {
@@ -414,6 +415,7 @@ let viewsCommandTests = {
     movePrimary: {skip: "Tested in sharding/movePrimary1.js"},
     multicast: {skip: isUnrelated},
     netstat: {skip: isAnInternalCommand},
+    pinHistoryReplicated: {skip: isAnInternalCommand},
     ping: {command: {ping: 1}},
     planCacheClear: {command: {planCacheClear: "view"}, expectFailure: true},
     planCacheClearFilters: {command: {planCacheClearFilters: "view"}, expectFailure: true},

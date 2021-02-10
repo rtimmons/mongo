@@ -72,40 +72,83 @@ void cloneTags(OperationContext* opCtx,
         opCtx, TagsType::ConfigNS, lastTag.toBSON(), ShardingCatalogClient::kMajorityWriteConcern));
 }
 
+void deleteChunks(OperationContext* opCtx, const NamespaceStringOrUUID& nssOrUUID) {
+    const auto catalogClient = Grid::get(opCtx)->catalogClient();
+
+    // Remove config.chunks entries
+    const auto chunksQuery = [&]() {
+        auto optUUID = nssOrUUID.uuid();
+        if (optUUID) {
+            return BSON(ChunkType::collectionUUID << *optUUID);
+        }
+
+        auto optNss = nssOrUUID.nss();
+        invariant(optNss);
+        return BSON(ChunkType::ns(optNss->ns()));
+    }();
+
+    uassertStatusOK(catalogClient->removeConfigDocuments(
+        opCtx, ChunkType::ConfigNS, chunksQuery, ShardingCatalogClient::kMajorityWriteConcern));
+}
+
+void deleteCollection(OperationContext* opCtx, const NamespaceString& nss) {
+    const auto catalogClient = Grid::get(opCtx)->catalogClient();
+
+    // Remove config.collection entry
+    uassertStatusOK(
+        catalogClient->removeConfigDocuments(opCtx,
+                                             CollectionType::ConfigNS,
+                                             BSON(CollectionType::kNssFieldName << nss.ns()),
+                                             ShardingCatalogClient::kMajorityWriteConcern));
+}
+
 }  // namespace
 
-void removeCollMetadataFromConfig(OperationContext* opCtx,
-                                  NamespaceString nss,
-                                  const boost::optional<UUID>& collectionUUID) {
+void removeTagsMetadataFromConfig(OperationContext* opCtx, const NamespaceString& nss) {
+    const auto catalogClient = Grid::get(opCtx)->catalogClient();
 
+    // Remove config.tags entries
+    uassertStatusOK(
+        catalogClient->removeConfigDocuments(opCtx,
+                                             TagsType::ConfigNS,
+                                             BSON(TagsType::ns(nss.ns())),
+                                             ShardingCatalogClient::kMajorityWriteConcern));
+}
+
+void removeCollMetadataFromConfig(OperationContext* opCtx, const CollectionType& coll) {
+    IgnoreAPIParametersBlock ignoreApiParametersBlock(opCtx);
+    const auto& nss = coll.getNss();
+
+    ON_BLOCK_EXIT(
+        [&] { Grid::get(opCtx)->catalogCache()->invalidateCollectionEntry_LINEARIZABLE(nss); });
+
+    const NamespaceStringOrUUID nssOrUUID = coll.getTimestamp()
+        ? NamespaceStringOrUUID(nss.db().toString(), coll.getUuid())
+        : NamespaceStringOrUUID(nss);
+
+    deleteChunks(opCtx, nssOrUUID);
+
+    removeTagsMetadataFromConfig(opCtx, nss);
+
+    deleteCollection(opCtx, nss);
+}
+
+bool removeCollMetadataFromConfig(OperationContext* opCtx, const NamespaceString& nss) {
     IgnoreAPIParametersBlock ignoreApiParametersBlock(opCtx);
     const auto catalogClient = Grid::get(opCtx)->catalogClient();
 
     ON_BLOCK_EXIT(
         [&] { Grid::get(opCtx)->catalogCache()->invalidateCollectionEntry_LINEARIZABLE(nss); });
 
-    // Remove chunk data
-    const auto chunksQuery = [&]() {
-        if (collectionUUID) {
-            return BSON(ChunkType::collectionUUID << *collectionUUID);
-        } else {
-            return BSON(ChunkType::ns(nss.ns()));
-        }
-    }();
-    uassertStatusOK(catalogClient->removeConfigDocuments(
-        opCtx, ChunkType::ConfigNS, chunksQuery, ShardingCatalogClient::kMajorityWriteConcern));
-    // Remove tag data
-    uassertStatusOK(
-        catalogClient->removeConfigDocuments(opCtx,
-                                             TagsType::ConfigNS,
-                                             BSON(TagsType::ns(nss.ns())),
-                                             ShardingCatalogClient::kMajorityWriteConcern));
-    // Remove coll metadata
-    uassertStatusOK(
-        catalogClient->removeConfigDocuments(opCtx,
-                                             CollectionType::ConfigNS,
-                                             BSON(CollectionType::kNssFieldName << nss.ns()),
-                                             ShardingCatalogClient::kMajorityWriteConcern));
+    try {
+        auto coll = catalogClient->getCollection(opCtx, nss);
+        removeCollMetadataFromConfig(opCtx, coll);
+        return true;
+    } catch (ExceptionFor<ErrorCodes::NamespaceNotFound>&) {
+        // The collection is not sharded or doesn't exist, just tags need to be removed
+        removeTagsMetadataFromConfig(opCtx, nss);
+        return false;
+    }
 }
 
 void shardedRenameMetadata(OperationContext* opCtx,
@@ -114,7 +157,7 @@ void shardedRenameMetadata(OperationContext* opCtx,
     auto catalogClient = Grid::get(opCtx)->catalogClient();
 
     // Delete eventual TO chunk/collection entries referring a dropped collection
-    removeCollMetadataFromConfig(opCtx, toNss, boost::none);
+    removeCollMetadataFromConfig(opCtx, toNss);
 
     // Clone FROM tags to TO
     cloneTags(opCtx, fromNss, toNss);
@@ -142,7 +185,7 @@ void shardedRenameMetadata(OperationContext* opCtx,
             repl::ReadConcernLevel::kMajorityReadConcern));
 
         if (!chunks.empty()) {
-            // Wait for majority just for last tag
+            // Wait for majority just for last chunk
             auto lastChunk = chunks.back();
             chunks.pop_back();
             for (auto& chunk : chunks) {
@@ -166,7 +209,8 @@ void shardedRenameMetadata(OperationContext* opCtx,
     }
 
     // Delete FROM tag/collection entries
-    removeCollMetadataFromConfig(opCtx, fromNss, boost::none);
+    removeTagsMetadataFromConfig(opCtx, fromNss);
+    deleteCollection(opCtx, fromNss);
 }
 
 void checkShardedRenamePreconditions(OperationContext* opCtx,
@@ -204,6 +248,35 @@ void checkShardedRenamePreconditions(OperationContext* opCtx,
             str::stream() << "Can't rename to target collection " << toNss.ns()
                           << " because it must not have associated tags",
             tags.empty());
+}
+
+boost::optional<CreateCollectionResponse> checkIfCollectionAlreadySharded(
+    OperationContext* opCtx,
+    const NamespaceString& nss,
+    const BSONObj& key,
+    const BSONObj& collation,
+    bool unique) {
+    auto cm = uassertStatusOK(
+        Grid::get(opCtx)->catalogCache()->getCollectionRoutingInfoWithRefresh(opCtx, nss));
+
+    if (!cm.isSharded()) {
+        return boost::none;
+    }
+
+    auto defaultCollator =
+        cm.getDefaultCollator() ? cm.getDefaultCollator()->getSpec().toBSON() : BSONObj();
+
+    // If the collection is already sharded, fail if the deduced options in this request do not
+    // match the options the collection was originally sharded with.
+    uassert(ErrorCodes::AlreadyInitialized,
+            str::stream() << "sharding already enabled for collection " << nss,
+            SimpleBSONObjComparator::kInstance.evaluate(cm.getShardKeyPattern().toBSON() == key) &&
+                SimpleBSONObjComparator::kInstance.evaluate(defaultCollator == collation) &&
+                cm.isUnique() == unique);
+
+    CreateCollectionResponse response(cm.getVersion());
+    response.setCollectionUUID(cm.getUUID());
+    return response;
 }
 
 }  // namespace sharding_ddl_util

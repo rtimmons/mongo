@@ -166,6 +166,8 @@ void ScanStage::doAttachToTrialRunTracker(TrialRunTracker* tracker) {
 }
 
 void ScanStage::open(bool reOpen) {
+    auto optTimer(getOptTimer(_opCtx));
+
     _commonStats.opens++;
     invariant(_opCtx);
     if (!reOpen) {
@@ -209,6 +211,8 @@ void ScanStage::open(bool reOpen) {
 }
 
 PlanState ScanStage::getNext() {
+    auto optTimer(getOptTimer(_opCtx));
+
     if (!_cursor) {
         return trackPlanState(PlanState::IS_EOF);
     }
@@ -230,7 +234,7 @@ PlanState ScanStage::getNext() {
 
     if (_recordIdAccessor) {
         _recordIdAccessor->reset(value::TypeTags::RecordId,
-                                 value::bitcastFrom<int64_t>(nextRecord->id.as<int64_t>()));
+                                 value::bitcastFrom<int64_t>(nextRecord->id.asLong()));
     }
 
     if (!_fieldAccessors.empty()) {
@@ -271,6 +275,8 @@ PlanState ScanStage::getNext() {
 }
 
 void ScanStage::close() {
+    auto optTimer(getOptTimer(_opCtx));
+
     _commonStats.closes++;
     _cursor.reset();
     _coll.reset();
@@ -463,6 +469,8 @@ void ParallelScanStage::doAttachToOperationContext(OperationContext* opCtx) {
 }
 
 void ParallelScanStage::open(bool reOpen) {
+    auto optTimer(getOptTimer(_opCtx));
+
     invariant(_opCtx);
     invariant(!reOpen, "parallel scan is not restartable");
 
@@ -524,6 +532,8 @@ boost::optional<Record> ParallelScanStage::nextRange() {
 }
 
 PlanState ParallelScanStage::getNext() {
+    auto optTimer(getOptTimer(_opCtx));
+
     if (!_cursor) {
         _commonStats.isEOF = true;
         return PlanState::IS_EOF;
@@ -553,7 +563,7 @@ PlanState ParallelScanStage::getNext() {
 
     if (_recordIdAccessor) {
         _recordIdAccessor->reset(value::TypeTags::RecordId,
-                                 value::bitcastFrom<int64_t>(nextRecord->id.as<int64_t>()));
+                                 value::bitcastFrom<int64_t>(nextRecord->id.asLong()));
     }
 
 
@@ -587,6 +597,8 @@ PlanState ParallelScanStage::getNext() {
 }
 
 void ParallelScanStage::close() {
+    auto optTimer(getOptTimer(_opCtx));
+
     _cursor.reset();
     _coll.reset();
     _open = false;

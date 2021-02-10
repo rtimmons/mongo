@@ -31,6 +31,7 @@
 
 #include "mongo/platform/basic.h"
 
+#include "mongo/db/auth/authorization_checks.h"
 #include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/client.h"
 #include "mongo/db/clientcursor.h"
@@ -231,7 +232,8 @@ public:
                     authSession->isAuthorizedToParseNamespaceElement(_request.body.firstElement()));
 
             const auto hasTerm = _request.body.hasField(kTermField);
-            uassertStatusOK(authSession->checkAuthForFind(
+            uassertStatusOK(auth::checkAuthForFind(
+                authSession,
                 CollectionCatalog::get(opCtx)->resolveNamespaceStringOrUUID(
                     opCtx, CommandHelpers::parseNsOrUUID(_dbName, _request.body)),
                 hasTerm));
@@ -274,11 +276,11 @@ public:
                 auto viewAggCmd = OpMsgRequest::fromDBAndBody(_dbName, viewAggregationCommand).body;
                 // Create the agg request equivalent of the find operation, with the explain
                 // verbosity included.
-                auto aggRequest = uassertStatusOK(aggregation_request_helper::parseFromBSON(
+                auto aggRequest = aggregation_request_helper::parseFromBSON(
                     nss,
                     viewAggCmd,
                     verbosity,
-                    APIParameters::get(opCtx).getAPIStrict().value_or(false)));
+                    APIParameters::get(opCtx).getAPIStrict().value_or(false));
 
                 try {
                     // An empty PrivilegeVector is acceptable because these privileges are only

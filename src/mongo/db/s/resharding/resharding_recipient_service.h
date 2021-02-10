@@ -54,6 +54,12 @@ void createTemporaryReshardingCollectionLocally(OperationContext* opCtx,
                                                 const UUID& existingUUID,
                                                 Timestamp fetchTimestamp);
 
+std::vector<NamespaceString> ensureStashCollectionsExist(
+    OperationContext* opCtx,
+    const ChunkManager& cm,
+    const UUID& existingUUID,
+    std::vector<DonorShardMirroringEntry> donorShards);
+
 }  // namespace resharding
 
 class ReshardingRecipientService final : public repl::PrimaryOnlyService {
@@ -107,14 +113,9 @@ public:
         return _completionPromise.getFuture();
     }
 
-    /**
-     * TODO(SERVER-51021) Report ReshardingRecipientService Instances in currentOp().
-     */
     boost::optional<BSONObj> reportForCurrentOp(
-        MongoProcessInterface::CurrentOpConnectionsMode connMode,
-        MongoProcessInterface::CurrentOpSessionsMode sessionMode) noexcept final {
-        return boost::none;
-    }
+        MongoProcessInterface::CurrentOpConnectionsMode,
+        MongoProcessInterface::CurrentOpSessionsMode) noexcept override;
 
     void onReshardingFieldsChanges(const TypeCollectionReshardingFields& reshardingFields);
 

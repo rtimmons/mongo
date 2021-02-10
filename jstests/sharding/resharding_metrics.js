@@ -39,9 +39,10 @@ function verifyServerStatusOutput(reshardingTest, inputCollection) {
 
         const metrics = shardingStats.resharding;
         verifyMetrics(metrics, {
-            "successfulOperations": 0,
-            "failedOperations": 0,
-            "canceledOperations": 0,
+            "countReshardingOperations": 0,
+            "countReshardingSuccessful": 0,
+            "countReshardingFailures": 0,
+            "countReshardingCanceled": 0,
             "documentsCopied": 0,
             "bytesCopied": 0,
             "oplogEntriesApplied": 0,
@@ -109,8 +110,37 @@ function verifyCurrentOpOutput(reshardingTest, inputCollection) {
         });
     });
 
-    // TODO SERVER-51021 verify currentOp output for recipients
-    // TODO SERVER-50976 verify currentOp output for the coordinator
+    reshardingTest.recipientShardNames.forEach(function(shardName) {
+        checkCurrentOp(new Mongo(topology.shards[shardName].primary), shardName, "Recipient", {
+            "type": "op",
+            "op": "command",
+            "ns": kNamespace,
+            "originatingCommand": undefined,
+            "totalOperationTimeElapsed": undefined,
+            "remainingOperationTimeEstimated": undefined,
+            "approxDocumentsToCopy": undefined,
+            "approxBytesToCopy": undefined,
+            "documentsCopied": undefined,
+            "bytesCopied": undefined,
+            "totalCopyTimeElapsed": undefined,
+            "oplogEntriesFetched": undefined,
+            "oplogEntriesApplied": undefined,
+            "totalApplyTimeElapsed": undefined,
+            "recipientState": undefined,
+            "opStatus": "actively running",
+        });
+    });
+
+    checkCurrentOp(new Mongo(topology.configsvr.nodes[0]), "configsvr", "Coordinator", {
+        "type": "op",
+        "op": "command",
+        "ns": kNamespace,
+        "originatingCommand": undefined,
+        "totalOperationTimeElapsed": undefined,
+        "remainingOperationTimeEstimated": undefined,
+        "coordinatorState": undefined,
+        "opStatus": "actively running",
+    });
 }
 
 const reshardingTest = new ReshardingTest({numDonors: 2, numRecipients: 2, reshardInPlace: true});

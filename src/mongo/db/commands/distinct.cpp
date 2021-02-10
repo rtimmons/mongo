@@ -35,6 +35,7 @@
 #include <string>
 #include <vector>
 
+#include "mongo/db/auth/authorization_checks.h"
 #include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/bson/dotted_path_support.h"
 #include "mongo/db/client.h"
@@ -124,10 +125,10 @@ public:
         }
 
         const auto hasTerm = false;
-        return authSession->checkAuthForFind(
-            CollectionCatalog::get(opCtx)->resolveNamespaceStringOrUUID(
-                opCtx, CommandHelpers::parseNsOrUUID(dbname, cmdObj)),
-            hasTerm);
+        return auth::checkAuthForFind(authSession,
+                                      CollectionCatalog::get(opCtx)->resolveNamespaceStringOrUUID(
+                                          opCtx, CommandHelpers::parseNsOrUUID(dbname, cmdObj)),
+                                      hasTerm);
     }
 
     Status explain(OperationContext* opCtx,
@@ -166,18 +167,11 @@ public:
                 viewAggCmd,
                 verbosity,
                 APIParameters::get(opCtx).getAPIStrict().value_or(false));
-            if (!viewAggRequest.isOK()) {
-                return viewAggRequest.getStatus();
-            }
 
             // An empty PrivilegeVector is acceptable because these privileges are only checked on
             // getMore and explain will not open a cursor.
-            return runAggregate(opCtx,
-                                nss,
-                                viewAggRequest.getValue(),
-                                viewAggregation.getValue(),
-                                PrivilegeVector(),
-                                result);
+            return runAggregate(
+                opCtx, nss, viewAggRequest, viewAggregation.getValue(), PrivilegeVector(), result);
         }
 
         const auto& collection = ctx->getCollection();

@@ -159,7 +159,11 @@ Status _createTimeseries(OperationContext* opCtx,
         }
 
         auto db = autoColl.ensureDbExists();
-        if (ViewCatalog::get(db)->lookup(opCtx, ns.ns())) {
+        if (auto view = ViewCatalog::get(db)->lookup(opCtx, ns.ns())) {
+            if (view->timeseries()) {
+                return {ErrorCodes::NamespaceExists,
+                        str::stream() << "A timeseries collection already exists. NS: " << ns};
+            }
             return {ErrorCodes::NamespaceExists,
                     str::stream() << "A view already exists. NS: " << ns};
         }
@@ -237,13 +241,14 @@ Status _createTimeseries(OperationContext* opCtx,
                                                          timeField,
                                                          timeField));
 
-        // Time-series buckets collections are clustered by _id using the ObjectId type by default.
-        ClusteredIndexOptions clusteredOptions;
-        clusteredOptions.setKeyFormat(KeyFormatEnum::OID);
-        if (auto expireAfterSeconds = options.timeseries->getExpireAfterSeconds()) {
-            clusteredOptions.setExpireAfterSeconds(*expireAfterSeconds);
+        // If possible, cluster time-series buckets collections by _id.
+        if (opCtx->getServiceContext()->getStorageEngine()->supportsClusteredIdIndex()) {
+            ClusteredIndexOptions clusteredOptions;
+            if (auto expireAfterSeconds = options.timeseries->getExpireAfterSeconds()) {
+                clusteredOptions.setExpireAfterSeconds(*expireAfterSeconds);
+            }
+            bucketsOptions.clusteredIndex = clusteredOptions;
         }
-        bucketsOptions.clusteredIndex = clusteredOptions;
 
         // Create the buckets collection that will back the view. Do not create the _id index as the
         // buckets collection will have a clustered index on _id.
@@ -307,7 +312,12 @@ Status _createCollection(OperationContext* opCtx,
             return Status(ErrorCodes::NamespaceExists,
                           str::stream() << "Collection already exists. NS: " << nss);
         }
-        if (ViewCatalog::get(autoDb.getDb())->lookup(opCtx, nss.ns())) {
+        if (auto view = ViewCatalog::get(autoDb.getDb())->lookup(opCtx, nss.ns()); view) {
+            if (view->timeseries()) {
+                return Status(ErrorCodes::NamespaceExists,
+                              str::stream()
+                                  << "A timeseries collection already exists. NS: " << nss);
+            }
             return Status(ErrorCodes::NamespaceExists,
                           str::stream() << "A view already exists. NS: " << nss);
         }
