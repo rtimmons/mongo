@@ -52,6 +52,9 @@
 #include "mongo/db/query/sbe_stage_builder_helpers.h"
 #include "mongo/util/str.h"
 
+#include <absl/container/flat_hash_map.h>
+#include <absl/container/flat_hash_set.h>
+
 namespace mongo::stage_builder {
 namespace {
 std::pair<sbe::value::TypeTags, sbe::value::Value> convertFrom(Value val) {
@@ -1192,6 +1195,7 @@ public:
         visitConditionalExpression(expr);
     }
     void visit(ExpressionDateDiff* expr) final {
+        using namespace std::literals;
         auto frameId = _context->frameIdGenerator->generate();
         std::vector<std::unique_ptr<sbe::EExpression>> arguments;
         std::vector<std::unique_ptr<sbe::EExpression>> bindings;
@@ -1199,14 +1203,21 @@ public:
         sbe::EVariable endDateRef(frameId, 1);
         sbe::EVariable unitRef(frameId, 2);
         sbe::EVariable timezoneRef(frameId, 3);
+        sbe::EVariable startOfWeekRef(frameId, 4);
+
+        // An auxiliary boolean variable to hold a value of a common subexpression 'unit'=="week"
+        // (string).
+        sbe::EVariable unitIsWeekRef(frameId, 5);
 
         auto children = expr->getChildren();
-        invariant(children.size() == 4);
-        _context->ensureArity(expr->isTimezoneSpecified() ? 4 : 3);
+        invariant(children.size() == 5);
+        _context->ensureArity(3 + (expr->isTimezoneSpecified() ? 1 : 0) +
+                              (expr->isStartOfWeekSpecified() ? 1 : 0));
 
         // Get child expressions.
+        auto startOfWeekExpression = expr->isStartOfWeekSpecified() ? _context->popExpr() : nullptr;
         auto timezoneExpression =
-            expr->isTimezoneSpecified() ? _context->popExpr() : sbe::makeE<sbe::EConstant>("UTC");
+            expr->isTimezoneSpecified() ? _context->popExpr() : makeConstant("UTC"sv);
         auto unitExpression = _context->popExpr();
         auto endDateExpression = _context->popExpr();
         auto startDateExpression = _context->popExpr();
@@ -1219,53 +1230,95 @@ public:
         arguments.push_back(endDateRef.clone());
         arguments.push_back(unitRef.clone());
         arguments.push_back(timezoneRef.clone());
+        if (expr->isStartOfWeekSpecified()) {
+            // Parameter "startOfWeek" - if the time unit is the week, then pass value of parameter
+            // "startOfWeek" of "$dateDiff" expression, otherwise pass a valid default value, since
+            // "dateDiff" built-in function does not accept non-string type values for this
+            // parameter.
+            arguments.push_back(sbe::makeE<sbe::EIf>(
+                unitIsWeekRef.clone(), startOfWeekRef.clone(), makeConstant("sun"sv)));
+        }
 
         // Set bindings for the frame.
         bindings.push_back(std::move(startDateExpression));
         bindings.push_back(std::move(endDateExpression));
         bindings.push_back(std::move(unitExpression));
         bindings.push_back(std::move(timezoneExpression));
+        if (expr->isStartOfWeekSpecified()) {
+            bindings.push_back(std::move(startOfWeekExpression));
+            bindings.push_back(generateIsEqualToStringCheck(unitRef, "week"sv));
+        }
 
         // Create an expression to invoke built-in "dateDiff" function.
-        auto dateDiffFunctionCall = sbe::makeE<sbe::EFunction>("dateDiff", std::move(arguments));
+        auto dateDiffFunctionCall = sbe::makeE<sbe::EFunction>("dateDiff"sv, std::move(arguments));
 
         // Create expressions to check that each argument to "dateDiff" function exists, is not
         // null, and is of the correct type.
-        auto dateDiffExpression = buildMultiBranchConditional(
-            // Return null if any of the parameters is either null or missing.
-            generateReturnNullIfNullOrMissing(startDateRef),
-            generateReturnNullIfNullOrMissing(endDateRef),
-            generateReturnNullIfNullOrMissing(unitRef),
-            generateReturnNullIfNullOrMissing(timezoneRef),
+        std::vector<CaseValuePair> inputValidationCases;
 
-            // "timezone" parameter validation.
-            CaseValuePair{
-                generateNonStringCheck(timezoneRef),
-                sbe::makeE<sbe::EFail>(ErrorCodes::Error{5166504},
-                                       "$dateDiff parameter 'timezone' must be a string")},
-            CaseValuePair{
-                makeNot(makeFunction(
-                    "isTimezone", sbe::makeE<sbe::EVariable>(timezoneDBSlot), timezoneRef.clone())),
-                sbe::makeE<sbe::EFail>(ErrorCodes::Error{5166505},
-                                       "$dateDiff parameter 'timezone' must be a valid timezone")},
+        // Return null if any of the parameters is either null or missing.
+        inputValidationCases.push_back(generateReturnNullIfNullOrMissing(startDateRef));
+        inputValidationCases.push_back(generateReturnNullIfNullOrMissing(endDateRef));
+        inputValidationCases.push_back(generateReturnNullIfNullOrMissing(unitRef));
+        inputValidationCases.push_back(generateReturnNullIfNullOrMissing(timezoneRef));
+        if (expr->isStartOfWeekSpecified()) {
+            inputValidationCases.emplace_back(
+                sbe::makeE<sbe::EPrimBinary>(sbe::EPrimBinary::logicAnd,
+                                             unitIsWeekRef.clone(),
+                                             generateNullOrMissing(startOfWeekRef)),
+                makeConstant(sbe::value::TypeTags::Null, 0));
+        }
 
-            // "startDate" parameter validation.
-            generateFailIfNotCoercibleToDate(
-                startDateRef, ErrorCodes::Error{5166500}, "$dateDiff"_sd, "startDate"_sd),
+        // "timezone" parameter validation.
+        inputValidationCases.emplace_back(
+            generateNonStringCheck(timezoneRef),
+            sbe::makeE<sbe::EFail>(ErrorCodes::Error{5166504},
+                                   "$dateDiff parameter 'timezone' must be a string"));
+        inputValidationCases.emplace_back(
+            makeNot(makeFunction(
+                "isTimezone", sbe::makeE<sbe::EVariable>(timezoneDBSlot), timezoneRef.clone())),
+            sbe::makeE<sbe::EFail>(ErrorCodes::Error{5166505},
+                                   "$dateDiff parameter 'timezone' must be a valid timezone"));
 
-            // "endDate" parameter validation.
-            generateFailIfNotCoercibleToDate(
-                endDateRef, ErrorCodes::Error{5166501}, "$dateDiff"_sd, "endDate"_sd),
+        // "startDate" parameter validation.
+        inputValidationCases.emplace_back(generateFailIfNotCoercibleToDate(
+            startDateRef, ErrorCodes::Error{5166500}, "$dateDiff"_sd, "startDate"_sd));
 
-            // "unit" parameter validation.
-            CaseValuePair{generateNonStringCheck(unitRef),
-                          sbe::makeE<sbe::EFail>(ErrorCodes::Error{5166502},
-                                                 "$dateDiff parameter 'unit' must be a string")},
-            CaseValuePair{
-                makeNot(makeFunction("isTimeUnit", unitRef.clone())),
-                sbe::makeE<sbe::EFail>(ErrorCodes::Error{5166503},
-                                       "$dateDiff parameter 'unit' must be a valid time unit")},
-            std::move(dateDiffFunctionCall));
+        // "endDate" parameter validation.
+        inputValidationCases.emplace_back(generateFailIfNotCoercibleToDate(
+            endDateRef, ErrorCodes::Error{5166501}, "$dateDiff"_sd, "endDate"_sd));
+
+        // "unit" parameter validation.
+        inputValidationCases.emplace_back(
+            generateNonStringCheck(unitRef),
+            sbe::makeE<sbe::EFail>(ErrorCodes::Error{5166502},
+                                   "$dateDiff parameter 'unit' must be a string"));
+        inputValidationCases.emplace_back(
+            makeNot(makeFunction("isTimeUnit", unitRef.clone())),
+            sbe::makeE<sbe::EFail>(ErrorCodes::Error{5166503},
+                                   "$dateDiff parameter 'unit' must be a valid time unit"));
+
+        // "startOfWeek" parameter validation.
+        if (expr->isStartOfWeekSpecified()) {
+            // If 'timeUnit' value is equal to "week" then validate "startOfWeek" parameter.
+            inputValidationCases.emplace_back(
+                sbe::makeE<sbe::EPrimBinary>(sbe::EPrimBinary::logicAnd,
+                                             unitIsWeekRef.clone(),
+                                             generateNonStringCheck(startOfWeekRef)),
+                sbe::makeE<sbe::EFail>(ErrorCodes::Error{5338801},
+                                       "$dateDiff parameter 'startOfWeek' must be a string"));
+            inputValidationCases.emplace_back(
+                sbe::makeE<sbe::EPrimBinary>(
+                    sbe::EPrimBinary::logicAnd,
+                    unitIsWeekRef.clone(),
+                    makeNot(makeFunction("isDayOfWeek", startOfWeekRef.clone()))),
+                sbe::makeE<sbe::EFail>(
+                    ErrorCodes::Error{5338802},
+                    "$dateDiff parameter 'startOfWeek' must be a valid day of the week"));
+        }
+
+        auto dateDiffExpression = buildMultiBranchConditionalFromCaseValuePairs(
+            std::move(inputValidationCases), std::move(dateDiffFunctionCall));
         _context->pushExpr(sbe::makeE<sbe::ELocalBind>(
             frameId, std::move(bindings), std::move(dateDiffExpression)));
     }
@@ -2751,10 +2804,10 @@ private:
      * expressionName - a name of an expression the parameter belongs to.
      * parameterName - a name of the parameter corresponding to variable 'dateRef'.
      */
-    CaseValuePair generateFailIfNotCoercibleToDate(const sbe::EVariable& dateRef,
-                                                   ErrorCodes::Error errorCode,
-                                                   StringData expressionName,
-                                                   StringData parameterName) {
+    static CaseValuePair generateFailIfNotCoercibleToDate(const sbe::EVariable& dateRef,
+                                                          ErrorCodes::Error errorCode,
+                                                          StringData expressionName,
+                                                          StringData parameterName) {
         return {makeNot(sbe::makeE<sbe::ETypeMatch>(dateRef.clone(), dateTypeMask())),
                 sbe::makeE<sbe::EFail>(errorCode,
                                        str::stream()
@@ -2766,8 +2819,20 @@ private:
      * Creates a CaseValuePair such that Null value is returned if a value of variable denoted by
      * 'variable' is null or missing.
      */
-    CaseValuePair generateReturnNullIfNullOrMissing(const sbe::EVariable& variable) {
+    static CaseValuePair generateReturnNullIfNullOrMissing(const sbe::EVariable& variable) {
         return {generateNullOrMissing(variable), makeConstant(sbe::value::TypeTags::Null, 0)};
+    }
+
+    /**
+     * Creates a boolean expression to check if 'variable' is equal to string 'string'.
+     */
+    static std::unique_ptr<sbe::EExpression> generateIsEqualToStringCheck(
+        const sbe::EVariable& variable, std::string_view string) {
+        return sbe::makeE<sbe::EPrimBinary>(sbe::EPrimBinary::logicAnd,
+                                            makeFunction("isString", variable.clone()),
+                                            sbe::makeE<sbe::EPrimBinary>(sbe::EPrimBinary::eq,
+                                                                         variable.clone(),
+                                                                         makeConstant(string)));
     }
 
     /**
@@ -3047,76 +3112,192 @@ private:
      * Shared expression building logic for regex expressions.
      */
     void generateRegexExpression(ExpressionRegex* expr, StringData exprName) {
-        size_t arity = (expr->hasOptions()) ? 3 : 2;
+        size_t arity = expr->hasOptions() ? 3 : 2;
         _context->ensureArity(arity);
 
         std::unique_ptr<sbe::EExpression> options =
-            (arity == 3) ? _context->popExpr() : sbe::makeE<sbe::EConstant>("");
+            expr->hasOptions() ? _context->popExpr() : nullptr;
         auto pattern = _context->popExpr();
         auto input = _context->popExpr();
 
-        auto pcreRegexExpr = [&]() {
-            auto [patternStr, optStr] = expr->getConstantPatternAndOptions();
-            if (patternStr) {
-                // Create the compiled Regex from constant pattern and options.
-                auto [regexTag, regexVal] = sbe::value::makeNewPcreRegex(patternStr.get(), optStr);
-                return sbe::makeE<sbe::EConstant>(regexTag, regexVal);
-            } else {
-                // Build a call to regexCompile function.
-                auto frameId = _context->frameIdGenerator->generate();
-                auto binds = sbe::makeEs(std::move(pattern));
-                sbe::EVariable patternRef(frameId, 0);
+        // Create top level local bind.
+        auto frameId = _context->frameIdGenerator->generate();
+        auto binds = sbe::makeEs(std::move(input));
+        sbe::EVariable inputVar{frameId, 0};
 
-                return sbe::makeE<sbe::ELocalBind>(
-                    frameId,
-                    std::move(binds),
-                    buildMultiBranchConditional(
-                        CaseValuePair{generateNullOrMissing(patternRef),
-                                      sbe::makeE<sbe::EConstant>(sbe::value::TypeTags::Null, 0)},
-                        CaseValuePair{generateNonStringCheck(patternRef),
-                                      sbe::makeE<sbe::EFail>(ErrorCodes::Error{5073400},
-                                                             str::stream()
-                                                                 << "$" << exprName.toString()
-                                                                 << " expects string pattern")},
-                        sbe::makeE<sbe::EFunction>(
-                            "regexCompile", sbe::makeEs(patternRef.clone(), std::move(options)))));
+        auto makeError = [exprName](int errorCode, StringData message) {
+            return sbe::makeE<sbe::EFail>(ErrorCodes::Error{errorCode},
+                                          str::stream() << "$" << exprName.toString() << ": "
+                                                        << message.toString());
+        };
+
+        auto makeRegexFunctionCall = [&](std::unique_ptr<sbe::EExpression> compiledRegex) {
+            return makeLocalBind(
+                _context->frameIdGenerator,
+                [&](sbe::EVariable regexResult) {
+                    return sbe::makeE<sbe::EIf>(
+                        makeFunction("exists", regexResult.clone()),
+                        regexResult.clone(),
+                        makeError(5073403,
+                                  "error occurred while executing the regular expression"));
+                },
+                makeFunction(exprName.toString(), std::move(compiledRegex), inputVar.clone()));
+        };
+
+        auto regexFunctionResult = [&]() {
+            if (auto patternAndOptions = expr->getConstantPatternAndOptions(); patternAndOptions) {
+                auto [pattern, options] = *patternAndOptions;
+                if (!pattern) {
+                    // Pattern is null, just generate null result.
+                    return generateRegexNullResponse(exprName);
+                }
+
+                // Create the compiled Regex from constant pattern and options.
+                auto [regexTag, regexVal] = sbe::value::makeNewPcreRegex(*pattern, options);
+                auto compiledRegex = sbe::makeE<sbe::EConstant>(regexTag, regexVal);
+                return makeRegexFunctionCall(std::move(compiledRegex));
             }
+
+            // Include pattern and options in the outer local bind.
+            sbe::EVariable patternVar{frameId, 1};
+            binds.push_back(std::move(pattern));
+
+            boost::optional<sbe::EVariable> optionsVar;
+            if (options) {
+                binds.push_back(std::move(options));
+                optionsVar.emplace(frameId, 2);
+            }
+
+            // 'patternArgument' contains the following expression:
+            //
+            // if isString(pattern) {
+            //     if hasNullBytes(pattern) {
+            //         fail('pattern cannot have null bytes in it')
+            //     } else {
+            //         pattern
+            //     }
+            // } else if isBsonRegex(pattern) {
+            //     getRegexPattern(pattern)
+            // } else {
+            //     fail('pattern must be either string or BSON RegEx')
+            // }
+            auto patternNullBytesCheck = sbe::makeE<sbe::EIf>(
+                makeFunction("hasNullBytes", patternVar.clone()),
+                makeError(5126602, "regex pattern must not have embedded null bytes"),
+                patternVar.clone());
+            auto patternArgument = buildMultiBranchConditional(
+                CaseValuePair{makeFunction("isString", patternVar.clone()),
+                              std::move(patternNullBytesCheck)},
+                CaseValuePair{sbe::makeE<sbe::ETypeMatch>(patternVar.clone(),
+                                                          getBSONTypeMask(BSONType::RegEx)),
+                              makeFunction("getRegexPattern", patternVar.clone())},
+                makeError(5126601, "regex pattern must have either string or BSON RegEx type"));
+
+            if (!optionsVar) {
+                // If no options are passed to the expression, try to extract them from the pattern.
+                auto optionsArgument =
+                    sbe::makeE<sbe::EIf>(sbe::makeE<sbe::ETypeMatch>(
+                                             patternVar.clone(), getBSONTypeMask(BSONType::RegEx)),
+                                         makeFunction("getRegexFlags", patternVar.clone()),
+                                         makeConstant(""));
+                auto compiledRegex = makeFunction(
+                    "regexCompile", std::move(patternArgument), std::move(optionsArgument));
+                return sbe::makeE<sbe::EIf>(makeFunction("isNull", patternVar.clone()),
+                                            generateRegexNullResponse(exprName),
+                                            makeRegexFunctionCall(std::move(compiledRegex)));
+            }
+
+            auto optionsArgument = [&]() {
+                // The code below generates the following expression:
+                //
+                // let stringOptions =
+                //     if isString(options) {
+                //         if hasNullBytes(options) {
+                //             fail('options cannot have null bytes in it')
+                //         } else {
+                //             options
+                //         }
+                //     } else if isNull(options) {
+                //         ''
+                //     } else {
+                //         fail('options must be either string or null')
+                //     }
+                // in
+                //     if isBsonRegex(pattern) {
+                //         let bsonOptions = getRegexFlags(pattern)
+                //         in
+                //             if stringOptions == "" {
+                //                 bsonOptions
+                //             } else if bsonOptions == "" {
+                //                 stringOptions
+                //             } else {
+                //                 fail('multiple options specified')
+                //             }
+                //     } else {
+                //         stringOptions
+                //     }
+                auto optionsNullBytesCheck = sbe::makeE<sbe::EIf>(
+                    makeFunction("hasNullBytes", optionsVar->clone()),
+                    makeError(5126604, "regex flags must not have embedded null bytes"),
+                    optionsVar->clone());
+                auto stringOptions = buildMultiBranchConditional(
+                    CaseValuePair{makeFunction("isString", optionsVar->clone()),
+                                  std::move(optionsNullBytesCheck)},
+                    CaseValuePair{makeFunction("isNull", optionsVar->clone()), makeConstant("")},
+                    makeError(5126603, "regex flags must have either string or null type"));
+
+                auto generateIsEmptyString = [](const sbe::EVariable& var) {
+                    return makeBinaryOp(sbe::EPrimBinary::eq, var.clone(), makeConstant(""));
+                };
+
+                return makeLocalBind(
+                    _context->frameIdGenerator,
+                    [&](sbe::EVariable stringOptions) {
+                        auto checkBsonRegexOptions = makeLocalBind(
+                            _context->frameIdGenerator,
+                            [&](sbe::EVariable bsonOptions) {
+                                return buildMultiBranchConditional(
+                                    CaseValuePair{generateIsEmptyString(stringOptions),
+                                                  bsonOptions.clone()},
+                                    CaseValuePair{generateIsEmptyString(bsonOptions),
+                                                  stringOptions.clone()},
+                                    makeError(5126605,
+                                              "regex options cannot be specified in both BSON "
+                                              "RegEx and 'options' field"));
+                            },
+                            makeFunction("getRegexFlags", patternVar.clone()));
+
+                        return sbe::makeE<sbe::EIf>(
+                            sbe::makeE<sbe::ETypeMatch>(patternVar.clone(),
+                                                        getBSONTypeMask(BSONType::RegEx)),
+                            std::move(checkBsonRegexOptions),
+                            stringOptions.clone());
+                    },
+                    std::move(stringOptions));
+            }();
+
+            // If there are options passed to the expression, we construct local bind with options
+            // argument because it needs to be validated even when pattern is null.
+            return makeLocalBind(
+                _context->frameIdGenerator,
+                [&](sbe::EVariable options) {
+                    auto compiledRegex =
+                        makeFunction("regexCompile", std::move(patternArgument), options.clone());
+                    return sbe::makeE<sbe::EIf>(makeFunction("isNull", patternVar.clone()),
+                                                generateRegexNullResponse(exprName),
+                                                makeRegexFunctionCall(std::move(compiledRegex)));
+                },
+                std::move(optionsArgument));
         }();
 
-        auto outerFrameId = _context->frameIdGenerator->generate();
-        auto outerBinds = sbe::makeEs(std::move(pcreRegexExpr), std::move(input));
-        sbe::EVariable regexRef(outerFrameId, 0);
-        sbe::EVariable inputRef(outerFrameId, 1);
-        auto innerFrameId = _context->frameIdGenerator->generate();
-        sbe::EVariable resRef(innerFrameId, 0);
+        auto resultExpr = buildMultiBranchConditional(
+            CaseValuePair{generateNullOrMissing(inputVar), generateRegexNullResponse(exprName)},
+            CaseValuePair{generateNonStringCheck(inputVar),
+                          makeError(5073401, "input must be of type string")},
+            std::move(regexFunctionResult));
 
-        auto regexWithErrorCheck = buildMultiBranchConditional(
-            CaseValuePair{makeBinaryOp(sbe::EPrimBinary::logicOr,
-                                       generateNullOrMissing(inputRef),
-                                       makeFunction("isNull", regexRef.clone())),
-                          generateRegexNullResponse(exprName)},
-            CaseValuePair{generateNonStringCheck(inputRef),
-                          sbe::makeE<sbe::EFail>(ErrorCodes::Error{5073401},
-                                                 str::stream() << "$" << exprName.toString()
-                                                               << " expects input of type string")},
-
-            CaseValuePair{
-                makeNot(makeFunction("exists", regexRef.clone())),
-                sbe::makeE<sbe::EFail>(ErrorCodes::Error{5073402}, "Invalid regular expression")},
-            sbe::makeE<sbe::ELocalBind>(
-                innerFrameId,
-                sbe::makeEs(makeFunction(exprName.toString(), regexRef.clone(), inputRef.clone())),
-                sbe::makeE<sbe::EIf>(
-                    makeFunction("exists", resRef.clone()),
-                    resRef.clone(),
-                    sbe::makeE<sbe::EFail>(ErrorCodes::Error{5073403},
-                                           str::stream()
-                                               << "Unexpected error occurred while executing "
-                                               << exprName.toString()
-                                               << ". For more details see the error logs."))));
-
-        _context->pushExpr(sbe::makeE<sbe::ELocalBind>(
-            outerFrameId, std::move(outerBinds), std::move(regexWithErrorCheck)));
+        _context->pushExpr(
+            sbe::makeE<sbe::ELocalBind>(frameId, std::move(binds), std::move(resultExpr)));
     }
 
     /**
@@ -3230,8 +3411,10 @@ private:
     }
 
     void unsupportedExpression(const char* op) const {
-        uasserted(ErrorCodes::InternalErrorNotSupported,
-                  str::stream() << "Expression is not supported in SBE: " << op);
+        // We're guaranteed to not fire this assertion by implementing a mechanism in the upper
+        // layer which directs the query to the classic engine when an unsupported expression
+        // appears.
+        tasserted(5182300, str::stream() << "Unsupported expression in SBE stage builder: " << op);
     }
 
     ExpressionVisitorContext* _context;

@@ -41,6 +41,8 @@
 #include "mongo/db/exec/sbe/stages/union.h"
 #include "mongo/db/exec/sbe/stages/unwind.h"
 #include "mongo/db/matcher/matcher_type_set.h"
+#include <iterator>
+#include <numeric>
 
 namespace mongo::stage_builder {
 
@@ -171,6 +173,17 @@ std::unique_ptr<sbe::EExpression> buildMultiBranchConditional(
     return defaultCase;
 }
 
+std::unique_ptr<sbe::EExpression> buildMultiBranchConditionalFromCaseValuePairs(
+    std::vector<CaseValuePair> caseValuePairs, std::unique_ptr<sbe::EExpression> defaultValue) {
+    return std::accumulate(
+        std::make_reverse_iterator(std::make_move_iterator(caseValuePairs.end())),
+        std::make_reverse_iterator(std::make_move_iterator(caseValuePairs.begin())),
+        std::move(defaultValue),
+        [](auto&& expression, auto&& caseValuePair) {
+            return buildMultiBranchConditional(std::move(caseValuePair), std::move(expression));
+        });
+}
+
 std::unique_ptr<sbe::PlanStage> makeLimitTree(std::unique_ptr<sbe::PlanStage> inputStage,
                                               PlanNodeId planNodeId,
                                               long long limit) {
@@ -188,6 +201,12 @@ std::unique_ptr<sbe::EExpression> makeFillEmptyFalse(std::unique_ptr<sbe::EExpre
                         std::move(e),
                         sbe::makeE<sbe::EConstant>(sbe::value::TypeTags::Boolean,
                                                    sbe::value::bitcastFrom<bool>(false)));
+}
+
+std::unique_ptr<sbe::EExpression> makeVariable(sbe::value::SlotId slotId,
+                                               boost::optional<sbe::FrameId> frameId) {
+    return frameId ? sbe::makeE<sbe::EVariable>(*frameId, slotId)
+                   : sbe::makeE<sbe::EVariable>(slotId);
 }
 
 std::unique_ptr<sbe::EExpression> makeFillEmptyNull(std::unique_ptr<sbe::EExpression> e) {
@@ -593,5 +612,31 @@ std::unique_ptr<FilterStateHelper> makeFilterStateHelper(bool trackIndex) {
         return std::make_unique<IndexStateHelper>();
     }
     return std::make_unique<BooleanStateHelper>();
+}
+
+sbe::value::SlotVector makeIndexKeyOutputSlotsMatchingParentReqs(
+    const BSONObj& indexKeyPattern,
+    sbe::IndexKeysInclusionSet parentIndexKeyReqs,
+    sbe::IndexKeysInclusionSet childIndexKeyReqs,
+    sbe::value::SlotVector childOutputSlots) {
+    tassert(5308000,
+            "'childIndexKeyReqs' had fewer bits set than 'parentIndexKeyReqs'",
+            parentIndexKeyReqs.count() <= childIndexKeyReqs.count());
+    sbe::value::SlotVector newIndexKeySlots;
+
+    size_t slotIdx = 0;
+    for (size_t indexFieldNumber = 0;
+         indexFieldNumber < static_cast<size_t>(indexKeyPattern.nFields());
+         ++indexFieldNumber) {
+        if (parentIndexKeyReqs.test(indexFieldNumber)) {
+            newIndexKeySlots.push_back(childOutputSlots[slotIdx]);
+        }
+
+        if (childIndexKeyReqs.test(indexFieldNumber)) {
+            ++slotIdx;
+        }
+    }
+
+    return newIndexKeySlots;
 }
 }  // namespace mongo::stage_builder

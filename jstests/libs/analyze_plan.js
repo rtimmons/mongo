@@ -16,6 +16,16 @@ function getWinningPlan(queryPlanner) {
 }
 
 /**
+ * Returns an element of explain output which represents a rejected candidate plan.
+ */
+function getRejectedPlan(rejectedPlan) {
+    // The 'queryPlan' format is used when the SBE engine is turned on. If this field is present,
+    // it will hold a serialized winning plan, otherwise it will be stored in the 'rejectedPlan'
+    // element itself.
+    return rejectedPlan.hasOwnProperty("queryPlan") ? rejectedPlan.queryPlan : rejectedPlan;
+}
+
+/**
  * Given the root stage of explain's JSON representation of a query plan ('root'), returns all
  * subdocuments whose stage is 'stage'. Returns an empty array if the plan does not have the
  * requested stage.
@@ -59,11 +69,12 @@ function getPlanStages(root, stage) {
 
     if ("shards" in root) {
         if (Array.isArray(root.shards)) {
-            results = root.shards.reduce(
-                (res, shard) => res.concat(getPlanStages(
-                    shard.hasOwnProperty("winningPlan") ? shard.winningPlan : shard.executionStages,
-                    stage)),
-                results);
+            results =
+                root.shards.reduce((res, shard) => res.concat(getPlanStages(
+                                       shard.hasOwnProperty("winningPlan") ? getWinningPlan(shard)
+                                                                           : shard.executionStages,
+                                       stage)),
+                                   results);
         } else {
             const shards = Object.keys(root.shards);
             results = shards.reduce(
@@ -173,10 +184,13 @@ function getExecutionStages(root) {
  * subdocuments whose stage is 'stage'. This can either be an agg stage name like "$cursor" or
  * "$sort", or a query stage name like "IXSCAN" or "SORT".
  *
+ * If 'useQueryPlannerSection' is set to 'true', the 'queryPlanner' section of the explain output
+ * will be used to lookup the given 'stage', even if 'executionStats' section is available.
+ *
  * Returns an empty array if the plan does not have the requested stage. Asserts that agg explain
  * structure matches expected format.
  */
-function getAggPlanStages(root, stage) {
+function getAggPlanStages(root, stage, useQueryPlannerSection = false) {
     let results = [];
 
     function getDocumentSources(docSourceArray) {
@@ -198,7 +212,7 @@ function getAggPlanStages(root, stage) {
 
         // If execution stats are available, then use the execution stats tree. Otherwise use the
         // plan info from the "queryPlanner" section.
-        if (queryLayerOutput.hasOwnProperty("executionStats")) {
+        if (queryLayerOutput.hasOwnProperty("executionStats") && !useQueryPlannerSection) {
             assert(queryLayerOutput.executionStats.hasOwnProperty("executionStages"));
             results = results.concat(
                 getPlanStages(queryLayerOutput.executionStats.executionStages, stage));

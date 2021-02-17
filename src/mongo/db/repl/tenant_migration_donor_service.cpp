@@ -59,7 +59,8 @@ namespace mongo {
 namespace {
 
 MONGO_FAIL_POINT_DEFINE(abortTenantMigrationBeforeLeavingBlockingState);
-MONGO_FAIL_POINT_DEFINE(pauseTenantMigrationAfterPersitingInitialDonorStateDoc);
+MONGO_FAIL_POINT_DEFINE(pauseTenantMigrationAfterPersistingInitialDonorStateDoc);
+MONGO_FAIL_POINT_DEFINE(pauseTenantMigrationBeforeLeavingAbortingIndexBuildsState);
 MONGO_FAIL_POINT_DEFINE(pauseTenantMigrationBeforeLeavingBlockingState);
 MONGO_FAIL_POINT_DEFINE(pauseTenantMigrationBeforeLeavingDataSyncState);
 
@@ -68,7 +69,6 @@ const Backoff kExponentialBackoff(Seconds(1), Milliseconds::max());
 
 const ReadPreferenceSetting kPrimaryOnlyReadPreference(ReadPreference::PrimaryOnly);
 
-const Seconds kRecipientSyncDataTimeout(30);
 const int kMaxRecipientKeyDocsFindAttempts = 10;
 
 bool shouldStopCreatingTTLIndex(Status status, const CancelationToken& token) {
@@ -244,6 +244,10 @@ boost::optional<BSONObj> TenantMigrationDonorService::Instance::reportForCurrent
     if (_stateDoc.getExpireAt()) {
         bob.append("expireAt", _stateDoc.getExpireAt()->toString());
     }
+    if (_stateDoc.getStartMigrationDonorTimestamp()) {
+        bob.append("startMigrationDonorTimestamp",
+                   _stateDoc.getStartMigrationDonorTimestamp()->toBSON());
+    }
     if (_stateDoc.getBlockTimestamp()) {
         bob.append("blockTimestamp", _stateDoc.getBlockTimestamp()->toBSON());
     }
@@ -408,7 +412,7 @@ TenantMigrationDonorService::Instance::_fetchAndStoreRecipientClusterTimeKeyDocs
 ExecutorFuture<repl::OpTime> TenantMigrationDonorService::Instance::_insertStateDoc(
     std::shared_ptr<executor::ScopedTaskExecutor> executor, const CancelationToken& token) {
     invariant(_stateDoc.getState() == TenantMigrationDonorStateEnum::kUninitialized);
-    _stateDoc.setState(TenantMigrationDonorStateEnum::kDataSync);
+    _stateDoc.setState(TenantMigrationDonorStateEnum::kAbortingIndexBuilds);
 
     return AsyncTry([this, self = shared_from_this()] {
                auto opCtxHolder = cc().makeOperationContext();
@@ -475,6 +479,10 @@ ExecutorFuture<repl::OpTime> TenantMigrationDonorService::Instance::_updateState
                        // Update the state.
                        _stateDoc.setState(nextState);
                        switch (nextState) {
+                           case TenantMigrationDonorStateEnum::kDataSync: {
+                               _stateDoc.setStartMigrationDonorTimestamp(oplogSlot.getTimestamp());
+                               break;
+                           }
                            case TenantMigrationDonorStateEnum::kBlocking: {
                                _stateDoc.setBlockTimestamp(oplogSlot.getTimestamp());
 
@@ -576,11 +584,12 @@ ExecutorFuture<void> TenantMigrationDonorService::Instance::_waitForMajorityWrit
             stdx::lock_guard<Latch> lg(_mutex);
             _durableState.state = _stateDoc.getState();
             switch (_durableState.state) {
-                case TenantMigrationDonorStateEnum::kDataSync:
+                case TenantMigrationDonorStateEnum::kAbortingIndexBuilds:
                     if (!_initialDonorStateDurablePromise.getFuture().isReady()) {
                         _initialDonorStateDurablePromise.emplaceValue();
                     }
                     break;
+                case TenantMigrationDonorStateEnum::kDataSync:
                 case TenantMigrationDonorStateEnum::kBlocking:
                 case TenantMigrationDonorStateEnum::kCommitted:
                     break;
@@ -610,8 +619,7 @@ ExecutorFuture<void> TenantMigrationDonorService::Instance::_sendCommandToRecipi
                                NamespaceString::kAdminDb.toString(),
                                std::move(cmdObj),
                                rpc::makeEmptyMetadata(),
-                               nullptr,
-                               kRecipientSyncDataTimeout);
+                               nullptr);
                            request.sslMode = _sslMode;
 
                            return (_recipientCmdExecutor)
@@ -654,7 +662,8 @@ ExecutorFuture<void> TenantMigrationDonorService::Instance::_sendRecipientSyncDa
                                                 _stateDoc.getReadPreference());
         commonData.setRecipientCertificateForDonor(_stateDoc.getRecipientCertificateForDonor());
         request.setMigrationRecipientCommonData(commonData);
-
+        invariant(_stateDoc.getStartMigrationDonorTimestamp());
+        request.setStartMigrationDonorTimestamp(*_stateDoc.getStartMigrationDonorTimestamp());
         request.setReturnAfterReachingDonorTimestamp(_stateDoc.getBlockTimestamp());
         return request.toBSON(BSONObj());
     }();
@@ -699,7 +708,7 @@ SemiFuture<void> TenantMigrationDonorService::Instance::run(
                 return ExecutorFuture<void>(**executor, Status::OK());
             }
 
-            // Enter "dataSync" state.
+            // Enter "abortingIndexBuilds" state.
             return _insertStateDoc(executor, _abortMigrationSource.token())
                 .then([this, self = shared_from_this(), executor](repl::OpTime opTime) {
                     // TODO (SERVER-53389): TenantMigration{Donor, Recipient}Service should
@@ -710,7 +719,7 @@ SemiFuture<void> TenantMigrationDonorService::Instance::run(
                 .then([this, self = shared_from_this()] {
                     auto opCtxHolder = cc().makeOperationContext();
                     auto opCtx = opCtxHolder.get();
-                    pauseTenantMigrationAfterPersitingInitialDonorStateDoc.pauseWhileSet(opCtx);
+                    pauseTenantMigrationAfterPersistingInitialDonorStateDoc.pauseWhileSet(opCtx);
                 });
         })
         .then([this, self = shared_from_this(), executor, recipientTargeterRS, serviceToken] {
@@ -720,7 +729,7 @@ SemiFuture<void> TenantMigrationDonorService::Instance::run(
                 executor, recipientTargeterRS, serviceToken, _abortMigrationSource.token());
         })
         .then([this, self = shared_from_this(), executor, recipientTargeterRS, serviceToken] {
-            if (_stateDoc.getState() > TenantMigrationDonorStateEnum::kDataSync) {
+            if (_stateDoc.getState() > TenantMigrationDonorStateEnum::kAbortingIndexBuilds) {
                 return ExecutorFuture<void>(**executor, Status::OK());
             }
 
@@ -734,8 +743,27 @@ SemiFuture<void> TenantMigrationDonorService::Instance::run(
                 auto* indexBuildsCoordinator = IndexBuildsCoordinator::get(opCtx);
                 indexBuildsCoordinator->abortTenantIndexBuilds(
                     opCtx, _stateDoc.getTenantId(), "tenant migration");
+                pauseTenantMigrationBeforeLeavingAbortingIndexBuildsState.pauseWhileSet(opCtx);
             }
 
+            // Enter "dataSync" state.
+            return _updateStateDoc(executor,
+                                   TenantMigrationDonorStateEnum::kDataSync,
+                                   _abortMigrationSource.token())
+
+                .then([this, self = shared_from_this(), executor](repl::OpTime opTime) {
+                    // TODO (SERVER-53389): TenantMigration{Donor, Recipient}Service should
+                    // use its base PrimaryOnlyService's cancelation source to pass tokens
+                    // in calls to WaitForMajorityService::waitUntilMajority.
+                    return _waitForMajorityWriteConcern(executor, std::move(opTime));
+                });
+        })
+        .then([this, self = shared_from_this(), executor, recipientTargeterRS, serviceToken] {
+            if (_stateDoc.getState() > TenantMigrationDonorStateEnum::kDataSync) {
+                return ExecutorFuture<void>(**executor, Status::OK());
+            }
+
+            checkIfReceivedDonorAbortMigration(serviceToken, _abortMigrationSource.token());
             return _sendRecipientSyncDataCommand(
                        executor, recipientTargeterRS, _abortMigrationSource.token())
                 .then([this, self = shared_from_this()] {
@@ -808,28 +836,27 @@ SemiFuture<void> TenantMigrationDonorService::Instance::run(
                     auto opCtx = opCtxHolder.get();
 
                     pauseTenantMigrationBeforeLeavingBlockingState.executeIf(
-                        [&](const BSONObj&) {
-                            pauseTenantMigrationBeforeLeavingBlockingState.pauseWhileSet(opCtx);
+                        [&](const BSONObj& data) {
+                            if (!data.hasField("blockTimeMS")) {
+                                pauseTenantMigrationBeforeLeavingBlockingState.pauseWhileSet(opCtx);
+                            } else {
+                                const auto blockTime =
+                                    Milliseconds{data.getIntField("blockTimeMS")};
+                                LOGV2(5010400,
+                                      "Keep migration in blocking state",
+                                      "blockTime"_attr = blockTime);
+                                opCtx->sleepFor(blockTime);
+                            }
                         },
                         [&](const BSONObj& data) {
                             return !data.hasField("tenantId") ||
                                 _stateDoc.getTenantId() == data["tenantId"].str();
                         });
 
-                    abortTenantMigrationBeforeLeavingBlockingState.execute(
-                        [&](const BSONObj& data) {
-                            if (data.hasField("blockTimeMS")) {
-                                const auto blockTime =
-                                    Milliseconds{data.getIntField("blockTimeMS")};
-                                LOGV2(5010400,
-                                      "Keep migration in blocking state before aborting",
-                                      "blockTime"_attr = blockTime);
-                                opCtx->sleepFor(blockTime);
-                            }
-
-                            uasserted(ErrorCodes::InternalError,
-                                      "simulate a tenant migration error");
-                        });
+                    if (MONGO_unlikely(
+                            abortTenantMigrationBeforeLeavingBlockingState.shouldFail())) {
+                        uasserted(ErrorCodes::InternalError, "simulate a tenant migration error");
+                    }
                 })
                 .then([this, self = shared_from_this(), executor, serviceToken] {
                     checkIfReceivedDonorAbortMigration(serviceToken, _abortMigrationSource.token());

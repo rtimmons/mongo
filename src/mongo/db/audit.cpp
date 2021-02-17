@@ -31,6 +31,8 @@
 
 #if !MONGO_ENTERPRISE_AUDIT
 
+mongo::audit::ImpersonatedClientAttrs::ImpersonatedClientAttrs(Client* client) {}
+
 void mongo::audit::logAuthentication(Client* client,
                                      StringData mechanism,
                                      const UserName& user,
@@ -177,7 +179,9 @@ void mongo::audit::logDropView(Client* client,
 
 void mongo::audit::logDropDatabase(Client* client, StringData dbname) {}
 
-void mongo::audit::logRenameCollection(Client* client, StringData source, StringData target) {}
+void mongo::audit::logRenameCollection(Client* client,
+                                       const NamespaceString& source,
+                                       const NamespaceString& target) {}
 
 void mongo::audit::logEnableSharding(Client* client, StringData dbname) {}
 
@@ -196,5 +200,17 @@ void mongo::audit::logShardCollection(Client* client,
 void mongo::audit::logRefineCollectionShardKey(Client* client,
                                                StringData ns,
                                                const BSONObj& keyPattern) {}
+
+void mongo::audit::logInsertOperation(Client* client,
+                                      const NamespaceString& nss,
+                                      const BSONObj& doc) {}
+
+void mongo::audit::logUpdateOperation(Client* client,
+                                      const NamespaceString& nss,
+                                      const BSONObj& doc) {}
+
+void mongo::audit::logRemoveOperation(Client* client,
+                                      const NamespaceString& nss,
+                                      const BSONObj& doc) {}
 
 #endif

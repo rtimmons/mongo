@@ -150,6 +150,13 @@ std::unique_ptr<sbe::EExpression> buildMultiBranchConditional(
     std::unique_ptr<sbe::EExpression> defaultCase);
 
 /**
+ * Converts a std::vector of CaseValuePairs into a chain of EIf expressions in the same manner as
+ * the 'buildMultiBranchConditional()' function.
+ */
+std::unique_ptr<sbe::EExpression> buildMultiBranchConditionalFromCaseValuePairs(
+    std::vector<CaseValuePair> caseValuePairs, std::unique_ptr<sbe::EExpression> defaultValue);
+
+/**
  * Insert a limit stage on top of the 'input' stage.
  */
 std::unique_ptr<sbe::PlanStage> makeLimitTree(std::unique_ptr<sbe::PlanStage> inputStage,
@@ -194,6 +201,9 @@ inline auto makeConstant(std::string_view str) {
     auto [tag, value] = sbe::value::makeNewString(str);
     return sbe::makeE<sbe::EConstant>(tag, value);
 }
+
+std::unique_ptr<sbe::EExpression> makeVariable(sbe::value::SlotId slotId,
+                                               boost::optional<sbe::FrameId> frameId = {});
 
 /**
  * Check if expression returns Nothing and return null if so. Otherwise, return the
@@ -679,5 +689,33 @@ EvalExprStagePair generateShortCircuitingLogicalOp(sbe::EPrimBinary::Op logicOp,
                                                    PlanNodeId planNodeId,
                                                    sbe::value::SlotIdGenerator* slotIdGenerator,
                                                    const FilterStateHelper& stateHelper);
+
+/**
+ * Imagine that we have some parent QuerySolutionNode X and child QSN Y which both participate in a
+ * covered plan. Stage X requests some slots to be constructed out of the index keys using
+ * 'parentIndexKeyReqs'. Stage Y requests it's own slots, and adds those to the set requested by X,
+ * resulting in 'childIndexKeyReqs'. Note the invariant that 'childIndexKeyReqs' is a superset of
+ * 'parentIndexKeyReqs'. Let's notate the number of slots requested by 'childIndexKeyReqs' as |Y|
+ * and the set of slots requested by 'parentIndexKeyReqs' as |X|.
+ *
+ * The underlying SBE plan is constructed, and returns a vector of |Y| slots. However, the parent
+ * stage expects a vector of just |X| slots. The purpose of this function is to calculate and return
+ * the appropriate subset of the slot vector so that the parent stage X receives its expected |X|
+ * slots.
+ *
+ * As a concrete example, let's say the QSN tree is X => Y => IXSCAN and the index key pattern is
+ * {a: 1, b: 1, c: 1, d: 1}. X requests "a" and "d" using the bit vector 1001. Y additionally
+ * requires "c" so it requests three slots with the bit vector 1011. As a result, Y receives a
+ * 3-element slot vector, <s1, s2, s3>. Here, s1 will contain the value of "a", s2 contains "c", and
+ * s3 contain s"d".
+ *
+ * Parent QSN X expects just a two element slot vector where the first slot is for "a" and the
+ * second is for "d". This function would therefore return the slot vector <s1, s3>.
+ */
+sbe::value::SlotVector makeIndexKeyOutputSlotsMatchingParentReqs(
+    const BSONObj& indexKeyPattern,
+    sbe::IndexKeysInclusionSet parentIndexKeyReqs,
+    sbe::IndexKeysInclusionSet childIndexKeyReqs,
+    sbe::value::SlotVector childOutputSlots);
 
 }  // namespace mongo::stage_builder

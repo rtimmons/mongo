@@ -57,6 +57,22 @@ class Document;
 namespace audit {
 
 /**
+ * Struct that temporarily stores client information when an audit hook
+ * executes on a separate thread with a new Client. In those cases, ImpersonatedClientAttrs
+ * can bundle all relevant client attributes necessary for auditing and be safely
+ * passed into the new thread, where the new Client will be loaded with the userNames and
+ * roleNames stored in ImpersonatedClientAttrs.
+ */
+struct ImpersonatedClientAttrs {
+    std::vector<UserName> userNames;
+    std::vector<RoleName> roleNames;
+
+    ImpersonatedClientAttrs() = default;
+
+    ImpersonatedClientAttrs(Client* client);
+};
+
+/**
  * Narrow API for the parts of mongo::Command used by the audit library.
  */
 class CommandInterface {
@@ -329,7 +345,9 @@ void logDropDatabase(Client* client, StringData dbname);
 /**
  * Logs a collection rename event.
  */
-void logRenameCollection(Client* client, StringData source, StringData target);
+void logRenameCollection(Client* client,
+                         const NamespaceString& source,
+                         const NamespaceString& target);
 
 /**
  * Logs the result of a enableSharding command.
@@ -355,6 +373,22 @@ void logShardCollection(Client* client, StringData ns, const BSONObj& keyPattern
  * Logs the result of a refineCollectionShardKey event.
  */
 void logRefineCollectionShardKey(Client* client, StringData ns, const BSONObj& keyPattern);
+
+/**
+ * Logs an insert of a potentially security sensitive record.
+ */
+void logInsertOperation(Client* client, const NamespaceString& nss, const BSONObj& doc);
+
+/**
+ * Logs an update of a potentially security sensitive record.
+ */
+void logUpdateOperation(Client* client, const NamespaceString& nss, const BSONObj& doc);
+
+/**
+ * Logs a deletion of a potentially security sensitive record.
+ */
+void logRemoveOperation(Client* client, const NamespaceString& nss, const BSONObj& doc);
+
 
 }  // namespace audit
 }  // namespace mongo

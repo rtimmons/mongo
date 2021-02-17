@@ -171,6 +171,13 @@ UUID getCollectionUUIDFromChunkManger(const NamespaceString& nss, const ChunkMan
 NamespaceString constructTemporaryReshardingNss(StringData db, const UUID& sourceUuid);
 
 /**
+ * Gets the recipient shards for a resharding operation.
+ */
+std::set<ShardId> getRecipientShards(OperationContext* opCtx,
+                                     const NamespaceString& reshardNss,
+                                     const UUID& reshardingUUID);
+
+/**
  * Sends _flushRoutingTableCacheUpdatesWithWriteConcern to a list of shards. Throws if one of the
  * shards fails to refresh.
  */
@@ -255,6 +262,8 @@ boost::optional<ShardId> getDestinedRecipient(OperationContext* opCtx,
 bool isFinalOplog(const repl::OplogEntry& oplog);
 bool isFinalOplog(const repl::OplogEntry& oplog, UUID reshardingUUID);
 
-NamespaceString getLocalOplogBufferNamespace(UUID reshardingUUID, ShardId donorShardId);
+NamespaceString getLocalOplogBufferNamespace(UUID existingUUID, ShardId donorShardId);
+
+NamespaceString getLocalConflictStashNamespace(UUID existingUUID, ShardId donorShardId);
 
 }  // namespace mongo

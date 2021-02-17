@@ -1371,7 +1371,7 @@ std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinDate(ArityType 
 }
 
 std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinDateDiff(ArityType arity) {
-    invariant(arity == 5);
+    invariant(arity == 5 || arity == 6);  // 6th parameter is 'startOfWeek'.
 
     auto [timezoneDBOwn, timezoneDBTag, timezoneDBValue] = getFromStack(0);
     if (timezoneDBTag != value::TypeTags::timeZoneDB) {
@@ -1411,7 +1411,22 @@ std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinDateDiff(ArityT
     }
     auto timezone = getTimezone(timezoneTag, timezoneValue, timezoneDB);
 
-    auto result = dateDiff(startDate, endDate, unit, timezone);
+    // Get startOfWeek, if 'startOfWeek' parameter was passed and time unit is the week.
+    DayOfWeek startOfWeek{kStartOfWeekDefault};
+    if (6 == arity) {
+        auto [startOfWeekOwn, startOfWeekTag, startOfWeekValue] = getFromStack(5);
+        if (!value::isString(startOfWeekTag)) {
+            return {false, value::TypeTags::Nothing, 0};
+        }
+        if (TimeUnit::week == unit) {
+            auto startOfWeekString = value::getStringView(startOfWeekTag, startOfWeekValue);
+            if (!isValidDayOfWeek(startOfWeekString)) {
+                return {false, value::TypeTags::Nothing, 0};
+            }
+            startOfWeek = parseDayOfWeek(startOfWeekString);
+        }
+    }
+    auto result = dateDiff(startDate, endDate, unit, timezone, startOfWeek);
     return {false, value::TypeTags::NumberInt64, value::bitcastFrom<int64_t>(result)};
 }
 
@@ -2050,6 +2065,18 @@ std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinIsTimeUnit(Arit
                 isValidTimeUnit(value::getStringView(timeUnitTag, timeUnitValue)))};
 }
 
+std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinIsDayOfWeek(ArityType arity) {
+    invariant(arity == 1);
+    auto [dayOfWeekOwn, dayOfWeekTag, dayOfWeekValue] = getFromStack(0);
+    if (!value::isString(dayOfWeekTag)) {
+        return {false, value::TypeTags::Nothing, 0};
+    }
+    return {false,
+            value::TypeTags::Boolean,
+            value::bitcastFrom<bool>(
+                isValidDayOfWeek(value::getStringView(dayOfWeekTag, dayOfWeekValue)))};
+}
+
 std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinIsTimezone(ArityType arity) {
     auto [timezoneDBOwn, timezoneDBTag, timezoneDBVal] = getFromStack(0);
     if (timezoneDBTag != value::TypeTags::timeZoneDB) {
@@ -2509,17 +2536,10 @@ std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinRegexCompile(Ar
     auto [patternOwned, patternTypeTag, patternValue] = getFromStack(0);
     auto [optionsOwned, optionsTypeTag, optionsValue] = getFromStack(1);
 
-    if (patternTypeTag == value::TypeTags::Null) {
-        return {false, value::TypeTags::Null, 0};
-    }
     if (!value::isString(patternTypeTag) || !value::isString(optionsTypeTag)) {
         return {false, value::TypeTags::Nothing, 0};
     }
-    // At the moment we support only string patterns.
-    // TODO SERVER-51266 : complete the following items once BSONType::RegEx is supported in SBE
-    // - Handle the case when patternTypeTag == TypeTags::bsonRegex.
-    // - Ensure that regex options are specified either in the options argument or in bsonRegex
-    // value.
+
     auto pattern = value::getStringView(patternTypeTag, patternValue);
     auto options = value::getStringView(optionsTypeTag, optionsValue);
 
@@ -2571,6 +2591,7 @@ std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinRegexFindAll(Ar
     value::ValueGuard arrGuard{arrTag, arrVal};
     auto arrayView = value::getArrayView(arrVal);
 
+    int resultSize = 0;
     do {
         auto [owned, matchTag, matchVal] = [&]() {
             if (isFirstMatch) {
@@ -2587,6 +2608,12 @@ std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinRegexFindAll(Ar
         if (matchTag != value::TypeTags::Object) {
             return {false, value::TypeTags::Nothing, 0};
         }
+
+        resultSize += getApproximateSize(matchTag, matchVal);
+        uassert(5126606,
+                "$regexFindAll: the size of buffer to store output exceeded the 64MB limit",
+                resultSize <= mongo::BufferMaxSize);
+
         arrayView->push_back(matchTag, matchVal);
 
         // Move indexes after the current matched string to prepare for the next search.
@@ -2613,7 +2640,7 @@ std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinShardFilter(Ari
     auto [ownedFilter, filterTag, filterValue] = getFromStack(0);
     auto [ownedShardKey, shardKeyTag, shardKeyValue] = getFromStack(1);
 
-    if (filterTag != value::TypeTags::shardFilterer || shardKeyTag != value::TypeTags::Object) {
+    if (filterTag != value::TypeTags::shardFilterer || shardKeyTag != value::TypeTags::bsonObject) {
         if (filterTag == value::TypeTags::shardFilterer &&
             shardKeyTag == value::TypeTags::Nothing) {
             LOGV2_WARNING(5071200,
@@ -2625,13 +2652,11 @@ std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinShardFilter(Ari
         return {false, value::TypeTags::Nothing, 0};
     }
 
-    BSONObjBuilder bob;
-    bson::convertToBsonObj(bob, value::getObjectView(shardKeyValue));
-
+    BSONObj keyAsUnownedBson{sbe::value::bitcastTo<const char*>(shardKeyValue)};
     return {false,
             value::TypeTags::Boolean,
             value::bitcastFrom<bool>(
-                value::getShardFiltererView(filterValue)->keyBelongsToMe(bob.done()))};
+                value::getShardFiltererView(filterValue)->keyBelongsToMe(keyAsUnownedBson))};
 }
 
 std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinExtractSubArray(ArityType arity) {
@@ -2763,6 +2788,48 @@ std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinIsArrayEmpty(Ar
         // bsonArray, so it should be impossible to reach this point.
         MONGO_UNREACHABLE
     }
+}
+
+std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinHasNullBytes(ArityType arity) {
+    invariant(arity == 1);
+    auto [strOwned, strType, strValue] = getFromStack(0);
+
+    if (!value::isString(strType)) {
+        return {false, value::TypeTags::Nothing, 0};
+    }
+
+    auto stringView = value::getStringView(strType, strValue);
+    auto hasNullBytes = stringView.find('\0') != std::string_view::npos;
+
+    return {false, value::TypeTags::Boolean, value::bitcastFrom<bool>(hasNullBytes)};
+}
+
+std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinGetRegexPattern(ArityType arity) {
+    invariant(arity == 1);
+    auto [regexOwned, regexType, regexValue] = getFromStack(0);
+
+    if (regexType != value::TypeTags::bsonRegex) {
+        return {false, value::TypeTags::Nothing, 0};
+    }
+
+    auto regex = value::getBsonRegexView(regexValue);
+    auto [strType, strValue] = value::makeNewString(regex.pattern);
+
+    return {true, strType, strValue};
+}
+
+std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinGetRegexFlags(ArityType arity) {
+    invariant(arity == 1);
+    auto [regexOwned, regexType, regexValue] = getFromStack(0);
+
+    if (regexType != value::TypeTags::bsonRegex) {
+        return {false, value::TypeTags::Nothing, 0};
+    }
+
+    auto regex = value::getBsonRegexView(regexValue);
+    auto [strType, strValue] = value::makeNewString(regex.flags);
+
+    return {true, strType, strValue};
 }
 
 std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinDateAdd(ArityType arity) {
@@ -2920,6 +2987,8 @@ std::tuple<bool, value::TypeTags, value::Value> ByteCode::dispatchBuiltin(Builti
             return builtinIndexOfBytes(arity);
         case Builtin::indexOfCP:
             return builtinIndexOfCP(arity);
+        case Builtin::isDayOfWeek:
+            return builtinIsDayOfWeek(arity);
         case Builtin::isTimeUnit:
             return builtinIsTimeUnit(arity);
         case Builtin::isTimezone:
@@ -2952,6 +3021,12 @@ std::tuple<bool, value::TypeTags, value::Value> ByteCode::dispatchBuiltin(Builti
             return builtinIsArrayEmpty(arity);
         case Builtin::dateAdd:
             return builtinDateAdd(arity);
+        case Builtin::hasNullBytes:
+            return builtinHasNullBytes(arity);
+        case Builtin::getRegexPattern:
+            return builtinGetRegexPattern(arity);
+        case Builtin::getRegexFlags:
+            return builtinGetRegexFlags(arity);
     }
 
     MONGO_UNREACHABLE;

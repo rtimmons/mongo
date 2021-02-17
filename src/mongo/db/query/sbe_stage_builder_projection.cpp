@@ -51,6 +51,10 @@
 #include "mongo/util/str.h"
 #include "mongo/util/visit_helper.h"
 
+namespace mongo {
+extern FailPoint disablePipelineOptimization;
+}
+
 namespace mongo::stage_builder {
 namespace {
 using ExpressionType = std::unique_ptr<sbe::EExpression>;
@@ -131,6 +135,9 @@ struct ProjectionTraversalVisitorContext {
         // Vector containing expressions for each of the projections at the current level. There is
         // an eval for each of the fields in the current nested level.
         std::vector<ProjectEval> evals;
+
+        // Whether or not any subtree of this level has a computed field.
+        bool subtreeContainsComputedField = false;
     };
 
     const auto& topFrontField() const {
@@ -255,7 +262,9 @@ public:
 
     void visit(const projection_ast::ProjectionElemMatchASTNode* node) final {}
 
-    void visit(const projection_ast::ExpressionASTNode* node) final {}
+    void visit(const projection_ast::ExpressionASTNode* node) final {
+        _context->topLevel().subtreeContainsComputedField = true;
+    }
 
     void visit(const projection_ast::MatchExpressionASTNode* node) final {}
 
@@ -389,9 +398,14 @@ public:
         // Generate an expression to evaluate a projection expression and push it on top of the
         // 'evals' stack. If the expression is translated into a sub-tree, stack it with the
         // existing 'evalStage' sub-tree.
+        auto expression = node->expression();
+        if (MONGO_likely(!disablePipelineOptimization.shouldFail())) {
+            expression = expression->optimize();
+        }
+
         auto [outputSlot, expr, stage] =
             generateExpression(_context->opCtx,
-                               node->expression()->optimize().get(),
+                               expression.get(),
                                std::move(_context->topLevel().evalStage),
                                _context->slotIdGenerator,
                                _context->frameIdGenerator,
@@ -415,12 +429,12 @@ public:
             prepareFieldEvals(_context, node);
 
         // Finally, inject an mkobj stage to generate a document for the current nested level. For
-        // inclusion projection also add constant filter stage on top to filter out input values for
-        // nested traversal if they're not documents.
+        // inclusion projection also add a filter stage on top to filter out input values for
+        // nested traversal if they don't result in documents.
         auto childLevelInputSlot = _context->topLevel().inputSlot;
         auto childLevelResultSlot = _context->slotIdGenerator->generate();
         if (_context->projectType == projection_ast::ProjectType::kInclusion) {
-            childLevelStage = sbe::makeS<sbe::FilterStage<true>>(
+            auto mkBsonStage =
                 sbe::makeS<sbe::MakeBsonObjStage>(std::move(childLevelStage),
                                                   childLevelResultSlot,
                                                   childLevelInputSlot,
@@ -430,9 +444,29 @@ public:
                                                   std::move(projectSlots),
                                                   true,
                                                   false,
-                                                  _context->planNodeId),
-                makeFunction("isObject"sv, sbe::makeE<sbe::EVariable>(childLevelInputSlot)),
-                _context->planNodeId);
+                                                  _context->planNodeId);
+
+            if (_context->topLevel().subtreeContainsComputedField) {
+                // Projections of computed fields should always be applied to elements of an array,
+                // even if the elements aren't objects. For example:
+                // projection: {a: {b: "x"}}
+                // document: {a: [1,2,3]}
+                // result: {a: [{b: "x"}, {b: "x"}, {b: "x"}, {b: "x"}]}
+
+                childLevelStage = std::move(mkBsonStage);
+            } else {
+                // There are no computed fields, only inclusions. So anything that's not a document
+                // will get projected out. Example:
+                // projection: {a: {b: 1}}
+                // document: {a: [1, {b: 2}, 3]}
+                // result: {a: [{b: 2}]}
+
+                childLevelStage = sbe::makeS<sbe::FilterStage<true>>(
+                    std::move(mkBsonStage),
+                    makeFunction("isObject"sv, sbe::makeE<sbe::EVariable>(childLevelInputSlot)),
+                    _context->planNodeId);
+            }
+
         } else {
             childLevelStage =
                 sbe::makeS<sbe::MakeBsonObjStage>(std::move(childLevelStage),
@@ -449,7 +483,12 @@ public:
 
         // We are done with the child level. Now we need to extract corresponding field from parent
         // level, traverse it and assign value to 'childLevelInputSlot'.
-        _context->popLevel();
+        {
+            const bool containsComputedField = _context->topLevel().subtreeContainsComputedField;
+            _context->popLevel();
+            _context->topLevel().subtreeContainsComputedField =
+                _context->topLevel().subtreeContainsComputedField || containsComputedField;
+        }
 
         auto parentLevelInputSlot = _context->topLevel().inputSlot;
         auto parentLevelStage{std::move(_context->topLevel().evalStage)};

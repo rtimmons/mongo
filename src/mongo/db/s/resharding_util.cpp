@@ -120,6 +120,22 @@ NamespaceString constructTemporaryReshardingNss(StringData db, const UUID& sourc
                                        sourceUuid.toString()));
 }
 
+std::set<ShardId> getRecipientShards(OperationContext* opCtx,
+                                     const NamespaceString& sourceNss,
+                                     const UUID& reshardingUUID) {
+    const auto& tempNss = constructTemporaryReshardingNss(sourceNss.db(), reshardingUUID);
+    auto* catalogCache = Grid::get(opCtx)->catalogCache();
+    auto cm = uassertStatusOK(catalogCache->getCollectionRoutingInfo(opCtx, tempNss));
+
+    uassert(ErrorCodes::NamespaceNotSharded,
+            str::stream() << "Expected collection " << tempNss << " to be sharded",
+            cm.isSharded());
+
+    std::set<ShardId> recipients;
+    cm.getAllShardIds(&recipients);
+    return recipients;
+}
+
 void tellShardsToRefresh(OperationContext* opCtx,
                          const std::vector<ShardId>& shardIds,
                          const NamespaceString& nss,
@@ -547,9 +563,15 @@ bool isFinalOplog(const repl::OplogEntry& oplog, UUID reshardingUUID) {
 }
 
 
-NamespaceString getLocalOplogBufferNamespace(UUID reshardingUUID, ShardId donorShardId) {
+NamespaceString getLocalOplogBufferNamespace(UUID existingUUID, ShardId donorShardId) {
     return NamespaceString("config.localReshardingOplogBuffer.{}.{}"_format(
-        reshardingUUID.toString(), donorShardId.toString()));
+        existingUUID.toString(), donorShardId.toString()));
+}
+
+NamespaceString getLocalConflictStashNamespace(UUID existingUUID, ShardId donorShardId) {
+    return NamespaceString{NamespaceString::kConfigDb,
+                           "localReshardingConflictStash.{}.{}"_format(existingUUID.toString(),
+                                                                       donorShardId.toString())};
 }
 
 }  // namespace mongo

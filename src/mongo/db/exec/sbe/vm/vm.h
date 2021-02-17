@@ -282,6 +282,7 @@ enum class Builtin : uint8_t {
     collIsMember,
     indexOfBytes,
     indexOfCP,
+    isDayOfWeek,
     isTimeUnit,
     isTimezone,
     setUnion,
@@ -298,6 +299,9 @@ enum class Builtin : uint8_t {
     extractSubArray,
     isArrayEmpty,
     dateAdd,
+    hasNullBytes,
+    getRegexPattern,
+    getRegexFlags,
 };
 
 using SmallArityType = uint8_t;
@@ -691,6 +695,7 @@ private:
     std::tuple<bool, value::TypeTags, value::Value> builtinCollIsMember(ArityType arity);
     std::tuple<bool, value::TypeTags, value::Value> builtinIndexOfBytes(ArityType arity);
     std::tuple<bool, value::TypeTags, value::Value> builtinIndexOfCP(ArityType arity);
+    std::tuple<bool, value::TypeTags, value::Value> builtinIsDayOfWeek(ArityType arity);
     std::tuple<bool, value::TypeTags, value::Value> builtinIsTimeUnit(ArityType arity);
     std::tuple<bool, value::TypeTags, value::Value> builtinIsTimezone(ArityType arity);
     std::tuple<bool, value::TypeTags, value::Value> builtinSetUnion(ArityType arity);
@@ -707,6 +712,9 @@ private:
     std::tuple<bool, value::TypeTags, value::Value> builtinExtractSubArray(ArityType arity);
     std::tuple<bool, value::TypeTags, value::Value> builtinIsArrayEmpty(ArityType arity);
     std::tuple<bool, value::TypeTags, value::Value> builtinDateAdd(ArityType arity);
+    std::tuple<bool, value::TypeTags, value::Value> builtinHasNullBytes(ArityType arity);
+    std::tuple<bool, value::TypeTags, value::Value> builtinGetRegexPattern(ArityType arity);
+    std::tuple<bool, value::TypeTags, value::Value> builtinGetRegexFlags(ArityType arity);
 
     std::tuple<bool, value::TypeTags, value::Value> dispatchBuiltin(Builtin f, ArityType arity);
 

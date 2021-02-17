@@ -73,6 +73,13 @@ public:
     static constexpr StringData kOrphanCollectionPrefix = "orphan."_sd;
     static constexpr StringData kOrphanCollectionDb = "local"_sd;
 
+    // Prefix for collections that store the local resharding oplog buffer.
+    static constexpr StringData kReshardingLocalOplogBufferPrefix =
+        "localReshardingOplogBuffer."_sd;
+
+    // Prefix for resharding conflict stash collections.
+    static constexpr StringData kReshardingConflictStashPrefix = "localReshardingConflictStash."_sd;
+
     // Prefix for temporary resharding collection.
     static constexpr StringData kTemporaryReshardingCollectionPrefix = "system.resharding."_sd;
 
@@ -121,6 +128,9 @@ public:
 
     // Namespace for storing the persisted state of tenant migration recipient service instances.
     static const NamespaceString kTenantMigrationRecipientsNamespace;
+
+    // Namespace for view on local.oplog.rs for tenant migrations.
+    static const NamespaceString kTenantMigrationOplogView;
 
     // Namespace for replica set configuration settings.
     static const NamespaceString kSystemReplSetNamespace;
@@ -311,6 +321,16 @@ public:
      * Returns whether the specified namespace is config.cache.chunks.<>.
      */
     bool isConfigDotCacheDotChunks() const;
+
+    /**
+     * Returns whether the specified namespace is config.localReshardingOplogBuffer.<>.
+     */
+    bool isReshardingLocalOplogBufferCollection() const;
+
+    /**
+     * Returns whether the specified namespace is config.localReshardingConflictStash.<>.
+     */
+    bool isReshardingConflictStashCollection() const;
 
     /**
      * Returns whether the specified namespace is <database>.system.resharding.<>.
