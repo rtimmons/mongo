@@ -4,28 +4,33 @@ stepback: false
 variables:
   ###
   # Leave this section uncommented to enable compile.
-  _real_remote_file: &_remote_file
-      ${project_dir}/${version_id}/${revision}/${platform}/mongodb${compile-variant|}-${version_id}.tar.gz
-  _real_compile: &_compile
-    - variant: linux-wt-standalone
-      name: compile
-  _real_expansions: &_expansion_updates
-    []
-  ###
+  # _real_compile_amazon2: &_compile_amazon2
+  #     - name: compile
+  #       variant: compile-amazon2
+  #     - name: genny_generate_all_tasks
+  #       variant: compile-amazon2
+  # _real_compile_rhel70: &_compile_rhel70
+  #     - name: compile
+  #       variant: compile-rhel70
+  #     - name: genny_generate_all_tasks
+  #       variant: compile-amazon2
+  # _real_expansions: &_expansion_updates
+  #   []
+  # ###
 
   ###
   # **Or**: Leave this section uncommented to bypass/skip compile.
-  # # This file ↓ came from a microbenchmarks waterfall run.
-  # # https://evergreen.mongodb.com/version/performance_996dcdc3d96346d71f012388eccc79c691619340
-  # # Artifacts eventually expire. If this fails, grab the compile artifacts url and update this.
-  # _skip_remote_file: &_remote_file
-  #     perf/5f6ca2392fbabe40badf39c4/c39af144b2370be0537410d9bc79be66a1a5f3c7/linux/mongodb-5f6ca2392fbabe40badf39c4.tar.gz
-  # _skip_compile: &_compile
-  #     []
-  # _skip_expansions: &_expansion_updates
-  #   - key: mongodb_binary_archive
-  #     value: https://mciuploads.s3.amazonaws.com/perf/5f6ca2392fbabe40badf39c4/c39af144b2370be0537410d9bc79be66a1a5f3c7/linux/mongodb-5f6ca2392fbabe40badf39c4.tar.gz
-  ###
+  _skip_compile_amazon2: &_compile_amazon2
+      - name: genny_generate_all_tasks
+        variant: compile-amazon2
+  _skip_compile_rhel70: &_compile_rhel70
+      - name: genny_generate_all_tasks
+        variant: compile-amazon2
+  _skip_expansions: &_expansion_updates
+    # This is the normal (amazon2) "compile" artifact from https://evergreen.mongodb.com/version/sys_perf_4.4_78207ca380688c73b1a217f23d5b7c8803bef9cd
+    - key: mdb_binary_for_server
+      value: https://dsi-donot-remove.s3-us-west-2.amazonaws.com/compile_artifacts/mongodb-sys_perf_4.4_78207ca380688c73b1a217f23d5b7c8803bef9cd.tar.gz
+  ##
 
   _src_dir: &src_dir src/mongo
   _modules: &modules
