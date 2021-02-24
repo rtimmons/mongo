@@ -38,9 +38,12 @@
 #include "mongo/db/query/collation/collation_spec.h"
 #include "mongo/db/repl/oplog_applier.h"
 #include "mongo/db/repl/read_concern_args.h"
+#include "mongo/db/s/collection_sharding_runtime.h"
 #include "mongo/db/s/migration_destination_manager.h"
 #include "mongo/db/s/resharding/resharding_collection_cloner.h"
 #include "mongo/db/s/resharding/resharding_data_copy_util.h"
+#include "mongo/db/s/resharding/resharding_donor_recipient_common.h"
+#include "mongo/db/s/resharding/resharding_donor_service.h"
 #include "mongo/db/s/resharding/resharding_metrics.h"
 #include "mongo/db/s/resharding/resharding_server_parameters_gen.h"
 #include "mongo/db/s/resharding/resharding_txn_cloner.h"
@@ -88,6 +91,7 @@ void ensureFulfilledPromise(WithLock lk, SharedPromise<void>& sp) {
         sp.emplaceValue();
     }
 }
+
 }  // namespace
 
 namespace resharding {
@@ -170,6 +174,29 @@ std::vector<NamespaceString> ensureStashCollectionsExist(
     return stashCollections;
 }
 
+ReshardingDonorOplogId getFetcherIdToResumeFrom(OperationContext* opCtx,
+                                                NamespaceString oplogBufferNss,
+                                                Timestamp fetchTimestamp) {
+    AutoGetCollection collection(opCtx, oplogBufferNss, MODE_IS);
+    if (!collection) {
+        return ReshardingDonorOplogId{fetchTimestamp, fetchTimestamp};
+    }
+
+    auto highestOplogBufferId = resharding::data_copy::findHighestInsertedId(opCtx, *collection);
+    return highestOplogBufferId.missing()
+        ? ReshardingDonorOplogId{fetchTimestamp, fetchTimestamp}
+        : ReshardingDonorOplogId::parse({"resharding::getFetcherIdToResumeFrom"},
+                                        highestOplogBufferId.getDocument().toBson());
+}
+
+ReshardingDonorOplogId getApplierIdToResumeFrom(OperationContext* opCtx,
+                                                ReshardingSourceId sourceId,
+                                                Timestamp fetchTimestamp) {
+    auto applierProgress = ReshardingOplogApplier::checkStoredProgress(opCtx, sourceId);
+    return !applierProgress ? ReshardingDonorOplogId{fetchTimestamp, fetchTimestamp}
+                            : applierProgress->getProgress();
+}
+
 }  // namespace resharding
 
 std::shared_ptr<repl::PrimaryOnlyService::Instance> ReshardingRecipientService::constructInstance(
@@ -194,7 +221,10 @@ SemiFuture<void> ReshardingRecipientService::RecipientStateMachine::run(
     std::shared_ptr<executor::ScopedTaskExecutor> executor,
     const CancelationToken& cancelToken) noexcept {
     return ExecutorFuture<void>(**executor)
-        .then([this] { _transitionToCreatingTemporaryReshardingCollection(); })
+        .then([this] {
+            _metrics()->onStart();
+            _transitionToCreatingTemporaryReshardingCollection();
+        })
         .then([this] { _createTemporaryReshardingCollectionThenTransitionToCloning(); })
         .then([this, executor, cancelToken] {
             return _cloneThenTransitionToApplying(executor, cancelToken);
@@ -204,7 +234,7 @@ SemiFuture<void> ReshardingRecipientService::RecipientStateMachine::run(
             return _awaitAllDonorsMirroringThenTransitionToStrictConsistency(executor);
         })
         .then([this, executor] {
-            return __awaitCoordinatorHasDecisionPersistedThenTransitionToRenaming(executor);
+            return _awaitCoordinatorHasDecisionPersistedThenTransitionToRenaming(executor);
         })
         .then([this] { _renameTemporaryReshardingCollection(); })
         .onError([this](Status status) {
@@ -213,27 +243,42 @@ SemiFuture<void> ReshardingRecipientService::RecipientStateMachine::run(
                   "namespace"_attr = _recipientDoc.getNss().ns(),
                   "reshardingId"_attr = _id,
                   "error"_attr = status);
-            _transitionStateAndUpdateCoordinator(RecipientStateEnum::kError, status);
+            _transitionState(RecipientStateEnum::kError, boost::none, status);
+            _updateCoordinator();
+
+            // TODO SERVER-52838: Ensure all local collections that may have been created for
+            // resharding are removed, with the exception of the ReshardingRecipientDocument, before
+            // transitioning to kDone.
+            _transitionState(RecipientStateEnum::kDone, boost::none, status);
+            _updateCoordinator();
             return status;
         })
         .onCompletion([this, self = shared_from_this()](Status status) {
             stdx::lock_guard<Latch> lg(_mutex);
             if (_completionPromise.getFuture().isReady()) {
                 // interrupt() was called before we got here.
+                _metrics()->onCompletion(ReshardingMetrics::OperationStatus::kCanceled);
                 return;
             }
-
-            removeRecipientDocFailpoint.pauseWhileSet();
 
             if (status.isOK()) {
                 // The shared_ptr stored in the PrimaryOnlyService's map for the
                 // ReshardingRecipientService Instance is removed when the recipient state document
                 // tied to the instance is deleted. It is necessary to use shared_from_this() to
                 // extend the lifetime so the code can safely finish executing.
+
+                {
+                    auto opCtx = cc().makeOperationContext();
+                    removeRecipientDocFailpoint.pauseWhileSet(opCtx.get());
+                }
+
                 _removeRecipientDocument();
+                _metrics()->onCompletion(ReshardingMetrics::OperationStatus::kSucceeded);
                 _completionPromise.emplaceValue();
             } else {
-                // Set error on all promises
+                _metrics()->onCompletion(ErrorCodes::isCancelationError(status)
+                                             ? ReshardingMetrics::OperationStatus::kCanceled
+                                             : ReshardingMetrics::OperationStatus::kFailed);
                 _completionPromise.setError(status);
             }
         })
@@ -242,23 +287,8 @@ SemiFuture<void> ReshardingRecipientService::RecipientStateMachine::run(
 
 void ReshardingRecipientService::RecipientStateMachine::interrupt(Status status) {
     // Resolve any unresolved promises to avoid hanging.
-    stdx::lock_guard<Latch> lg(_mutex);
-
-    if (_oplogFetcherExecutor) {
-        _oplogFetcherExecutor->shutdown();
-    }
-
-    for (auto&& fetcher : _oplogFetchers) {
-        fetcher->interrupt(status);
-    }
-
-    for (auto&& threadPool : _oplogApplierWorkers) {
-        threadPool->shutdown();
-    }
-
-    if (!_coordinatorHasDecisionPersisted.getFuture().isReady()) {
-        _coordinatorHasDecisionPersisted.setError(status);
-    }
+    stdx::lock_guard<Latch> lk(_mutex);
+    _onAbortOrStepdown(lk, status);
 
     if (!_completionPromise.getFuture().isReady()) {
         _completionPromise.setError(status);
@@ -273,22 +303,19 @@ boost::optional<BSONObj> ReshardingRecipientService::RecipientStateMachine::repo
                                                _recipientDoc.getNss(),
                                                _recipientDoc.getReshardingKey().toBSON(),
                                                false);
-    return ReshardingMetrics::get(cc().getServiceContext())->reportForCurrentOp(options);
+    return _metrics()->reportForCurrentOp(options);
 }
 
 void ReshardingRecipientService::RecipientStateMachine::onReshardingFieldsChanges(
-    const TypeCollectionReshardingFields& reshardingFields) {
-    auto coordinatorState = reshardingFields.getState();
-    if (coordinatorState == CoordinatorStateEnum::kError) {
-        // TODO SERVER-52838: Investigate if we want to have a special error code so the recipient
-        // knows when it has recieved the error from the coordinator rather than needing to report
-        // an error to the coordinator.
-        interrupt({ErrorCodes::InternalError,
-                   "ReshardingDonorService observed CoordinatorStateEnum::kError"});
+    OperationContext* opCtx, const TypeCollectionReshardingFields& reshardingFields) {
+    stdx::lock_guard<Latch> lk(_mutex);
+    if (reshardingFields.getAbortReason()) {
+        auto status = getStatusFromAbortReason(reshardingFields);
+        _onAbortOrStepdown(lk, status);
         return;
     }
 
-    stdx::lock_guard<Latch> lk(_mutex);
+    auto coordinatorState = reshardingFields.getState();
     if (coordinatorState >= CoordinatorStateEnum::kDecisionPersisted) {
         ensureFulfilledPromise(lk, _coordinatorHasDecisionPersisted);
     }
@@ -368,6 +395,7 @@ ReshardingRecipientService::RecipientStateMachine::_cloneThenTransitionToApplyin
     }
 
     auto* serviceContext = Client::getCurrent()->getServiceContext();
+    auto fetchTimestamp = *_recipientDoc.getFetchTimestamp();
     auto tempNss = constructTemporaryReshardingNss(_recipientDoc.getNss().db(),
                                                    _recipientDoc.getExistingUUID());
 
@@ -376,13 +404,15 @@ ReshardingRecipientService::RecipientStateMachine::_cloneThenTransitionToApplyin
         _recipientDoc.getNss(),
         _recipientDoc.getExistingUUID(),
         ShardingState::get(serviceContext)->shardId(),
-        *_recipientDoc.getFetchTimestamp(),
+        fetchTimestamp,
         std::move(tempNss));
 
-    auto scopedOpCtx = cc().makeOperationContext();
-    auto opCtx = scopedOpCtx.get();
+    {
+        auto scopedOpCtx = cc().makeOperationContext();
+        auto opCtx = scopedOpCtx.get();
 
-    _initTxnCloner(opCtx, *_recipientDoc.getFetchTimestamp());
+        _initTxnCloner(opCtx, *_recipientDoc.getFetchTimestamp());
+    }
 
     auto numDonors = _recipientDoc.getDonorShardsMirroring().size();
     _oplogFetchers.reserve(numDonors);
@@ -395,18 +425,25 @@ ReshardingRecipientService::RecipientStateMachine::_cloneThenTransitionToApplyin
 
     const auto& recipientId = ShardingState::get(serviceContext)->shardId();
     for (const auto& donor : _recipientDoc.getDonorShardsMirroring()) {
+        auto oplogBufferNss =
+            getLocalOplogBufferNamespace(_recipientDoc.getExistingUUID(), donor.getId());
+        auto opCtx = cc().makeOperationContext();
+        auto idToResumeFrom =
+            resharding::getFetcherIdToResumeFrom(opCtx.get(), oplogBufferNss, fetchTimestamp);
+        invariant((idToResumeFrom >= ReshardingDonorOplogId{fetchTimestamp, fetchTimestamp}));
+
         stdx::lock_guard<Latch> lk(_mutex);
         _oplogFetchers.emplace_back(std::make_unique<ReshardingOplogFetcher>(
+            std::make_unique<ReshardingOplogFetcher::Env>(getGlobalServiceContext(), _metrics()),
             _recipientDoc.get_id(),
             _recipientDoc.getExistingUUID(),
-            // The recipient fetches oplog entries from the donor starting from the fetchTimestamp,
-            // which corresponds to {clusterTime: fetchTimestamp, ts: fetchTimestamp} as a resume
-            // token value.
-            ReshardingDonorOplogId{*_recipientDoc.getFetchTimestamp(),
-                                   *_recipientDoc.getFetchTimestamp()},
+            // The recipient fetches oplog entries from the donor starting from the largest _id
+            // value in the oplog buffer. Otherwise, it starts at fetchTimestamp, which corresponds
+            // to {clusterTime: fetchTimestamp, ts: fetchTimestamp} as a resume token value.
+            std::move(idToResumeFrom),
             donor.getId(),
             recipientId,
-            getLocalOplogBufferNamespace(_recipientDoc.getExistingUUID(), donor.getId())));
+            std::move(oplogBufferNss)));
 
         _oplogFetcherFutures.emplace_back(
             _oplogFetchers.back()
@@ -418,7 +455,7 @@ ReshardingRecipientService::RecipientStateMachine::_cloneThenTransitionToApplyin
     }
 
     return _collectionCloner->run(**executor, cancelToken)
-        .then([this, executor] {
+        .then([this, executor, cancelToken] {
             if (_txnCloners.empty()) {
                 return SemiFuture<void>::makeReady();
             }
@@ -427,12 +464,15 @@ ReshardingRecipientService::RecipientStateMachine::_cloneThenTransitionToApplyin
 
             std::vector<ExecutorFuture<void>> txnClonerFutures;
             for (auto&& txnCloner : _txnCloners) {
-                txnClonerFutures.push_back(txnCloner->run(serviceContext, **executor));
+                txnClonerFutures.push_back(txnCloner->run(serviceContext, **executor, cancelToken));
             }
 
             return whenAllSucceed(std::move(txnClonerFutures));
         })
-        .then([this] { _transitionStateAndUpdateCoordinator(RecipientStateEnum::kApplying); });
+        .then([this] {
+            _transitionState(RecipientStateEnum::kApplying);
+            _updateCoordinator();
+        });
 }
 
 void ReshardingRecipientService::RecipientStateMachine::_applyThenTransitionToSteadyState() {
@@ -448,9 +488,10 @@ void ReshardingRecipientService::RecipientStateMachine::_applyThenTransitionToSt
     // _awaitAllDonorsMirroringThenTransitionToStrictConsistency() instead.
     //
     // TODO: Consider removing _applyThenTransitionToSteadyState() and changing
-    // _cloneThenTransitionToApplying() to call _transitionStateAndUpdateCoordinator(kSteadyState).
+    // _cloneThenTransitionToApplying() to call _transitionState/_updateCoordinator(kSteadyState).
 
-    _transitionStateAndUpdateCoordinator(RecipientStateEnum::kSteadyState);
+    _transitionState(RecipientStateEnum::kSteadyState);
+    _updateCoordinator();
 }
 
 ExecutorFuture<void> ReshardingRecipientService::RecipientStateMachine::
@@ -464,7 +505,6 @@ ExecutorFuture<void> ReshardingRecipientService::RecipientStateMachine::
     _oplogAppliers.reserve(numDonors);
     _oplogApplierWorkers.reserve(numDonors);
 
-    auto* serviceContext = Client::getCurrent()->getServiceContext();
     const auto& sourceChunkMgr = [&] {
         auto opCtx = cc().makeOperationContext();
         auto catalogCache = Grid::get(opCtx.get())->catalogCache();
@@ -490,25 +530,31 @@ ExecutorFuture<void> ReshardingRecipientService::RecipientStateMachine::
                                          true /* isKillableByStepdown */));
         }
 
+        auto sourceId = ReshardingSourceId{_recipientDoc.get_id(), donor.getId()};
         const auto& oplogBufferNss =
             getLocalOplogBufferNamespace(_recipientDoc.getExistingUUID(), donor.getId());
+        auto fetchTimestamp = *_recipientDoc.getFetchTimestamp();
+        auto idToResumeFrom = [&] {
+            auto opCtx = cc().makeOperationContext();
+            return resharding::getApplierIdToResumeFrom(opCtx.get(), sourceId, fetchTimestamp);
+        }();
+        invariant((idToResumeFrom >= ReshardingDonorOplogId{fetchTimestamp, fetchTimestamp}));
+
         _oplogAppliers.emplace_back(std::make_unique<ReshardingOplogApplier>(
-            serviceContext,
-            ReshardingSourceId{_recipientDoc.get_id(), donor.getId()},
+            std::make_unique<ReshardingOplogApplier::Env>(Client::getCurrent()->getServiceContext(),
+                                                          _metrics()),
+            std::move(sourceId),
             oplogBufferNss,
             _recipientDoc.getNss(),
             _recipientDoc.getExistingUUID(),
             stashCollections,
             i,
-            *_recipientDoc.getFetchTimestamp(),
-            // The recipient applies oplog entries from the donor starting from the fetchTimestamp,
-            // which corresponds to {clusterTime: fetchTimestamp, ts: fetchTimestamp} as a resume
-            // token value.
+            fetchTimestamp,
+            // The recipient applies oplog entries from the donor starting from the progress value
+            // in progress_applier. Otherwise, it starts at fetchTimestamp, which corresponds to
+            // {clusterTime: fetchTimestamp, ts: fetchTimestamp} as a resume token value.
             std::make_unique<ReshardingDonorOplogIterator>(
-                oplogBufferNss,
-                ReshardingDonorOplogId{*_recipientDoc.getFetchTimestamp(),
-                                       *_recipientDoc.getFetchTimestamp()},
-                _oplogFetchers[i].get()),
+                oplogBufferNss, std::move(idToResumeFrom), _oplogFetchers[i].get()),
             sourceChunkMgr,
             **executor,
             _oplogApplierWorkers.back().get()));
@@ -525,12 +571,28 @@ ExecutorFuture<void> ReshardingRecipientService::RecipientStateMachine::
     }
 
     return whenAllSucceed(std::move(futuresToWaitOn)).thenRunOn(**executor).then([this] {
-        _transitionStateAndUpdateCoordinator(RecipientStateEnum::kStrictConsistency);
+        _transitionState(RecipientStateEnum::kStrictConsistency);
+
+        bool isDonor = [& id = _recipientDoc.get_id()] {
+            auto opCtx = cc().makeOperationContext();
+            auto instance =
+                resharding::tryGetReshardingStateMachine<ReshardingDonorService,
+                                                         ReshardingDonorService::DonorStateMachine,
+                                                         ReshardingDonorDocument>(opCtx.get(), id);
+
+            return !!instance;
+        }();
+
+        if (!isDonor) {
+            _critSec.emplace(cc().getServiceContext(), _recipientDoc.getNss());
+        }
+
+        _updateCoordinator();
     });
 }
 
 ExecutorFuture<void> ReshardingRecipientService::RecipientStateMachine::
-    __awaitCoordinatorHasDecisionPersistedThenTransitionToRenaming(
+    _awaitCoordinatorHasDecisionPersistedThenTransitionToRenaming(
         const std::shared_ptr<executor::ScopedTaskExecutor>& executor) {
     if (_recipientDoc.getState() > RecipientStateEnum::kStrictConsistency) {
         return ExecutorFuture<void>(**executor, Status::OK());
@@ -558,9 +620,12 @@ void ReshardingRecipientService::RecipientStateMachine::_renameTemporaryReshardi
             renameCollection(opCtx.get(), reshardingNss, _recipientDoc.getNss(), options));
 
         _dropOplogCollections(opCtx.get());
+
+        _critSec.reset();
     }
 
-    _transitionStateAndUpdateCoordinator(RecipientStateEnum::kDone);
+    _transitionState(RecipientStateEnum::kDone);
+    _updateCoordinator();
 }
 
 void ReshardingRecipientService::RecipientStateMachine::_transitionState(
@@ -572,38 +637,40 @@ void ReshardingRecipientService::RecipientStateMachine::_transitionState(
 
     if (endState == RecipientStateEnum::kCreatingCollection) {
         _insertRecipientDocument(replacementDoc);
+        _metrics()->setRecipientState(endState);
         return;
     }
 
     emplaceFetchTimestampIfExists(replacementDoc, std::move(fetchTimestamp));
     emplaceAbortReasonIfExists(replacementDoc, std::move(abortReason));
 
+    // For logging purposes.
+    auto oldState = _recipientDoc.getState();
     auto newState = replacementDoc.getState();
+
     _updateRecipientDocument(std::move(replacementDoc));
+    _metrics()->setRecipientState(endState);
 
     LOGV2_INFO(5279506,
                "Transitioned resharding recipient state",
                "newState"_attr = RecipientState_serializer(newState),
-               "oldState"_attr = RecipientState_serializer(_recipientDoc.getState()),
+               "oldState"_attr = RecipientState_serializer(oldState),
                "ns"_attr = _recipientDoc.getNss(),
                "collectionUUID"_attr = _recipientDoc.getExistingUUID(),
                "reshardingUUID"_attr = _recipientDoc.get_id());
 }
 
-void ReshardingRecipientService::RecipientStateMachine::_transitionStateAndUpdateCoordinator(
-    RecipientStateEnum endState, boost::optional<Status> abortReason) {
-    _transitionState(endState, boost::none, abortReason);
+void ReshardingRecipientService::RecipientStateMachine::_updateCoordinator() {
 
     auto opCtx = cc().makeOperationContext();
 
     auto shardId = ShardingState::get(opCtx.get())->shardId();
 
     BSONObjBuilder updateBuilder;
-    updateBuilder.append("recipientShards.$.state", RecipientState_serializer(endState));
-    if (abortReason) {
-        BSONObjBuilder abortReasonBuilder;
-        abortReason.get().serializeErrorToBSON(&abortReasonBuilder);
-        updateBuilder.append("recipientShards.$.abortReason", abortReasonBuilder.obj());
+    updateBuilder.append("recipientShards.$.state",
+                         RecipientState_serializer(_recipientDoc.getState()));
+    if (_recipientDoc.getAbortReason()) {
+        updateBuilder.append("recipientShards.$.abortReason", _recipientDoc.getAbortReason().get());
     }
 
     uassertStatusOK(
@@ -682,6 +749,29 @@ void ReshardingRecipientService::RecipientStateMachine::_dropOplogCollections(
         auto oplogBufferNss =
             getLocalOplogBufferNamespace(_recipientDoc.getExistingUUID(), donor.getId());
         resharding::data_copy::ensureCollectionDropped(opCtx, oplogBufferNss);
+    }
+}
+
+ReshardingMetrics* ReshardingRecipientService::RecipientStateMachine::_metrics() const {
+    return ReshardingMetrics::get(cc().getServiceContext());
+}
+
+void ReshardingRecipientService::RecipientStateMachine::_onAbortOrStepdown(WithLock,
+                                                                           Status status) {
+    if (_oplogFetcherExecutor) {
+        _oplogFetcherExecutor->shutdown();
+    }
+
+    for (auto&& fetcher : _oplogFetchers) {
+        fetcher->interrupt(status);
+    }
+
+    for (auto&& threadPool : _oplogApplierWorkers) {
+        threadPool->shutdown();
+    }
+
+    if (!_coordinatorHasDecisionPersisted.getFuture().isReady()) {
+        _coordinatorHasDecisionPersisted.setError(status);
     }
 }
 

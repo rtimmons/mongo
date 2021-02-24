@@ -88,19 +88,23 @@ bool documentBelongsToMe(OperationContext* opCtx,
 
 DonorShardEntry makeDonorShard(ShardId shardId,
                                DonorStateEnum donorState,
-                               boost::optional<Timestamp> minFetchTimestamp) {
+                               boost::optional<Timestamp> minFetchTimestamp,
+                               boost::optional<Status> abortReason) {
     DonorShardEntry entry(shardId);
     entry.setState(donorState);
     emplaceMinFetchTimestampIfExists(entry, minFetchTimestamp);
+    emplaceAbortReasonIfExists(entry, abortReason);
     return entry;
 }
 
 RecipientShardEntry makeRecipientShard(ShardId shardId,
                                        RecipientStateEnum recipientState,
-                                       boost::optional<Timestamp> strictConsistencyTimestamp) {
+                                       boost::optional<Timestamp> strictConsistencyTimestamp,
+                                       boost::optional<Status> abortReason) {
     RecipientShardEntry entry(shardId);
     entry.setState(recipientState);
     emplaceStrictConsistencyTimestampIfExists(entry, strictConsistencyTimestamp);
+    emplaceAbortReasonIfExists(entry, abortReason);
     return entry;
 }
 
@@ -139,16 +143,24 @@ std::set<ShardId> getRecipientShards(OperationContext* opCtx,
 void tellShardsToRefresh(OperationContext* opCtx,
                          const std::vector<ShardId>& shardIds,
                          const NamespaceString& nss,
-                         std::shared_ptr<executor::TaskExecutor> executor) {
+                         const std::shared_ptr<executor::TaskExecutor>& executor) {
     auto cmd = _flushRoutingTableCacheUpdatesWithWriteConcern(nss);
     cmd.setSyncFromConfig(true);
     cmd.setDbName(nss.db());
     auto cmdObj =
         cmd.toBSON(BSON(WriteConcernOptions::kWriteConcernField << WriteConcernOptions::Majority));
 
+    sendCommandToShards(opCtx, cmdObj, shardIds, nss, executor);
+}
+
+void sendCommandToShards(OperationContext* opCtx,
+                         const BSONObj& command,
+                         const std::vector<ShardId>& shardIds,
+                         const NamespaceString& nss,
+                         const std::shared_ptr<executor::TaskExecutor>& executor) {
     std::vector<AsyncRequestsSender::Request> requests;
     for (const auto& shardId : shardIds) {
-        requests.emplace_back(shardId, cmdObj);
+        requests.emplace_back(shardId, command);
     }
 
     if (!requests.empty()) {

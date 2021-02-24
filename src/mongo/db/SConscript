@@ -719,9 +719,10 @@ env.Library(
         '$BUILD_DIR/mongo/client/clientdriver_minimal',
         'curop',
         'lasterror',
+        'ops/write_ops_parsers',
     ],
     LIBDEPS_PRIVATE=[
-        '$BUILD_DIR/mongo/db/repl/repl_coordinator_interface',
+        'repl/repl_coordinator_interface',
     ],
 )
 
@@ -1135,6 +1136,16 @@ env.Library(
 )
 
 env.Library(
+    target='record_id_helpers',
+    source=[
+        'record_id_helpers.cpp',
+    ],
+    LIBDEPS=[
+        '$BUILD_DIR/mongo/base',
+    ],
+)
+
+env.Library(
     target='query_exec',
     source=[
         'clientcursor.cpp',
@@ -1184,6 +1195,7 @@ env.Library(
         'exec/upsert_stage.cpp',
         'exec/working_set_common.cpp',
         'exec/write_stage_common.cpp',
+        'ops/delete_request.idl',
         'ops/parsed_delete.cpp',
         'ops/update_result.cpp',
         'pipeline/document_source_cursor.cpp',
@@ -1266,7 +1278,6 @@ env.Library(
         's/sharding_api_d',
         'shared_request_handling',
         'stats/serveronly_stats',
-        'storage/oplog_hack',
         'storage/remove_saver',
         'storage/storage_options',
         'update/update_driver',
@@ -1915,7 +1926,6 @@ env.Library(
         'ops/update.cpp',
         'ops/write_ops_retryability.cpp',
         'ops/single_write_result.idl',
-        'ops/delete_request.idl',
     ],
     LIBDEPS=[
         '$BUILD_DIR/mongo/base',
@@ -2144,6 +2154,7 @@ env.Library(
         '$BUILD_DIR/mongo/util/cmdline_utils/cmdline_utils',
         '$BUILD_DIR/mongo/util/concurrency/thread_pool',
         '$BUILD_DIR/mongo/util/latch_analyzer' if get_option('use-diagnostic-latches') == 'on' else [],
+        '$BUILD_DIR/mongo/util/net/http_client_impl',
         '$BUILD_DIR/mongo/util/net/ssl_manager',
         '$BUILD_DIR/mongo/util/signal_handlers',
         '$BUILD_DIR/mongo/watchdog/watchdog_mongod',

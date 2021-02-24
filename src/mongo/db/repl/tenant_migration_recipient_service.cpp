@@ -95,12 +95,14 @@ MONGO_FAIL_POINT_DEFINE(setTenantMigrationRecipientInstanceHostTimeout);
 MONGO_FAIL_POINT_DEFINE(pauseAfterRetrievingLastTxnMigrationRecipientInstance);
 MONGO_FAIL_POINT_DEFINE(fpAfterCollectionClonerDone);
 MONGO_FAIL_POINT_DEFINE(fpAfterStartingOplogApplierMigrationRecipientInstance);
+MONGO_FAIL_POINT_DEFINE(fpBeforeFulfillingDataConsistentPromise);
 MONGO_FAIL_POINT_DEFINE(fpAfterDataConsistentMigrationRecipientInstance);
 MONGO_FAIL_POINT_DEFINE(hangBeforeTaskCompletion);
 MONGO_FAIL_POINT_DEFINE(fpAfterReceivingRecipientForgetMigration);
 MONGO_FAIL_POINT_DEFINE(hangAfterCreatingRSM);
 MONGO_FAIL_POINT_DEFINE(skipRetriesWhenConnectingToDonorHost);
 MONGO_FAIL_POINT_DEFINE(fpBeforeDroppingOplogBufferCollection);
+MONGO_FAIL_POINT_DEFINE(fpWaitUntilTimestampMajorityCommitted);
 
 namespace {
 // We never restart just the oplog fetcher.  If a failure occurs, we restart the whole state machine
@@ -320,8 +322,10 @@ OpTime TenantMigrationRecipientService::Instance::waitUntilMigrationReachesConsi
 OpTime TenantMigrationRecipientService::Instance::waitUntilTimestampIsMajorityCommitted(
     OperationContext* opCtx, const Timestamp& donorTs) const {
 
-    // This gives assurance that _tenantOplogApplier pointer won't be empty.
-    _dataSyncStartedPromise.getFuture().get(opCtx);
+    // This gives assurance that _tenantOplogApplier pointer won't be empty, and that it has been
+    // started. Additionally, we must have finished processing the recipientSyncData command that
+    // waits on _dataConsistentPromise.
+    _dataConsistentPromise.getFuture().get(opCtx);
 
     auto getWaitOpTimeFuture = [&]() {
         stdx::lock_guard lk(_mutex);
@@ -350,7 +354,23 @@ OpTime TenantMigrationRecipientService::Instance::waitUntilTimestampIsMajorityCo
         return _tenantOplogApplier->getNotificationForOpTime(
             OpTime(donorTs, OpTime::kUninitializedTerm));
     };
-    auto donorRecipientOpTimePair = getWaitOpTimeFuture().get(opCtx);
+
+    auto waitOpTimeFuture = getWaitOpTimeFuture();
+    fpWaitUntilTimestampMajorityCommitted.pauseWhileSet();
+    auto swDonorRecipientOpTimePair = waitOpTimeFuture.getNoThrow();
+
+    auto status = swDonorRecipientOpTimePair.getStatus();
+
+    // A cancelation error may occur due to an interrupt. If that is the case, replace the error
+    // code with the interrupt code, the true reason for interruption.
+    if (ErrorCodes::isCancelationError(status)) {
+        stdx::lock_guard lk(_mutex);
+        if (!_taskState.getInterruptStatus().isOK()) {
+            status = _taskState.getInterruptStatus();
+        }
+    }
+
+    uassertStatusOK(status);
 
     // We want to guarantee that the recipient logical clock has advanced to at least the donor
     // timestamp before returning success for recipientSyncData by doing a majority committed noop
@@ -371,7 +391,7 @@ OpTime TenantMigrationRecipientService::Instance::waitUntilTimestampIsMajorityCo
     WaitForMajorityService::get(opCtx->getServiceContext())
         .waitUntilMajority(repl::ReplClientInfo::forClient(opCtx->getClient()).getLastOp())
         .get(opCtx);
-    return donorRecipientOpTimePair.donorOpTime;
+    return swDonorRecipientOpTimePair.getValue().donorOpTime;
 }
 
 std::unique_ptr<DBClientConnection> TenantMigrationRecipientService::Instance::_connectAndAuth(
@@ -495,31 +515,46 @@ TenantMigrationRecipientService::Instance::_createAndConnectClients() {
                        auto client = _connectAndAuth(serverAddress, applicationName);
 
                        boost::optional<repl::OpTime> startApplyingOpTime;
+                       Timestamp startMigrationDonorTimestamp;
                        {
                            stdx::lock_guard lk(_mutex);
                            startApplyingOpTime = _stateDoc.getStartApplyingDonorOpTime();
+                           startMigrationDonorTimestamp =
+                               _stateDoc.getStartMigrationDonorTimestamp();
                        }
 
-                       if (startApplyingOpTime) {
-                           auto majoritySnapshotOpTime = _getDonorMajorityOpTime(client);
-
-                           if (majoritySnapshotOpTime < *startApplyingOpTime) {
-                               stdx::lock_guard lk(_mutex);
-                               const auto now =
-                                   getGlobalServiceContext()->getFastClockSource()->now();
-                               _excludeDonorHost(
-                                   lk,
-                                   serverAddress,
-                                   now + Milliseconds(tenantMigrationExcludeDonorHostTimeoutMS));
-                               uasserted(
-                                   kDelayedMajorityOpTimeErrorCode,
-                                   str::stream()
-                                       << "majoritySnapshotOpTime on donor host must not be behind "
-                                          "startApplyingDonorOpTime, majoritySnapshotOpTime: "
-                                       << majoritySnapshotOpTime.toString()
-                                       << "; startApplyingDonorOpTime: "
-                                       << (*startApplyingOpTime).toString());
-                           }
+                       auto majoritySnapshotOpTime = _getDonorMajorityOpTime(client);
+                       if (majoritySnapshotOpTime.getTimestamp() < startMigrationDonorTimestamp) {
+                           stdx::lock_guard lk(_mutex);
+                           const auto now = getGlobalServiceContext()->getFastClockSource()->now();
+                           _excludeDonorHost(
+                               lk,
+                               serverAddress,
+                               now + Milliseconds(tenantMigrationExcludeDonorHostTimeoutMS));
+                           uasserted(
+                               kDelayedMajorityOpTimeErrorCode,
+                               str::stream()
+                                   << "majoritySnapshotOpTime on donor host must not be behind "
+                                      "startMigrationDonorTimestamp, majoritySnapshotOpTime: "
+                                   << majoritySnapshotOpTime.toString()
+                                   << "; startMigrationDonorTimestamp: "
+                                   << startMigrationDonorTimestamp.toString());
+                       }
+                       if (startApplyingOpTime && majoritySnapshotOpTime < *startApplyingOpTime) {
+                           stdx::lock_guard lk(_mutex);
+                           const auto now = getGlobalServiceContext()->getFastClockSource()->now();
+                           _excludeDonorHost(
+                               lk,
+                               serverAddress,
+                               now + Milliseconds(tenantMigrationExcludeDonorHostTimeoutMS));
+                           uasserted(
+                               kDelayedMajorityOpTimeErrorCode,
+                               str::stream()
+                                   << "majoritySnapshotOpTime on donor host must not be behind "
+                                      "startApplyingDonorOpTime, majoritySnapshotOpTime: "
+                                   << majoritySnapshotOpTime.toString()
+                                   << "; startApplyingDonorOpTime: "
+                                   << (*startApplyingOpTime).toString());
                        }
 
                        // Application name is constructed such that it doesn't exceed
@@ -749,11 +784,25 @@ void TenantMigrationRecipientService::Instance::_startOplogFetcher() {
     options.dropCollectionAtStartup = false;
     options.dropCollectionAtShutdown = false;
     options.useTemporaryCollection = false;
+    // Create the oplog buffer outside the mutex to avoid deadlock on a concurrent stepdown.
+    auto oplogBufferNS = getOplogBufferNs(getMigrationUUID());
+    auto bufferCollection = std::make_unique<OplogBufferCollection>(
+        StorageInterface::get(opCtx.get()), oplogBufferNS, options);
     stdx::unique_lock lk(_mutex);
     invariant(_stateDoc.getStartFetchingDonorOpTime());
-    _donorOplogBuffer = std::make_unique<OplogBufferCollection>(
-        StorageInterface::get(opCtx.get()), getOplogBufferNs(getMigrationUUID()), options);
-    _donorOplogBuffer->startup(opCtx.get());
+    _donorOplogBuffer = std::move(bufferCollection);
+
+    {
+        // Ensure we are primary when trying to startup and create the oplog buffer collection.
+        auto coordinator = repl::ReplicationCoordinator::get(opCtx.get());
+        Lock::GlobalLock globalLock(opCtx.get(), MODE_IX);
+        if (!coordinator->canAcceptWritesForDatabase(opCtx.get(), oplogBufferNS.db())) {
+            uassertStatusOK(
+                Status(ErrorCodes::NotWritablePrimary,
+                       "Recipient node is not primary, cannot create oplog buffer collection."));
+        }
+        _donorOplogBuffer->startup(opCtx.get());
+    }
 
     pauseAfterCreatingOplogBuffer.pauseWhileSet();
 
@@ -1313,8 +1362,7 @@ void TenantMigrationRecipientService::Instance::_fetchAndStoreDonorClusterTimeKe
             _serviceContext, _migrationUuid, doc));
     }
 
-    tenant_migration_util::storeExternalClusterTimeKeyDocsAndRefreshCache(_scopedExecutor,
-                                                                          std::move(keyDocs));
+    tenant_migration_util::storeExternalClusterTimeKeyDocs(_scopedExecutor, std::move(keyDocs));
 }
 
 void TenantMigrationRecipientService::Instance::_compareRecipientAndDonorFCV() const {
@@ -1524,6 +1572,7 @@ SemiFuture<void> TenantMigrationRecipientService::Instance::run(
             return _getDataConsistentFuture();
         })
         .then([this, self = shared_from_this()] {
+            _stopOrHangOnFailPoint(&fpBeforeFulfillingDataConsistentPromise);
             stdx::lock_guard lk(_mutex);
             LOGV2_DEBUG(4881101,
                         1,
@@ -1553,16 +1602,15 @@ SemiFuture<void> TenantMigrationRecipientService::Instance::run(
             // normally stop by itself on success. It completes only on errors or on external
             // interruption (e.g. by shutDown/stepDown or by recipientForgetMigration command).
             Status status = applierStatus.getStatus();
-            {
-                // If we were interrupted during oplog application, replace oplog application
-                // status with error state.
+
+            // If we were interrupted during oplog application, replace oplog application
+            // status with error state.
+            // Network and cancellation errors can be caused due to interrupt() (which shuts
+            // down the cloner/fetcher dbClientConnection & oplog applier), so replace those
+            // error status with interrupt status, if set.
+            if (ErrorCodes::isCancelationError(status) || ErrorCodes::isNetworkError(status)) {
                 stdx::lock_guard lk(_mutex);
-                // Network and cancellation errors can be caused due to interrupt() (which shuts
-                // down the cloner/fetcher dbClientConnection & oplog applier), so replace those
-                // error status with interrupt status, if set.
-                if ((ErrorCodes::isCancelationError(status) ||
-                     ErrorCodes::isNetworkError(status)) &&
-                    _taskState.isInterrupted()) {
+                if (_taskState.isInterrupted()) {
                     LOGV2(4881207,
                           "Migration completed with both error and interrupt",
                           "tenantId"_attr = getTenantId(),

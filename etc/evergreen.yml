@@ -40,6 +40,11 @@ ignore:
   - "!/etc/evergreen.yml"
   - "README"
 
+## Parameters for parameterized builds (see https://github.com/evergreen-ci/evergreen/wiki/Parameterized-Builds)
+parameters:
+  - key: patch_compile_flags
+    description: "Additional SCons flags to be applied during scons compile invocations in this patch"
+
 ## Some variables for convenience:
 variables:
 
@@ -128,7 +133,7 @@ variables:
 # Templates used by powercycle
 - &powercycle_remote_credentials
   private_key_file: $(${posix_workdir})/powercycle.pem
-  private_key_remote: ${powercycle_private_key}
+  private_key_remote: ${__project_aws_ssh_key_value}
   aws_key_remote: ${powercycle_aws_key}
   aws_secret_remote: ${powercycle_aws_secret}
 
@@ -1893,7 +1898,7 @@ functions:
         ${compile_env|} $python ./buildscripts/scons.py                                     \
             ${compile_flags|} ${task_compile_flags|} ${task_compile_flags_extra|}           \
             ${scons_cache_args|} $extra_args                                                \
-            ${targets} MONGO_VERSION=${version} || exit_status=$?
+            ${targets} MONGO_VERSION=${version} ${patch_compile_flags|} || exit_status=$?
 
         chmod -R ugo+w ./src
         ls -la src/mongo/stdx/sigaltstack_location_test.cpp || true
@@ -2363,12 +2368,18 @@ functions:
           set -o verbose
           set -o errexit
 
+          if [ "Windows_NT" = "$OS" ]; then
+            user=Administrator
+          else
+            user=$USER
+          fi
+
           ${activate_virtualenv}
           # Set an exit trap so we can save the real exit status (see SERVER-34033).
           trap 'echo $? > error_exit.txt; exit 0' EXIT
           set +o errexit
-          eval $python -u buildscripts/resmoke.py powercycle \
-            "--sshUserHost=${private_ip_address} \
+          eval $python -u buildscripts/resmoke.py powercycle run \
+            "--sshUserHost=$(printf "%s@%s" "$user" "${private_ip_address}") \
             --sshConnection=\"-i ${private_key_file} ${ssh_connection_options}\" \
             --taskName=${task_name}"
 
@@ -2573,12 +2584,13 @@ functions:
 
     - command: shell.exec
       params:
+        shell: bash
         script: |
-          identity_file=${private_key_file}
-          echo "${__project_aws_ssh_key_value}" > "$identity_file"
-          chmod 0600 "$identity_file"
-
-          user=$USER
+          if [ "Windows_NT" = "$OS" ]; then
+            user=Administrator
+          else
+            user=$USER
+          fi
           hostname=$(tr -d '"[]{}' < src/hosts.yml | cut -d , -f 1 | awk -F : '{print $2}')
 
           # To add the hostname to expansions.
@@ -2586,14 +2598,13 @@ functions:
 
           echo $hostname
           echo $user
-          echo $identity_file
 
           attempts=0
           connection_attempts=${connection_attempts|25}
 
           # Check for remote connectivity
           while ! ssh \
-            -i "$identity_file" \
+            -i ${private_key_file} \
             -o ConnectTimeout=10 \
             -o ForwardAgent=yes \
             -o IdentitiesOnly=yes \
@@ -2607,7 +2618,6 @@ functions:
             # sleep for Permission denied (publickey) errors
             sleep 10
           done
-        shell: bash
 
     - command: expansions.update
       params:
@@ -2626,10 +2636,10 @@ functions:
           set -o errexit
 
           ${activate_virtualenv}
-          $python buildscripts/powercycle_operations.py setUpEC2Instance
+          $python buildscripts/resmoke.py powercycle setup-host
 
   ### Process & archive remote EC2 artifacts ###
-  "tar EC2 artifacts": &tar_ec2_artifacts
+  "save powercycle artifacts": &save_powercycle_artifacts
     command: shell.exec
     params:
       shell: bash
@@ -2642,79 +2652,7 @@ functions:
         fi
 
         ${activate_virtualenv}
-        $python buildscripts/powercycle_operations.py tarEC2Artifacts
-
-  "copy EC2 artifacts": &copy_ec2_artifacts
-    command: shell.exec
-    params:
-      shell: bash
-      working_dir: src
-      script: |
-        if [ ! -f powercycle_ip_address.yml ]; then
-          exit 0
-        fi
-
-        ${activate_virtualenv}
-        $python buildscripts/powercycle_operations.py copyEC2Artifacts
-
-  "copy ec2 monitor files": &copy_ec2_monitor_files
-    command: shell.exec
-    params:
-      shell: bash
-      working_dir: src
-      script: |
-        set -o verbose
-
-        if [ ! -f powercycle_ip_address.yml ]; then
-          exit 0
-        fi
-
-        ${activate_virtualenv}
-        $python buildscripts/powercycle_operations.py copyEC2MonitorFiles
-
-  # The event logs on Windows are a useful diagnostic to have when determining if something bad
-  # happened to the remote machine after it was repeatedly crashed during powercycle testing. For
-  # example, the Application and System event logs have previously revealed that the mongod.exe
-  # process abruptly exited due to not being able to open a file despite the process successfully
-  # being restarted and responding to network requests.
-  "gather remote event logs": &gather_remote_event_logs
-    command: shell.exec
-    params:
-      shell: bash
-      working_dir: src
-      script: |
-        if [ ! -f powercycle_ip_address.yml ]; then
-          exit 0
-        fi
-
-        ${activate_virtualenv}
-        $python buildscripts/powercycle_operations.py gatherRemoteEventLogs
-
-  "gather remote mongo coredumps": &gather_remote_mongo_coredumps
-    command: shell.exec
-    params:
-      shell: bash
-      working_dir: "src"
-      script: |
-        if [ ! -f powercycle_ip_address.yml ]; then
-          exit 0
-        fi
-
-        ${activate_virtualenv}
-        $python buildscripts/powercycle_operations.py gatherRemoteMongoCoredumps
-
-  "copy remote mongo coredumps": &copy_remote_mongo_coredumps
-    command: shell.exec
-    params:
-      shell: bash
-      working_dir: "src"
-      script: |
-        if [ ! -f powercycle_ip_address.yml ]; then
-          exit 0
-        fi
-
-        ${activate_virtualenv}
-        $python buildscripts/powercycle_operations.py copyRemoteMongoCoredumps
+        $python buildscripts/resmoke.py powercycle save-diagnostics
 
   "archive remote EC2 artifacts": &archive_remote_ec2_artifacts
     command: s3.put
@@ -2743,12 +2681,7 @@ functions:
       optional: true
 
   "save ec2 task artifacts":
-    - *gather_remote_event_logs
-    - *tar_ec2_artifacts
-    - *copy_ec2_artifacts
-    - *copy_ec2_monitor_files
-    - *gather_remote_mongo_coredumps
-    - *copy_remote_mongo_coredumps
+    - *save_powercycle_artifacts
     - *archive_remote_ec2_artifacts
     - *archive_remote_ec2_monitor_files
 
@@ -3100,7 +3033,7 @@ functions:
 
         # Call hang analyzer for tasks that are running remote mongo processes
         if [ -n "${private_ip_address}" ]; then
-          $python buildscripts/powercycle_operations.py runHangAnalyzerOnRemoteInstance
+          $python buildscripts/resmoke.py powercycle remote-hang-analyzer
         fi
 
   "wait for resmoke to shutdown":
@@ -4631,7 +4564,7 @@ tasks:
 ## jstestfuzz concurrent sharded cluster ##
 - <<: *jstestfuzz_template
   name: jstestfuzz_concurrent_sharded_gen
-  tags: ["jstestfuzz", "common"]
+  tags: ["jstestfuzz", "common", "sharding"]
   commands:
   - func: "generate fuzzer tasks"
     vars:
@@ -4861,7 +4794,7 @@ tasks:
 ## jstestfuzz sharded cluster ##
 - <<: *jstestfuzz_template
   name: jstestfuzz_sharded_gen
-  tags: ["jstestfuzz", "common"]
+  tags: ["jstestfuzz", "common", "sharding"]
   commands:
   - func: "generate fuzzer tasks"
     vars:
@@ -6866,24 +6799,6 @@ tasks:
       use_multiversion: /data/multiversion
       suite: sharding_multiversion
 
-- name: sharding_rs_matching_disabled_gen
-  tags: ["sharding", "common"]
-  commands:
-  - func: "generate resmoke tasks"
-    vars:
-      use_large_distro: "true"
-      resmoke_args: --storageEngine=wiredTiger
-      fallback_num_sub_suites: 32
-
-- name: sharding_rs_matching_match_busiest_node_gen
-  tags: ["sharding", "common"]
-  commands:
-  - func: "generate resmoke tasks"
-    vars:
-      use_large_distro: "true"
-      resmoke_args: --storageEngine=wiredTiger
-      fallback_num_sub_suites: 32
-
 - name: sharding_max_mirroring_gen
   tags: ["sharding", "common"]
   commands:
@@ -8684,9 +8599,8 @@ buildvariants:
   - name: concurrency_simultaneous
   - name: disk_wiredtiger
   - name: failpoints_auth
-  - name: .jscore .common !.decimal !.txns
-  - name: .jstestfuzz .common !.repl
-  - name: sharding_jscore_passthrough
+  - name: .jscore .common !.sharding !.decimal !.txns
+  - name: .jstestfuzz .common !.sharding !.repl
 
 - name: ubuntu1804
   display_name: Ubuntu 18.04
@@ -8999,51 +8913,6 @@ buildvariants:
   - name: test_packages
     distros:
     - ubuntu2004-package
-  - name: .publish
-    distros:
-    - ubuntu1804-test
-
-- name: enterprise-ubuntu1804-ppc64le
-  display_name: Enterprise Ubuntu 18.04 PPC64LE
-  modules:
-  - enterprise
-  run_on:
-  - ubuntu1804-power8-test
-  batchtime: 10080 # 7 days
-  expansions:
-    additional_package_targets: archive-mongocryptd archive-mongocryptd-debug
-    push_path: linux
-    push_bucket: downloads.10gen.com
-    push_name: linux
-    push_arch: ppc64le-enterprise-ubuntu1804
-    compile_flags: --ssl --ocsp-stapling=off MONGO_DISTMOD=ubuntu1804 -j$(echo "$(grep -c processor /proc/cpuinfo)/2" | bc) CCFLAGS="-mcpu=power8 -mtune=power8 -mcmodel=medium" --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars
-    test_flags: --excludeWithAnyTags=requires_ocsp_stapling
-    resmoke_jobs_max: 2
-    has_packages: true
-    packager_script: packager_enterprise.py
-    packager_arch: ppc64le
-    packager_distro: ubuntu1804
-    repo_edition: enterprise
-    multiversion_platform: ubuntu1804
-    multiversion_architecture: ppc64le
-    multiversion_edition: enterprise
-    use_default_timeouts: true
-  tasks:
-  - name: compile_test_and_package_serial_TG
-    distros:
-    - ubuntu1804-power8-build
-  - name: aggregation
-  - name: .auth !.audit !.multiversion !.jscore
-  - name: .misc_js
-  - name: fle
-  - name: .jscore .common !.auth
-  - name: .ocsp
-  - name: replica_sets
-  - name: .replica_sets .common
-  - name: .sharding .txns
-  - name: sharding_gen
-  - name: .ssl
-  - name: .stitch
   - name: .publish
     distros:
     - ubuntu1804-test
@@ -9687,6 +9556,7 @@ buildvariants:
   - name: burn_in_tests_gen
   - name: buildscripts_test
   - name: noPassthrough_gen
+  - name: powercycle_smoke
   - name: server_discovery_and_monitoring_json_test_TG
   - name: server_selection_json_test_TG
   - name: compile_run_and_archive_dbtest_TG
@@ -9718,7 +9588,9 @@ buildvariants:
         --mongodSetParameters="{
             featureFlagToaster: true,
             featureFlagSpoon: true,
+            featureFlagAuthorizationContract: true,
             featureFlagImprovedAuditing: true,
+            featureFlagRuntimeAuditConfig: true,
             featureFlagTimeseriesCollection: true,
             featureFlagShardingFullDDLSupport: true,
             featureFlagShardingFullDDLSupportTimestampedVersion: true,
@@ -9822,7 +9694,9 @@ buildvariants:
         --mongodSetParameters="{
             featureFlagToaster: true,
             featureFlagSpoon: true,
+            featureFlagAuthorizationContract: true,
             featureFlagImprovedAuditing: true,
+            featureFlagRuntimeAuditConfig: true,
             featureFlagTimeseriesCollection: true,
             featureFlagShardingFullDDLSupport: true,
             featureFlagShardingFullDDLSupportTimestampedVersion: true,
@@ -10389,8 +10263,10 @@ buildvariants:
         --mongodSetParameters="{
             featureFlagToaster: true,
             featureFlagSpoon: true,
+            featureFlagAuthorizationContract: true,
             featureFlagTenantMigrations: true,
             featureFlagImprovedAuditing: true,
+            featureFlagRuntimeAuditConfig: true,
             featureFlagTimeseriesCollection: true,
             featureFlagShardingFullDDLSupport: true,
             featureFlagShardingFullDDLSupportTimestampedVersion: true,
@@ -11659,8 +11535,10 @@ buildvariants:
         --mongodSetParameters="{
             featureFlagToaster: true,
             featureFlagSpoon: true,
+            featureFlagAuthorizationContract: true,
             featureFlagTenantMigrations: true,
             featureFlagImprovedAuditing: true,
+            featureFlagRuntimeAuditConfig: true,
             featureFlagTimeseriesCollection: true,
             featureFlagShardingFullDDLSupport: true,
             featureFlagShardingFullDDLSupportTimestampedVersion: true,
@@ -12424,8 +12302,10 @@ buildvariants:
         --mongodSetParameters="{
             featureFlagToaster: true,
             featureFlagSpoon: true,
+            featureFlagAuthorizationContract: true,
             featureFlagTenantMigrations: true,
             featureFlagImprovedAuditing: true,
+            featureFlagRuntimeAuditConfig: true,
             featureFlagTimeseriesCollection: true,
             featureFlagShardingFullDDLSupport: true,
             featureFlagShardingFullDDLSupportTimestampedVersion: true,
@@ -12592,8 +12472,10 @@ buildvariants:
         --mongodSetParameters="{
             featureFlagToaster: true,
             featureFlagSpoon: true,
+            featureFlagAuthorizationContract: true,
             featureFlagTenantMigrations: true,
             featureFlagImprovedAuditing: true,
+            featureFlagRuntimeAuditConfig: true,
             featureFlagTimeseriesCollection: true,
             featureFlagShardingFullDDLSupport: true,
             featureFlagShardingFullDDLSupportTimestampedVersion: true,
@@ -12704,8 +12586,10 @@ buildvariants:
         --mongodSetParameters="{
             featureFlagToaster: true,
             featureFlagSpoon: true,
+            featureFlagAuthorizationContract: true,
             featureFlagTenantMigrations: true,
             featureFlagImprovedAuditing: true,
+            featureFlagRuntimeAuditConfig: true,
             featureFlagTimeseriesCollection: true,
             featureFlagShardingFullDDLSupport: true,
             featureFlagShardingFullDDLSupportTimestampedVersion: true,
@@ -12895,6 +12779,96 @@ buildvariants:
     multiversion_edition: enterprise
     test_flags: |- # Set the taskExecutorPoolSize for all tests
         --mongosSetParameters="taskExecutorPoolSize: 4"
+    large_distro_name: ubuntu1604-build
+  tasks:
+  - name: compile_test_and_package_serial_TG
+    distros:
+    - ubuntu1604-build
+  - name: .aggregation !.no_async
+  - name: .sharding .auth
+  - name: .sharding .causally_consistent !.wo_snapshot
+  - name: .concurrency .common !.kill_terminate
+  - name: .integration !.audit
+  - name: .jscore .common
+  - name: .logical_session_cache .one_sec
+  - name: .sharding .jscore !.wo_snapshot !.multi_stmt
+  - name: .sharding .common !.csrs
+
+- name: enterprise-ubuntu-sharding-task-executor-pool-rsm-matchPrimary-1604-64-bit
+  display_name: "~ Enterprise Ubuntu 16.04 (with {ShardingTaskExecutorPoolReplicaSetMatching: \"matchPrimaryNode\"})"
+  batchtime: 1440 # 1 day
+  run_on:
+    - ubuntu1604-test
+  modules:
+  - enterprise
+  expansions:
+    scons_cache_scope: shared
+    compile_flags: MONGO_DISTMOD=ubuntu1604 -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars
+    multiversion_platform: ubuntu1604
+    multiversion_edition: enterprise
+    test_flags: >-
+        --mongosSetParameters="ShardingTaskExecutorPoolReplicaSetMatching: \"matchPrimaryNode\""
+        --excludeWithAnyTags=sets_replica_set_matching_strategy
+    large_distro_name: ubuntu1604-build
+  tasks:
+  - name: compile_test_and_package_serial_TG
+    distros:
+    - ubuntu1604-build
+  - name: .aggregation !.no_async
+  - name: .sharding .auth
+  - name: .sharding .causally_consistent !.wo_snapshot
+  - name: .concurrency .common !.kill_terminate
+  - name: .integration !.audit
+  - name: .jscore .common
+  - name: .logical_session_cache .one_sec
+  - name: .sharding .jscore !.wo_snapshot !.multi_stmt
+  - name: .sharding .common !.csrs
+
+- name: enterprise-ubuntu-sharding-task-executor-pool-rsm-matchBusiest-1604-64-bit
+  display_name: "~ Enterprise Ubuntu 16.04 (with {ShardingTaskExecutorPoolReplicaSetMatching: \"matchBusiestNode\"})"
+  batchtime: 1440 # 1 day
+  run_on:
+    - ubuntu1604-test
+  modules:
+  - enterprise
+  expansions:
+    scons_cache_scope: shared
+    compile_flags: MONGO_DISTMOD=ubuntu1604 -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars
+    multiversion_platform: ubuntu1604
+    multiversion_edition: enterprise
+    test_flags: >-
+        --mongosSetParameters="ShardingTaskExecutorPoolReplicaSetMatching: \"matchBusiestNode\""
+        --excludeWithAnyTags=sets_replica_set_matching_strategy
+    large_distro_name: ubuntu1604-build
+  tasks:
+  - name: compile_test_and_package_serial_TG
+    distros:
+    - ubuntu1604-build
+  - name: .aggregation !.no_async
+  - name: .sharding .auth
+  - name: .sharding .causally_consistent !.wo_snapshot
+  - name: .concurrency .common !.kill_terminate
+  - name: .integration !.audit
+  - name: .jscore .common
+  - name: .logical_session_cache .one_sec
+  - name: .sharding .jscore !.wo_snapshot !.multi_stmt
+  - name: .sharding .common !.csrs
+
+- name: enterprise-ubuntu-sharding-task-executor-pool-rsm-disabled-1604-64-bit
+  display_name: "~ Enterprise Ubuntu 16.04 (with {ShardingTaskExecutorPoolReplicaSetMatching: \"disabled\"})"
+  batchtime: 1440 # 1 day
+  run_on:
+    - ubuntu1604-test
+  modules:
+  - enterprise
+  expansions:
+    scons_cache_scope: shared
+    compile_flags: MONGO_DISTMOD=ubuntu1604 -j$(grep -c ^processor /proc/cpuinfo) --variables-files=etc/scons/mongodbtoolchain_v3_gcc.vars
+    multiversion_platform: ubuntu1604
+    multiversion_edition: enterprise
+    test_flags: >-
+        --mongosSetParameters="ShardingTaskExecutorPoolReplicaSetMatching: \"disabled\""
+        --excludeWithAnyTags=sets_replica_set_matching_strategy
     large_distro_name: ubuntu1604-build
   tasks:
   - name: compile_test_and_package_serial_TG

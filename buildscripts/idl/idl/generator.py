@@ -243,7 +243,11 @@ class _SlowFieldUsageChecker(_FieldUsageCheckerBase):
                     (_get_field_constant_name(field))
                 with writer.IndentedScopedBlock(self._writer, pred, '}'):
                     if field.default:
-                        if field.type.is_enum:
+                        if field.chained_struct_field:
+                            self._writer.write_line('%s.%s(%s);' % (_get_field_member_name(
+                                field.chained_struct_field), _get_field_member_setter_name(field),
+                                                                    field.default))
+                        elif field.type.is_enum:
                             self._writer.write_line(
                                 '%s = %s::%s;' % (_get_field_member_name(field),
                                                   field.type.cpp_type, field.default))
@@ -752,6 +756,9 @@ class _CppHeaderFileWriter(_CppFileWriterBase):
                 self._writer.write_line(
                     common.template_args('${name} ${value},', name=enum_value.name,
                                          value=enum_type_info.get_cpp_value_assignment(enum_value)))
+
+        self._writer.write_line("static constexpr uint32_t kNum%s = %d;" %
+                                (enum_type_info.get_cpp_type_name(), len(idl_enum.values)))
 
     def gen_op_msg_request_methods(self, command):
         # type: (ast.Command) -> None
@@ -1362,11 +1369,10 @@ class _CppSourceFileWriter(_CppFileWriterBase):
         for scalar_type in scalar_types:
             for bson_type in scalar_type.bson_serialization_type:
                 self._writer.write_line('case %s:' % (bson.cpp_bson_type_name(bson_type), ))
-            self._writer.indent()
-            self.gen_field_deserializer(field, scalar_type, "bsonObject", bson_element, None,
-                                        check_type=False)
-            self._writer.write_line('break;')
-            self._writer.unindent()
+                with self._block('{', '}'):
+                    self.gen_field_deserializer(field, scalar_type, "bsonObject", bson_element,
+                                                None, check_type=False)
+                    self._writer.write_line('break;')
 
         if field.type.variant_struct_type:
             self._writer.write_line('case Object:')

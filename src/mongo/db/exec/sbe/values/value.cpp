@@ -31,6 +31,7 @@
 
 #include "mongo/db/exec/sbe/values/value.h"
 
+#include "mongo/base/compare_numbers.h"
 #include "mongo/db/exec/js_function.h"
 #include "mongo/db/exec/sbe/values/bson.h"
 #include "mongo/db/exec/sbe/values/value_builder.h"
@@ -42,6 +43,17 @@
 namespace mongo {
 namespace sbe {
 namespace value {
+
+std::pair<TypeTags, Value> makeCopyBsonRegex(const BsonRegex& regex) {
+    auto buffer = new char[regex.byteSize()];
+    memcpy(buffer, regex.data(), regex.byteSize());
+    return {TypeTags::bsonRegex, bitcastFrom<char*>(buffer)};
+}
+
+std::pair<TypeTags, Value> makeCopyBsonJavascript(std::string_view code) {
+    auto [_, strVal] = makeBigString(code);
+    return {TypeTags::bsonJavascript, strVal};
+}
 
 std::pair<TypeTags, Value> makeCopyKeyString(const KeyString::Value& inKey) {
     auto k = new KeyString::Value(inKey);
@@ -114,6 +126,8 @@ void releaseValue(TypeTags tag, Value val) noexcept {
         case TypeTags::StringBig:
         case TypeTags::bsonObjectId:
         case TypeTags::bsonBinData:
+        case TypeTags::bsonRegex:
+        case TypeTags::bsonJavascript:
             delete[] getRawPointerView(val);
             break;
 
@@ -234,6 +248,9 @@ void writeTagToStream(T& stream, const TypeTags tag) {
             break;
         case TypeTags::bsonRegex:
             stream << "bsonRegex";
+            break;
+        case TypeTags::bsonJavascript:
+            stream << "bsonJavascript";
             break;
         default:
             stream << "unknown tag";
@@ -454,6 +471,9 @@ void writeValueToStream(T& stream, TypeTags tag, Value val) {
             stream << '/' << regex.pattern << '/' << regex.flags;
             break;
         }
+        case value::TypeTags::bsonJavascript:
+            stream << "Javascript(" << getBsonJavascriptView(val) << ")";
+            break;
         default:
             MONGO_UNREACHABLE;
     }
@@ -533,6 +553,8 @@ BSONType tagToType(TypeTags tag) noexcept {
             return BSONType::EOO;
         case TypeTags::bsonRegex:
             return BSONType::RegEx;
+        case TypeTags::bsonJavascript:
+            return BSONType::Code;
         default:
             MONGO_UNREACHABLE;
     }
@@ -647,6 +669,8 @@ std::size_t hashValue(TypeTags tag, Value val, const CollatorInterface* collator
             auto regex = getBsonRegexView(val);
             return absl::Hash<std::string_view>{}(regex.dataView());
         }
+        case TypeTags::bsonJavascript:
+            return absl::Hash<std::string_view>{}(getBsonJavascriptView(val));
         default:
             break;
     }
@@ -690,13 +714,13 @@ std::pair<TypeTags, Value> compareValue(TypeTags lhsTag,
                 return {TypeTags::NumberInt32, bitcastFrom<int32_t>(result)};
             }
             case TypeTags::NumberDouble: {
-                auto result = compareHelper(numericCast<double>(lhsTag, lhsValue),
-                                            numericCast<double>(rhsTag, rhsValue));
+                auto result = compareDoubles(numericCast<double>(lhsTag, lhsValue),
+                                             numericCast<double>(rhsTag, rhsValue));
                 return {TypeTags::NumberInt32, bitcastFrom<int32_t>(result)};
             }
             case TypeTags::NumberDecimal: {
-                auto result = compareHelper(numericCast<Decimal128>(lhsTag, lhsValue),
-                                            numericCast<Decimal128>(rhsTag, rhsValue));
+                auto result = compareDecimals(numericCast<Decimal128>(lhsTag, lhsValue),
+                                              numericCast<Decimal128>(rhsTag, rhsValue));
                 return {TypeTags::NumberInt32, bitcastFrom<int32_t>(result)};
             }
             default:
@@ -822,6 +846,11 @@ std::pair<TypeTags, Value> compareValue(TypeTags lhsTag,
         auto rhsRegex = getBsonRegexView(rhsValue);
         auto result = compareHelper(lhsRegex.dataView(), rhsRegex.dataView());
         return {TypeTags::NumberInt32, bitcastFrom<int32_t>(result)};
+    } else if (lhsTag == TypeTags::bsonJavascript && rhsTag == TypeTags::bsonJavascript) {
+        auto lhsCode = getBsonJavascriptView(lhsValue);
+        auto rhsCode = getBsonJavascriptView(rhsValue);
+        auto result = compareHelper(lhsCode, rhsCode);
+        return {TypeTags::NumberInt32, result};
     } else {
         // Different types.
         auto lhsType = tagToType(lhsTag);

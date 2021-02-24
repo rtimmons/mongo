@@ -218,7 +218,8 @@ void PrimaryOnlyServiceRegistry::onStepDown() {
 void PrimaryOnlyServiceRegistry::reportServiceInfoForServerStatus(BSONObjBuilder* result) noexcept {
     BSONObjBuilder subBuilder(result->subobjStart("primaryOnlyServices"));
     for (auto& service : _servicesByName) {
-        subBuilder.appendNumber(service.first, service.second->getNumberOfInstances());
+        subBuilder.appendNumber(service.first,
+                                static_cast<long long>(service.second->getNumberOfInstances()));
     }
 }
 
@@ -451,6 +452,11 @@ void PrimaryOnlyService::shutdown() {
     for (auto& instance : savedInstances) {
         instance.second->interrupt(
             {ErrorCodes::InterruptedAtShutdown, "PrimaryOnlyService interrupted due to shutdown"});
+    }
+
+    for (auto opCtx : _opCtxs) {
+        stdx::lock_guard<Client> clientLock(*opCtx->getClient());
+        _serviceContext->killOperation(clientLock, opCtx, ErrorCodes::InterruptedAtShutdown);
     }
 
     if (savedScopedExecutor) {

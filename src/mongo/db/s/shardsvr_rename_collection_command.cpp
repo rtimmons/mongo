@@ -36,6 +36,7 @@
 #include "mongo/db/commands.h"
 #include "mongo/db/db_raii.h"
 #include "mongo/db/s/collection_sharding_state.h"
+#include "mongo/db/s/dist_lock_manager.h"
 #include "mongo/db/s/rename_collection_coordinator.h"
 #include "mongo/db/s/sharding_state.h"
 #include "mongo/logv2/log.h"
@@ -53,9 +54,9 @@ bool isCollectionSharded(OperationContext* opCtx, const NamespaceString& nss) {
         CollectionShardingState::get(opCtx, nss)->getCollectionDescription(opCtx).isSharded();
 }
 
-RenameCollectionResponse renameUnshardedCollection(OperationContext* opCtx,
-                                                   const ShardsvrRenameCollection& request,
-                                                   const NamespaceString& fromNss) {
+RenameCollectionResponse renameCollectionLegacy(OperationContext* opCtx,
+                                                const ShardsvrRenameCollection& request,
+                                                const NamespaceString& fromNss) {
     const auto& toNss = request.getTo();
 
     const auto fromDB = uassertStatusOK(
@@ -110,17 +111,21 @@ public:
             auto const shardingState = ShardingState::get(opCtx);
             uassertStatusOK(shardingState->canAcceptShardedCommands());
 
+            DistLockManager::ScopedDistLock dbDistLock(
+                uassertStatusOK(DistLockManager::get(opCtx)->lock(
+                    opCtx,
+                    DistLockManager::kShardingRoutingInfoFormatStabilityLockName,
+                    "renameCollection",
+                    DistLockManager::kDefaultLockTimeout)));
             bool useNewPath = [&] {
-                // TODO (SERVER-53092): Use the FCV lock in order to "reserve" operation as running
-                // in new or legacy mode
                 return feature_flags::gShardingFullDDLSupport.isEnabled(
                            serverGlobalParams.featureCompatibility) &&
                     !feature_flags::gDisableIncompleteShardingDDLSupport.isEnabled(
                         serverGlobalParams.featureCompatibility);
             }();
 
-            if (!isCollectionSharded(opCtx, fromNss) || !useNewPath) {
-                return renameUnshardedCollection(opCtx, req, fromNss);
+            if (!useNewPath) {
+                return renameCollectionLegacy(opCtx, req, fromNss);
             }
 
             uassert(ErrorCodes::InvalidOptions,

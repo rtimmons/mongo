@@ -39,6 +39,8 @@
 #include "mongo/util/duration.h"
 #include "mongo/util/uuid.h"
 
+#pragma once
+
 namespace mongo {
 
 /*
@@ -99,6 +101,9 @@ public:
     BSONObj reportForCurrentOp(const ReporterOptions& options) const noexcept;
 
     void serialize(BSONObjBuilder*, ReporterOptions::Role role = ReporterOptions::Role::kAll) const;
+
+    // Reports the elapsed time for the active resharding operation, or `boost::none`.
+    boost::optional<Milliseconds> getOperationElapsedTime() const;
 
 private:
     ServiceContext* const _svcCtx;

@@ -39,7 +39,6 @@
 #include "mongo/db/repl/storage_interface_impl.h"
 #include "mongo/db/repl/storage_interface_mock.h"
 #include "mongo/db/s/config/config_server_test_fixture.h"
-#include "mongo/db/s/config/sharding_catalog_manager.h"
 #include "mongo/db/s/resharding/resharding_coordinator_service.h"
 #include "mongo/db/s/resharding_util.h"
 #include "mongo/db/s/transaction_coordinator_service.h"
@@ -775,6 +774,10 @@ TEST_F(ReshardingCoordinatorPersistenceTest, StateTranstionToDecisionPersistedSu
 TEST_F(ReshardingCoordinatorPersistenceTest, StateTransitionToErrorSucceeds) {
     auto coordinatorDoc =
         insertStateAndCatalogEntries(CoordinatorStateEnum::kPreparingToDonate, _originalEpoch);
+
+    insertChunkAndZoneEntries(
+        makeChunks(_originalNss, OID::gen(), _oldShardKey, std::vector{OID::gen(), OID::gen()}),
+        makeZones(_originalNss, _oldShardKey));
 
     // Persist the updates on disk
     auto expectedCoordinatorDoc = coordinatorDoc;

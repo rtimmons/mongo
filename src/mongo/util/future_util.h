@@ -357,6 +357,18 @@ inline constexpr bool isFutureOrExecutorFuture<ExecutorFuture<T>> = true;
 static inline const std::string kWhenAllSucceedEmptyInputInvariantMsg =
     "Must pass at least one future to whenAllSucceed";
 
+/**
+ * Turns a variadic parameter pack into a vector without invoking copies if possible via static
+ * casts.
+ */
+template <typename... U, typename T = std::common_type_t<U...>>
+std::vector<T> variadicArgsToVector(U&&... elems) {
+    std::vector<T> vector;
+    vector.reserve(sizeof...(elems));
+    (vector.push_back(std::forward<U>(elems)), ...);
+    return vector;
+}
+
 }  // namespace future_util_details
 
 /**
@@ -603,7 +615,86 @@ SemiFuture<Result> whenAny(std::vector<FutureT>&& futures) {
     return std::move(future).semi();
 }
 
+/**
+ * Variadic template overloads for the above helper functions. Though not strictly necessary,
+ * we peel off the first element of each input list in order to assist the compiler in type
+ * inference and to prevent 0 length lists from compiling.
+ */
+TEMPLATE(typename... FuturePack,
+         typename FutureLike = std::common_type_t<FuturePack...>,
+         typename Value = typename FutureLike::value_type,
+         typename ResultVector = std::vector<Value>)
+REQUIRES(future_util_details::isFutureOrExecutorFuture<FutureLike>)
+auto whenAllSucceed(FuturePack&&... futures) {
+    return whenAllSucceed(
+        future_util_details::variadicArgsToVector(std::forward<FuturePack>(futures)...));
+}
+
+template <typename... FuturePack,
+          typename FutureT = std::common_type_t<FuturePack...>,
+          typename Value = typename FutureT::value_type,
+          typename ResultVector = std::vector<StatusOrStatusWith<Value>>>
+SemiFuture<ResultVector> whenAll(FuturePack&&... futures) {
+    return whenAll(future_util_details::variadicArgsToVector(std::forward<FuturePack>(futures)...));
+}
+
+template <typename... FuturePack,
+          typename FutureT = std::common_type_t<FuturePack...>,
+          typename Result = WhenAnyResult<typename FutureT::value_type>>
+SemiFuture<Result> whenAny(FuturePack&&... futures) {
+    return whenAny(future_util_details::variadicArgsToVector(std::forward<FuturePack>(futures)...));
+}
+
 namespace future_util {
+
+/**
+ * Takes an input Future, ExecutorFuture, SemiFuture, or SharedSemiFuture and a CancelationToken,
+ * and returns a new SemiFuture that will be resolved when either the input future is resolved or
+ * when the input CancelationToken is canceled. If the token is canceled before the input future is
+ * resolved, the resulting SemiFuture will be resolved with a CallbackCanceled error. Otherwise, the
+ * resulting SemiFuture will be resolved with the same result as the input future.
+ */
+template <typename FutureT, typename Value = typename FutureT::value_type>
+SemiFuture<Value> withCancelation(FutureT&& inputFuture, const CancelationToken& token) {
+    /**
+     * A structure used to share state between the continuation we attach to the input future and
+     * the continuation we attach to the token's onCancel() future.
+     */
+    struct SharedBlock {
+        SharedBlock(Promise<Value> result) : resultPromise(std::move(result)) {}
+        // Tracks whether or not the resultPromise has been set.
+        AtomicWord<bool> done{false};
+        // The promise corresponding to the resulting SemiFuture returned by this function.
+        Promise<Value> resultPromise;
+    };
+
+    auto [promise, future] = makePromiseFuture<Value>();
+    auto sharedBlock = std::make_shared<SharedBlock>(std::move(promise));
+
+    std::move(inputFuture)
+        .unsafeToInlineFuture()
+        .getAsync([sharedBlock](StatusOrStatusWith<Value> result) {
+            // If the input future completes first, change done to true and set the
+            // value on the promise.
+            if (!sharedBlock->done.swap(true)) {
+                sharedBlock->resultPromise.setFrom(std::move(result));
+            }
+        });
+
+    token.onCancel().unsafeToInlineFuture().getAsync([sharedBlock](Status s) {
+        if (s.isOK()) {
+            // If the cancelation token is canceled first, change done to true and set the value on
+            // the promise.
+            if (!sharedBlock->done.swap(true)) {
+                sharedBlock->resultPromise.setError(
+                    {ErrorCodes::CallbackCanceled,
+                     "CancelationToken canceled while waiting for input future"});
+            }
+        }
+    });
+
+    return std::move(future).semi();
+}
 
 /**
  * This class is a helper for ensuring RAII-like behavior in async code.
@@ -690,4 +781,5 @@ auto makeState(Args&&... args) {
 }
 
 }  // namespace future_util
+
 }  // namespace mongo
