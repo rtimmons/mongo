@@ -14,12 +14,12 @@ variables:
       - name: compile
         variant: compile-amazon2
       - name: schedule_global_auto_tasks
-        variant: compile-amazon2
+        variant: task_generation
   _real_compile_rhel70: &_compile_rhel70
       - name: compile
         variant: compile-rhel70
       - name: schedule_global_auto_tasks
-        variant: compile-amazon2
+        variant: task_generation
   _real_expansions: &_expansion_updates
     []
   ###
@@ -28,10 +28,10 @@ variables:
 # **Or**: Leave this section uncommented to bypass/skip compile.
 #  _skip_compile_amazon2: &_compile_amazon2
 #      - name: schedule_global_auto_tasks
-#        variant: compile-amazon2
+#        variant: task_generation
 #  _skip_compile_rhel70: &_compile_rhel70
 #      - name: schedule_global_auto_tasks
-#        variant: compile-amazon2
+#        variant: task_generation
 #  _skip_expansions: &_expansion_updates
 #      # This is the normal (amazon2) "compile" artifact from https://evergreen.mongodb.com/version/sys_perf_4.4_78207ca380688c73b1a217f23d5b7c8803bef9cd
 #      - key: mdb_binary_for_client
@@ -140,6 +140,32 @@ functions:
     - command: expansions.update
       params:
         updates: *_expansion_updates
+  f_schedule_tasks:
+    - command: git.get_project
+      params:
+        directory: *src_dir
+        revisions:
+          dsi: ${dsi_rev}
+          genny: ${genny_rev}
+          signal-processing: ${signal-processing_rev}
+          linkbench: ${linkbench_rev}
+          linkbench2: ${linkbench2_rev}
+          workloads: ${workloads_rev}
+          mongo-perf: ${mongo-perf_rev}
+          YCSB: ${YCSB_rev}
+          benchmarks: ${benchmarks_rev}
+          py-tpcc: ${py-tpcc_rev}
+          # mongo: ${mongo_rev}
+    - command: expansions.write
+      params:
+        file: ./expansions.yml
+    - command: shell.exec
+      params:
+        script: ./src/dsi/run-dsi schedule_tasks --tasks=${tasks}
+    - command: generate.tasks
+      params:
+        files:
+          - build/TaskJSON/Tasks.json
   f_run_dsi_workload:
     - command: git.get_project
       params:
@@ -193,7 +219,7 @@ functions:
         remote_file: ${project_dir}/${build_variant}/${revision}/${task_id}/${version_id}/logs/dsi-artifacts-${task_name}-${build_id}-${execution}.tgz
         bucket: mciuploads
         permissions: public-read
-        content_type: ${application/x-gzip}
+        content_type: application/x-gzip
         display_name: DSI Artifacts - Execution ${execution}
     - command: s3.put
       params:
@@ -340,100 +366,72 @@ functions:
         display_name: mongodb${compile-variant|}.tar.gz
   ###
 
-  ## Schedule Tasks ##
-  f_schedule_tasks:
-    - command: git.get_project
-      params:
-        directory: *src_dir
-        revisions:
-          dsi: ${dsi_rev}
-          genny: ${genny_rev}
-          signal-processing: ${signal-processing_rev}
-          linkbench: ${linkbench_rev}
-          linkbench2: ${linkbench2_rev}
-          workloads: ${workloads_rev}
-          mongo-perf: ${mongo-perf_rev}
-          YCSB: ${YCSB_rev}
-          benchmarks: ${benchmarks_rev}
-          py-tpcc: ${py-tpcc_rev}
-          # mongo: ${mongo_rev}
-    - command: expansions.write
-      params:
-        file: ./expansions.yml
-    - command: shell.exec
-      params:
-        script: ./src/dsi/run-dsi schedule_tasks --tasks=${tasks}
-    - command: generate.tasks
-      params:
-        files:
-          - build/TaskJSON/Tasks.json
-
 tasks:
-  ###
-  # Same in every DSI project
-  - name: schedule_global_auto_tasks
-    priority: 5
-    commands:
-      - func: f_schedule_tasks
-        vars:
-          tasks: all_tasks
-  - name: schedule_variant_auto_tasks
-    priority: 5
-    commands:
-      - func: f_schedule_tasks
-        vars:
-          tasks: variant_tasks
-  - name: schedule_patch_auto_tasks
-    priority: 5
-    commands:
-      - func: f_schedule_tasks
-        vars:
-          tasks: patch_tasks
-  - name: smoke_test
-    priority: 5
-    commands:
-      - func: f_run_dsi_workload
-        vars:
-          test_control: short
-  - name: smoke_test_ssl
-    priority: 5
-    commands:
-      - func: f_run_dsi_workload
-        vars:
-          test_control: short
-          mongodb_setup: replica-ssl
-          infrastructure_provisioning: replica
-  - name: smoke_test_standalone_auth
-    priority: 5
-    commands:
-      - func: f_run_dsi_workload
-        vars:
-          test_control: short
-          mongodb_setup: standalone-auth
-          infrastructure_provisioning: single
-  - name: smoke_test_replset_auth
-    priority: 5
-    commands:
-      - func: f_run_dsi_workload
-        vars:
-          test_control: short
-          mongodb_setup: replica-auth
-          infrastructure_provisioning: replica
-  - name: smoke_test_shard_lite_auth
-    priority: 5
-    commands:
-      - func: f_run_dsi_workload
-        vars:
-          test_control: short
-          mongodb_setup: shard-lite-auth
-          infrastructure_provisioning: shard-lite
-  - name: dsi_integ_test_run_command_simple
-    priority: 5
-    commands:
-      - func: f_run_dsi_workload
-        vars:
-          test_control: run_command_simple
-  ###
+###
+# Same in every DSI project
+- name: schedule_global_auto_tasks
+  priority: 5
+  commands:
+    - func: f_schedule_tasks
+      vars:
+        tasks: all_tasks
+- name: schedule_variant_auto_tasks
+  priority: 5
+  commands:
+    - func: f_schedule_tasks
+      vars:
+        tasks: variant_tasks
+- name: schedule_patch_auto_tasks
+  priority: 5
+  commands:
+    - func: f_schedule_tasks
+      vars:
+        tasks: patch_tasks
+- name: smoke_test
+  priority: 5
+  commands:
+    - func: f_run_dsi_workload
+      vars:
+        test_control: short
+- name: smoke_test_ssl
+  priority: 5
+  commands:
+    - func: f_run_dsi_workload
+      vars:
+        test_control: short
+        mongodb_setup: replica-ssl
+        infrastructure_provisioning: replica
+- name: smoke_test_standalone_auth
+  priority: 5
+  commands:
+    - func: f_run_dsi_workload
+      vars:
+        test_control: short
+        mongodb_setup: standalone-auth
+        infrastructure_provisioning: single
+- name: smoke_test_replset_auth
+  priority: 5
+  commands:
+    - func: f_run_dsi_workload
+      vars:
+        test_control: short
+        mongodb_setup: replica-auth
+        infrastructure_provisioning: replica
+- name: smoke_test_shard_lite_auth
+  priority: 5
+  commands:
+    - func: f_run_dsi_workload
+      vars:
+        test_control: short
+        mongodb_setup: shard-lite-auth
+        infrastructure_provisioning: shard-lite
+- name: dsi_integ_test_run_command_simple
+  priority: 5
+  commands:
+    - func: f_run_dsi_workload
+      vars:
+        test_control: run_command_simple
+###
 
 - name: compile
   commands:
@@ -867,6 +865,16 @@ tasks:
 
 
 buildvariants:
+- name: task_generation
+  display_name: Task Generation
+  modules: *modules
+  expansions:
+    platform: linux
+    project_dir: &project_dir dsi
+  run_on:
+      - amazon2-build
+  tasks:
+    - name: schedule_global_auto_tasks
 - &compile-amazon2
   name: compile-amazon2
   display_name: Compile
@@ -889,7 +897,6 @@ buildvariants:
       - "amazon2-build"
   tasks:
     - name: compile
-    - name: genny_generate_all_tasks
 
 - name: linux-standalone
   display_name: Linux Standalone
@@ -906,8 +913,8 @@ buildvariants:
       - "rhel70-perf-single"
   depends_on: *_compile_amazon2
   tasks: &standalonetasks
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
     - name: dsi_integ_test_run_command_simple
     - name: smoke_test
     - name: industry_benchmarks
@@ -959,6 +966,8 @@ buildvariants:
       - "rhel70-perf-single"
   depends_on: *_compile_amazon2
   tasks: &1nodetasks
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
     - name: industry_benchmarks
     - name: ycsb_60GB
     - name: crud_workloads
@@ -979,8 +988,6 @@ buildvariants:
     - name: linkbench
     - name: linkbench2
     - name: tpcc
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
     - name: industry_benchmarks_wmajority
     - name: sb_large_scale
     - name: sb_timeseries
@@ -1000,11 +1007,11 @@ buildvariants:
       - "rhel70-perf-single"
   depends_on: *_compile_amazon2
   tasks:
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
     - name: industry_benchmarks
     - name: crud_workloads
     - name: smoke_test
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
 
 - name: linux-1-node-replSet-fle
   display_name: Linux 1-Node ReplSet FLE
@@ -1022,10 +1029,10 @@ buildvariants:
       - "rhel70-perf-single"
   depends_on: *_compile_amazon2
   tasks:
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
     - name: industry_benchmarks
     - name: linkbench
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
 
 - name: linux-1-node-replSet-cwrwc
   display_name: Linux 1-Node ReplSet CWRWC
@@ -1042,10 +1049,10 @@ buildvariants:
       - "rhel70-perf-single"
   depends_on: *_compile_amazon2
   tasks:
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
     - name: industry_benchmarks
     - name: linkbench
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
 
 - name: linux-1-node-replSet-ese-cbc
   display_name: Linux 1-Node ReplSet ESE CBC
@@ -1062,10 +1069,10 @@ buildvariants:
       - "rhel70-perf-single"
   depends_on: *_compile_amazon2
   tasks:
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
     - name: industry_benchmarks
     - name: smoke_test
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
     - name: ycsb_60GB
 
 - name: linux-1-node-replSet-ese-gcm
@@ -1083,10 +1090,10 @@ buildvariants:
       - "rhel70-perf-single"
   depends_on: *_compile_amazon2
   tasks:
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
     - name: industry_benchmarks
     - name: smoke_test
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
     - name: ycsb_60GB
 
 - name: linux-1-node-15gbwtcache
@@ -1104,10 +1111,10 @@ buildvariants:
       - "rhel70-perf-single"
   depends_on: *_compile_amazon2
   tasks:
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
     - name: industry_benchmarks
     - name: smoke_test
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
 
 - name: linux-3-node-1dayhistory-15gbwtcache
   display_name: Linux 3-Node ReplSet 1 Day History 15 GB WiredTiger Cache
@@ -1124,11 +1131,11 @@ buildvariants:
     - "rhel70-perf-replset"
   depends_on: *_compile_amazon2
   tasks:
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
     - name: crud_workloads
     - name: crud_workloads_majority
     - name: smoke_test
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
 
 - name: linux-3-shard
   display_name: Linux 3-Shard Cluster
@@ -1145,6 +1152,8 @@ buildvariants:
       - "rhel70-perf-shard"
   depends_on: *_compile_amazon2
   tasks:
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
     - name: industry_benchmarks
     - name: crud_workloads
     - name: mixed_workloads
@@ -1157,8 +1166,6 @@ buildvariants:
     - name: change_streams_throughput
     - name: change_streams_latency
     - name: change_streams_multi_mongos
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
 
 - name: linux-shard-lite-audit
   display_name: Linux Shard Lite Cluster Audit
@@ -1175,6 +1182,8 @@ buildvariants:
       - "rhel70-perf-shard-lite"
   depends_on: *_compile_amazon2
   tasks:
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
     - name: industry_benchmarks
 
 - name: linux-shard-lite
@@ -1192,6 +1201,8 @@ buildvariants:
       - "rhel70-perf-shard-lite"
   depends_on: *_compile_amazon2
   tasks: &shardlitetasks
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
     - name: bestbuy_agg
     - name: bestbuy_agg_merge_different_db
     - name: bestbuy_agg_merge_same_db
@@ -1211,8 +1222,6 @@ buildvariants:
     - name: move_chunk_waiting_workloads
     - name: retryable_writes_workloads
     - name: smoke_test
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
 
 - name: linux-shard-lite-cwrwc
   display_name: Linux Shard Lite Cluster CWRWC
@@ -1229,10 +1238,10 @@ buildvariants:
       - "rhel70-perf-shard-lite"
   depends_on: *_compile_amazon2
   tasks:
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
     - name: industry_benchmarks
     - name: linkbench
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
 
 - name: linux-shard-lite-all-feature-flags
   display_name: Linux Shard Lite (all feature flags)
@@ -1249,8 +1258,8 @@ buildvariants:
     - "rhel70-perf-shard-lite"
   depends_on: *_compile_amazon2
   tasks:
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
 
 - name: linux-shard-single
   display_name: Linux Shard Single
@@ -1267,8 +1276,8 @@ buildvariants:
       - "rhel70-perf-shard-lite"
   depends_on: *_compile_amazon2
   tasks:
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
 
 - name: linux-3-node-replSet
   display_name: Linux 3-Node ReplSet
@@ -1285,6 +1294,8 @@ buildvariants:
       - "rhel70-perf-replset"
   depends_on: *_compile_amazon2
   tasks: &3nodetasks
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
     - name: industry_benchmarks
     - name: ycsb_60GB
     - name: industry_benchmarks_secondary_reads
@@ -1312,8 +1323,6 @@ buildvariants:
     - name: tpcc
     - name: linkbench
     - name: linkbench2
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
     - name: sb_large_scale
     - name: sb_timeseries
 
@@ -1330,11 +1339,7 @@ buildvariants:
     storageEngine: wiredTiger
   run_on:
       - "rhel70-perf-replset"
-  depends_on:
-      - name: compile
-        variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_amazon2
   tasks: *3nodetasks
 
 - name: linux-3-node-replSet-last-lts-fcv
@@ -1350,11 +1355,7 @@ buildvariants:
     storageEngine: wiredTiger
   run_on:
       - "rhel70-perf-replset"
-  depends_on:
-      - name: compile
-        variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_amazon2
   tasks: *3nodetasks
 
 # Note that the "disabled-feature-flags" part of the name is kept to avoid breaking
@@ -1372,11 +1373,7 @@ buildvariants:
     storageEngine: wiredTiger
   run_on:
       - "rhel70-perf-replset"
-  depends_on:
-      - name: compile
-        variant: compile-amazon2
-      - name: genny_generate_all_tasks
-        variant: compile-amazon2
+  depends_on: *_compile_amazon2
   tasks: *3nodetasks
 
 - name: linux-3-node-replSet-noflowcontrol
@@ -1394,6 +1391,8 @@ buildvariants:
       - "rhel70-perf-replset"
   depends_on: *_compile_amazon2
   tasks:
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
     - name: industry_benchmarks
     - name: industry_benchmarks_secondary_reads
     - name: crud_workloads
@@ -1406,8 +1405,6 @@ buildvariants:
     - name: tpcc
     - name: linkbench
     - name: linkbench2
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
 
 - name: linux-3-node-replSet-ssl
   display_name: Linux 3-Node ReplSet (SSL)
@@ -1424,10 +1421,10 @@ buildvariants:
       - "rhel70-perf-replset"
   depends_on: *_compile_amazon2
   tasks:
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
     - name: industry_benchmarks
     - name: mixed_workloads
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
 
 - name: linux-3-node-replSet-maintenance-events
   display_name: Linux 3-Node ReplSet (Maintenance Events)
@@ -1444,6 +1441,8 @@ buildvariants:
       - "rhel70-perf-replset"
   depends_on: *_compile_amazon2
   tasks:
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
     - name: industry_benchmarks_stepdowns
     - name: industry_benchmarks_rolling_restarts
     - name: industry_benchmarks_non_retryable_writes_stepdowns
@@ -1470,11 +1469,11 @@ buildvariants:
   run_on:
       - "rhel70-perf-replset"
   tasks:
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
     - name: initialsync
     - name: initialsync-logkeeper-short
     - name: initialsync-large
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
 
 - name: linux-replSet-initialsync-logkeeper
   display_name: Linux ReplSet Initial Sync LogKeeper
@@ -1493,9 +1492,9 @@ buildvariants:
       - "rhel70-perf-initialsync-logkeeper"
   depends_on: *_compile_amazon2
   tasks:
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
     - name: initialsync-logkeeper
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
 
 # Uncomment this to run logkeeper FCV updates automatically. This is only intended to be run in
 # patch builds.
@@ -1534,6 +1533,8 @@ buildvariants:
       - "rhel70-perf-replset"
   depends_on: *_compile_amazon2
   tasks:
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
     - name: industry_benchmarks
 
 - name: linux-replSet-auth-delay
@@ -1551,7 +1552,8 @@ buildvariants:
       - "rhel70-perf-replset"
   depends_on: *_compile_amazon2
   tasks:
-    - name: genny_auto_tasks
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
 
 - name: atlas-like-M60
   display_name: M60-Like 3-Node ReplSet
@@ -1569,6 +1571,8 @@ buildvariants:
       - "rhel70-perf-M60-like"
   depends_on: *_compile_rhel70
   tasks:  # Cannot use *3nodetasks because secondary_performance uses a special mongodb setup.
+    - name: schedule_patch_auto_tasks
+    - name: schedule_variant_auto_tasks
     - name: industry_benchmarks
     - name: ycsb_60GB
     - name: industry_benchmarks_secondary_reads
@@ -1591,8 +1595,6 @@ buildvariants:
     - name: snapshot_reads
     - name: secondary_reads
     - name: linkbench
-    - name: genny_patch_tasks
-    - name: genny_auto_tasks
 
 - name: renew-ssl-cert
   display_name: Renew SSL Cert
