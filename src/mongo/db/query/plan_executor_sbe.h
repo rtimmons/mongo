@@ -117,8 +117,13 @@ public:
     Timestamp getLatestOplogTimestamp() const override;
     BSONObj getPostBatchResumeToken() const override;
 
+    /**
+     * Even though the leaves of '_root' will acquire AutoGet objects, the caller must acquire a top
+     * level AutoGet object outside of this PlanExecutor in order to open a storage transaction and
+     * establish a consistent view of the catalog.
+     */
     LockPolicy lockPolicy() const override {
-        return LockPolicy::kLocksInternally;
+        return LockPolicy::kLockExternally;
     }
 
     const PlanExplainer& getPlanExplainer() const final {
@@ -143,6 +148,9 @@ private:
 
     sbe::value::SlotAccessor* _result{nullptr};
     sbe::value::SlotAccessor* _resultRecordId{nullptr};
+    sbe::value::TypeTags _tagLastRecordId{sbe::value::TypeTags::Nothing};
+    sbe::value::Value _valLastRecordId{0};
+
     sbe::value::SlotAccessor* _oplogTs{nullptr};
     boost::optional<sbe::value::SlotId> _resumeRecordIdSlot;
 

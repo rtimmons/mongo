@@ -32,6 +32,7 @@
 #include <memory>
 
 #include "mongo/bson/timestamp.h"
+#include "mongo/db/cancelable_operation_context.h"
 #include "mongo/db/catalog/collection_catalog.h"
 #include "mongo/db/exec/document_value/value.h"
 #include "mongo/db/namespace_string.h"
@@ -49,7 +50,6 @@ class TaskExecutor;
 
 }  // namespace executor
 
-class CancelableOperationContextFactory;
 class OperationContext;
 class MongoProcessInterface;
 class ReshardingMetrics;
@@ -94,6 +94,7 @@ public:
      *   (b) the cancellation token was canceled due to a stepdown or abort.
      */
     SemiFuture<void> run(std::shared_ptr<executor::TaskExecutor> executor,
+                         std::shared_ptr<executor::TaskExecutor> cleanupExecutor,
                          CancellationToken cancelToken,
                          CancelableOperationContextFactory factory);
 

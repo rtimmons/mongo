@@ -430,7 +430,7 @@ void ShardServerOpObserver::onUpdate(OperationContext* opCtx, const OplogUpdateE
                                        *metadata->getChunkManager(),
                                        args.updateArgs.updatedDoc,
                                        args.updateArgs.updatedDoc.objsize(),
-                                       args.updateArgs.fromMigrate);
+                                       args.updateArgs.source == OperationSource::kFromMigrate);
     }
 }
 
@@ -500,8 +500,8 @@ void ShardServerOpObserver::onDelete(OperationContext* opCtx,
             opCtx->recoveryUnit()->onCommit([opCtx, deletedNss](boost::optional<Timestamp>) {
                 UninterruptibleLockGuard noInterrupt(opCtx->lockState());
                 auto* const csr = CollectionShardingRuntime::get(opCtx, deletedNss);
-                // The CSRLock is taken in exclusive mode by exitCriticalSection
-                csr->exitCriticalSection(opCtx);
+                auto csrLock = CollectionShardingRuntime::CSRLock::lockExclusive(opCtx, csr);
+                csr->exitCriticalSection(csrLock);
             });
         }
     }

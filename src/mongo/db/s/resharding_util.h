@@ -56,22 +56,20 @@ constexpr auto kReshardFinalOpLogType = "reshardFinalOp"_sd;
  * Emplaces the 'fetchTimestamp' onto the ClassWithFetchTimestamp if the timestamp has been
  * emplaced inside the boost::optional.
  */
-template <class ClassWithFetchTimestamp>
-void emplaceFetchTimestampIfExists(ClassWithFetchTimestamp& c,
-                                   boost::optional<Timestamp> fetchTimestamp) {
-    if (!fetchTimestamp) {
+template <typename ClassWithCloneTimestamp>
+void emplaceCloneTimestampIfExists(ClassWithCloneTimestamp& c,
+                                   boost::optional<Timestamp> cloneTimestamp) {
+    if (!cloneTimestamp) {
         return;
     }
 
-    invariant(!fetchTimestamp->isNull());
+    invariant(!cloneTimestamp->isNull());
 
-    if (auto alreadyExistingFetchTimestamp = c.getFetchTimestamp()) {
-        invariant(fetchTimestamp == alreadyExistingFetchTimestamp);
+    if (auto alreadyExistingCloneTimestamp = c.getCloneTimestamp()) {
+        invariant(cloneTimestamp == alreadyExistingCloneTimestamp);
     }
 
-    FetchTimestamp fetchTimestampStruct;
-    fetchTimestampStruct.setFetchTimestamp(std::move(fetchTimestamp));
-    c.setFetchTimestampStruct(std::move(fetchTimestampStruct));
+    c.setCloneTimestamp(*cloneTimestamp);
 }
 
 /**
@@ -135,6 +133,34 @@ Status getStatusFromAbortReason(ClassWithAbortReason& c) {
         errmsg = errmsgElement.toString();
     }
     return Status(ErrorCodes::Error(code), errmsg, abortReasonObj);
+}
+
+/**
+ * Extracts the ShardId from each Donor/RecipientShardEntry in participantShardEntries.
+ */
+template <class T>
+std::vector<ShardId> extractShardIdsFromParticipantEntries(
+    const std::vector<T>& participantShardEntries) {
+    std::vector<ShardId> shardIds(participantShardEntries.size());
+    std::transform(participantShardEntries.begin(),
+                   participantShardEntries.end(),
+                   shardIds.begin(),
+                   [](const auto& shardEntry) { return shardEntry.getId(); });
+    return shardIds;
+}
+
+/**
+ * Extracts the ShardId from each Donor/RecipientShardEntry in participantShardEntries as a set.
+ */
+template <class T>
+std::set<ShardId> extractShardIdsFromParticipantEntriesAsSet(
+    const std::vector<T>& participantShardEntries) {
+    std::set<ShardId> shardIds;
+    std::transform(participantShardEntries.begin(),
+                   participantShardEntries.end(),
+                   std::inserter(shardIds, shardIds.end()),
+                   [](const auto& shardEntry) { return shardEntry.getId(); });
+    return shardIds;
 }
 
 /**

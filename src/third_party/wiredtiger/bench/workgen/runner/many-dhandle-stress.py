@@ -38,7 +38,7 @@ sample_rate=1
 
 context = Context()
 conn_config = ""
-conn_config += ",cache_size=10G,eviction=(threads_min=4,threads_max=4),file_manager=(close_idle_time=30),session_max=1000"   # explicitly added
+conn_config += ",cache_size=10G,eviction=(threads_min=4,threads_max=4),file_manager=(close_idle_time=30),session_max=1000,statistics=[all,clear],statistics_log=(wait=1,json=false,on_close=true)"   # explicitly added
 conn = context.wiredtiger_open("create," + conn_config)
 s = conn.open_session("")
 
@@ -90,6 +90,9 @@ workload.options.run_time=900
 workload.options.max_latency=1000
 workload.options.sample_rate=1
 workload.options.sample_interval_ms = 5000
+# Uncomment to fail instead of generating a warning
+# workload.options.max_idle_table_cycle_fatal = True
+workload.options.max_idle_table_cycle = 2
 workload.run(conn)
 
 latency_filename = context.args.home + "/latency.out"

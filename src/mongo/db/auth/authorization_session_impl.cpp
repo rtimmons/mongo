@@ -75,7 +75,7 @@ constexpr StringData ADMIN_DBNAME = "admin"_sd;
 bool checkContracts() {
 
     // Only check contracts if the feature is enabled.
-    // TODO SERVER-52364 - Remove feature flag check
+    // TODO SERVER-55908 - Remove feature flag check
     if (!serverGlobalParams.featureCompatibility.isVersionInitialized() ||
         !feature_flags::gFeatureFlagAuthorizationContract.isEnabled(
             serverGlobalParams.featureCompatibility)) {
@@ -94,7 +94,7 @@ bool checkContracts() {
 
 AuthorizationSessionImpl::AuthorizationSessionImpl(
     std::unique_ptr<AuthzSessionExternalState> externalState, InstallMockForTestingOrAuthImpl)
-    : _externalState(std::move(externalState)), _impersonationFlag(false) {}
+    : _externalState(std::move(externalState)), _impersonationFlag(false), _checkContracts(false) {}
 
 AuthorizationSessionImpl::~AuthorizationSessionImpl() {
     invariant(_authenticatedUsers.count() == 0,
@@ -112,9 +112,11 @@ void AuthorizationSessionImpl::startRequest(OperationContext* opCtx) {
 
 void AuthorizationSessionImpl::startContractTracking() {
     if (!checkContracts()) {
+        _checkContracts = false;
         return;
     }
 
+    _checkContracts = true;
     _contract.clear();
 }
 
@@ -853,6 +855,11 @@ void AuthorizationSessionImpl::verifyContract(const AuthorizationContract* contr
     }
 
     if (!checkContracts()) {
+        return;
+    }
+
+    // Do not check a contract if we decided earlier not to clear the contract tracking state.
+    if (!_checkContracts) {
         return;
     }
 

@@ -34,7 +34,6 @@
 #include "mongo/db/auth/authorization_session.h"
 #include "mongo/db/catalog/rename_collection.h"
 #include "mongo/db/commands.h"
-#include "mongo/db/repl/repl_client_info.h"
 #include "mongo/db/s/range_deletion_util.h"
 #include "mongo/db/s/shard_metadata_util.h"
 #include "mongo/db/s/sharding_ddl_util.h"
@@ -66,6 +65,27 @@ void dropCollectionLocally(OperationContext* opCtx, const NamespaceString& nss) 
                 "Dropped target collection locally on renameCollection participant",
                 "namespace"_attr = nss,
                 "collectionExisted"_attr = knownNss);
+}
+
+/*
+ * Rename the collection if exists locally, otherwise simply drop the source collection.
+ * Returns true if the source collection is known, false otherwise.
+ */
+void renameOrDropTarget(OperationContext* opCtx,
+                        const NamespaceString& fromNss,
+                        const NamespaceString& toNss,
+                        const RenameCollectionOptions& options) {
+    try {
+        validateAndRunRenameCollection(opCtx, fromNss, toNss, options);
+    } catch (ExceptionFor<ErrorCodes::NamespaceNotFound>&) {
+        // It's ok for a participant shard to have no knowledge about a collection
+        LOGV2_DEBUG(5448801,
+                    1,
+                    "Source namespace not found while trying to rename collection on participant",
+                    "namespace"_attr = fromNss);
+        dropCollectionLocally(opCtx, toNss);
+        deleteRangeDeletionTasksForRename(opCtx, fromNss, toNss);
+    }
 }
 
 class ShardsvrRenameCollectionParticipantCommand final
@@ -108,38 +128,21 @@ public:
             const auto reason = BSON("command"
                                      << "rename"
                                      << "from" << fromNss.toString() << "to" << toNss.toString());
-            sharding_ddl_util::acquireRecoverableCriticalSectionBlockWrites(opCtx, fromNss, reason);
-            sharding_ddl_util::acquireRecoverableCriticalSectionBlockReads(opCtx, fromNss, reason);
-            sharding_ddl_util::acquireRecoverableCriticalSectionBlockWrites(opCtx, toNss, reason);
-            sharding_ddl_util::acquireRecoverableCriticalSectionBlockReads(opCtx, toNss, reason);
+            sharding_ddl_util::acquireRecoverableCriticalSectionBlockWrites(
+                opCtx, fromNss, reason, ShardingCatalogClient::kLocalWriteConcern);
+            sharding_ddl_util::acquireRecoverableCriticalSectionBlockReads(
+                opCtx, fromNss, reason, ShardingCatalogClient::kLocalWriteConcern);
+            sharding_ddl_util::acquireRecoverableCriticalSectionBlockWrites(
+                opCtx, toNss, reason, ShardingCatalogClient::kLocalWriteConcern);
+            sharding_ddl_util::acquireRecoverableCriticalSectionBlockReads(
+                opCtx, toNss, reason, ShardingCatalogClient::kMajorityWriteConcern);
 
-            // Wait until both persisted critical sections are majority committed
-            WriteConcernResult ignoreResult;
-            const auto latestOpTime =
-                repl::ReplClientInfo::forClient(opCtx->getClient()).getLastOp();
-            uassertStatusOK(waitForWriteConcern(
-                opCtx, latestOpTime, ShardingCatalogClient::kMajorityWriteConcern, &ignoreResult));
+            snapshotRangeDeletionsForRename(opCtx, fromNss, toNss);
 
-            dropCollectionLocally(opCtx, toNss);
+            renameOrDropTarget(opCtx, fromNss, toNss, options);
 
-            try {
-                snapshotRangeDeletionsForRename(opCtx, fromNss, toNss);
-
-                // Rename the collection locally and clear the cache
-                validateAndRunRenameCollection(opCtx, fromNss, toNss, options);
-                uassertStatusOK(
-                    shardmetadatautil::dropChunksAndDeleteCollectionsEntry(opCtx, fromNss));
-
-                restoreRangeDeletionTasksForRename(opCtx, toNss);
-                deleteRangeDeletionTasksForRename(opCtx, fromNss, toNss);
-            } catch (ExceptionFor<ErrorCodes::NamespaceNotFound>&) {
-                // It's ok for a participant shard to have no knowledge about a collection
-                LOGV2_DEBUG(
-                    5448801,
-                    1,
-                    "Source namespace not found while trying to rename collection on participant",
-                    "namespace"_attr = fromNss);
-            }
+            restoreRangeDeletionTasksForRename(opCtx, toNss);
+            deleteRangeDeletionTasksForRename(opCtx, fromNss, toNss);
         }
 
     private:
@@ -201,15 +204,10 @@ public:
             const auto reason = BSON("command"
                                      << "rename"
                                      << "from" << fromNss.toString() << "to" << toNss.toString());
-            sharding_ddl_util::releaseRecoverableCriticalSection(opCtx, fromNss, reason);
-            sharding_ddl_util::releaseRecoverableCriticalSection(opCtx, toNss, reason);
-
-            // Wait until both persisted critical sections are majority committed
-            WriteConcernResult ignoreResult;
-            const auto latestOpTime =
-                repl::ReplClientInfo::forClient(opCtx->getClient()).getLastOp();
-            uassertStatusOK(waitForWriteConcern(
-                opCtx, latestOpTime, ShardingCatalogClient::kMajorityWriteConcern, &ignoreResult));
+            sharding_ddl_util::releaseRecoverableCriticalSection(
+                opCtx, fromNss, reason, ShardingCatalogClient::kLocalWriteConcern);
+            sharding_ddl_util::releaseRecoverableCriticalSection(
+                opCtx, toNss, reason, ShardingCatalogClient::kMajorityWriteConcern);
 
             auto catalog = Grid::get(opCtx)->catalogCache();
             uassertStatusOK(catalog->getCollectionRoutingInfoWithRefresh(opCtx, toNss));

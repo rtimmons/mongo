@@ -27,7 +27,7 @@
  *    it in the license file.
  */
 
-#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kReplication
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kTenantMigration
 
 #include "mongo/platform/basic.h"
 
@@ -265,7 +265,7 @@ ExecutorFuture<void> TenantMigrationRecipientService::_rebuildService(
 }
 
 std::shared_ptr<PrimaryOnlyService::Instance> TenantMigrationRecipientService::constructInstance(
-    BSONObj initialStateDoc) const {
+    BSONObj initialStateDoc) {
     return std::make_shared<TenantMigrationRecipientService::Instance>(
         _serviceContext, this, initialStateDoc);
 }
@@ -317,7 +317,7 @@ boost::optional<BSONObj> TenantMigrationRecipientService::Instance::reportForCur
 
     stdx::lock_guard lk(_mutex);
     bob.append("desc", "tenant recipient migration");
-    bob.append("instanceID", _stateDoc.getId().toBSON());
+    _migrationUuid.appendToBuilder(&bob, "instanceID"_sd);
     bob.append("tenantId", _stateDoc.getTenantId());
     bob.append("donorConnectionString", _stateDoc.getDonorConnectionString());
     bob.append("readPreference", _stateDoc.getReadPreference().toInnerBSON());
@@ -346,15 +346,13 @@ boost::optional<BSONObj> TenantMigrationRecipientService::Instance::reportForCur
     }
 
     if (_stateDoc.getStartFetchingDonorOpTime())
-        bob.append("startFetchingDonorOpTime", _stateDoc.getStartFetchingDonorOpTime()->toBSON());
+        _stateDoc.getStartFetchingDonorOpTime()->append(&bob, "startFetchingDonorOpTime");
     if (_stateDoc.getStartApplyingDonorOpTime())
-        bob.append("startApplyingDonorOpTime", _stateDoc.getStartApplyingDonorOpTime()->toBSON());
+        _stateDoc.getStartApplyingDonorOpTime()->append(&bob, "startApplyingDonorOpTime");
     if (_stateDoc.getDataConsistentStopDonorOpTime())
-        bob.append("dataConsistentStopDonorOpTime",
-                   _stateDoc.getDataConsistentStopDonorOpTime()->toBSON());
+        _stateDoc.getDataConsistentStopDonorOpTime()->append(&bob, "dataConsistentStopDonorOpTime");
     if (_stateDoc.getCloneFinishedRecipientOpTime())
-        bob.append("cloneFinishedRecipientOpTime",
-                   _stateDoc.getCloneFinishedRecipientOpTime()->toBSON());
+        _stateDoc.getCloneFinishedRecipientOpTime()->append(&bob, "cloneFinishedRecipientOpTime");
 
     if (_stateDoc.getExpireAt())
         bob.append("expireAt", *_stateDoc.getExpireAt());
@@ -706,9 +704,15 @@ TenantMigrationRecipientService::Instance::_createAndConnectClients() {
              * 'startApplyingDonorOpTime'
              * 3) Some other retriable error
              */
+            // TODO (SERVER-55473): Investigate if DBClientBase::_auth can return the original
+            // status instead of AuthenticationFailed.
             if (status == ErrorCodes::FailedToSatisfyReadPreference ||
                 status == ErrorCodes::Error(kDelayedMajorityOpTimeErrorCode) ||
-                ErrorCodes::isRetriableError(status)) {
+                ErrorCodes::isRetriableError(status) ||
+                (status == ErrorCodes::AuthenticationFailed &&
+                 status.reason().find(
+                     "network error while attempting to run command 'authenticate'") !=
+                     std::string::npos)) {
                 return false;
             }
 
@@ -866,8 +870,8 @@ void TenantMigrationRecipientService::Instance::_getStartOpTimesFromDonor(WithLo
     _stateDoc.setStartFetchingDonorOpTime(startFetchingDonorOpTime);
 }
 
-AggregateCommand TenantMigrationRecipientService::Instance::_makeCommittedTransactionsAggregation()
-    const {
+AggregateCommandRequest
+TenantMigrationRecipientService::Instance::_makeCommittedTransactionsAggregation() const {
 
     auto opCtx = cc().makeOperationContext();
     auto expCtx = makeExpressionContext(opCtx.get());
@@ -884,8 +888,8 @@ AggregateCommand TenantMigrationRecipientService::Instance::_makeCommittedTransa
             expCtx, startFetchingTimestamp, getTenantId())
             ->serializeToBson();
 
-    AggregateCommand aggRequest(NamespaceString::kSessionTransactionsTableNamespace,
-                                std::move(serializedPipeline));
+    AggregateCommandRequest aggRequest(NamespaceString::kSessionTransactionsTableNamespace,
+                                       std::move(serializedPipeline));
 
     auto readConcern = repl::ReadConcernArgs(
         boost::optional<LogicalTime>(startFetchingTimestamp),
@@ -926,7 +930,8 @@ void TenantMigrationRecipientService::Instance::_processCommittedTransactionEntr
                 "sessionId"_attr = sessionId,
                 "txnNumber"_attr = txnNumber,
                 "tenantId"_attr = getTenantId(),
-                "migrationId"_attr = getMigrationUUID());
+                "migrationId"_attr = getMigrationUUID(),
+                "entry"_attr = entry.toString());
 
     auto txnParticipant = TransactionParticipant::get(opCtx);
     uassert(5351300,
@@ -1122,8 +1127,8 @@ TenantMigrationRecipientService::Instance::_fetchRetryableWritesOplogBeforeStart
             expCtx, startFetchingTimestamp, getTenantId())
             ->serializeToBson();
 
-    AggregateCommand aggRequest(NamespaceString::kSessionTransactionsTableNamespace,
-                                std::move(serializedPipeline));
+    AggregateCommandRequest aggRequest(NamespaceString::kSessionTransactionsTableNamespace,
+                                       std::move(serializedPipeline));
 
     auto readConcernArgs = repl::ReadConcernArgs(
         boost::optional<repl::ReadConcernLevel>(repl::ReadConcernLevel::kMajorityReadConcern));
@@ -1747,7 +1752,7 @@ void TenantMigrationRecipientService::Instance::_fetchAndStoreDonorClusterTimeKe
             tenant_migration_util::makeExternalClusterTimeKeyDoc(_migrationUuid, doc));
     }
 
-    tenant_migration_util::storeExternalClusterTimeKeyDocs(_scopedExecutor, std::move(keyDocs));
+    tenant_migration_util::storeExternalClusterTimeKeyDocs(std::move(keyDocs));
 }
 
 void TenantMigrationRecipientService::Instance::_compareRecipientAndDonorFCV() const {
@@ -2053,6 +2058,8 @@ SemiFuture<void> TenantMigrationRecipientService::Instance::run(
                                    "migrationId"_attr = getMigrationUUID());
                        {
                            stdx::lock_guard lk(_mutex);
+                           _tenantOplogApplier->setCloneFinishedRecipientOpTime(
+                               *_stateDoc.getCloneFinishedRecipientOpTime());
                            uassertStatusOK(_tenantOplogApplier->startup());
                            _isRestartingOplogApplier = false;
                            _restartOplogApplierCondVar.notify_all();

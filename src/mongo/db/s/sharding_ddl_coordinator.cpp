@@ -33,6 +33,7 @@
 
 #include "mongo/db/s/sharding_ddl_coordinator.h"
 
+#include "mongo/db/persistent_task_store.h"
 #include "mongo/db/s/database_sharding_state.h"
 #include "mongo/db/s/operation_sharding_state.h"
 #include "mongo/db/s/sharding_ddl_coordinator_gen.h"
@@ -47,11 +48,25 @@ ShardingDDLCoordinatorMetadata extractShardingDDLCoordinatorMetadata(const BSONO
 }
 
 ShardingDDLCoordinator::ShardingDDLCoordinator(const BSONObj& coorDoc)
-    : _coorMetadata(extractShardingDDLCoordinatorMetadata(coorDoc)) {}
+    : _coorMetadata(extractShardingDDLCoordinatorMetadata(coorDoc)),
+      _recoveredFromDisk(_coorMetadata.getRecoveredFromDisk()) {}
 
 ShardingDDLCoordinator::~ShardingDDLCoordinator() {
     invariant(_constructionCompletionPromise.getFuture().isReady());
     invariant(_completionPromise.getFuture().isReady());
+}
+
+void ShardingDDLCoordinator::_removeDocument(OperationContext* opCtx) {
+    PersistentTaskStore<ShardingDDLCoordinatorMetadata> store(
+        NamespaceString::kShardingDDLCoordinatorsNamespace);
+    LOGV2_DEBUG(5565601,
+                2,
+                "Removing sharding DDL coordinator document",
+                "coordinatorId"_attr = _coorMetadata.getId());
+    store.remove(
+        opCtx,
+        BSON(ShardingDDLCoordinatorMetadata::kIdFieldName << _coorMetadata.getId().toBSON()),
+        WriteConcerns::kMajorityWriteConcern);
 }
 
 void ShardingDDLCoordinator::interrupt(Status status) {
@@ -60,7 +75,6 @@ void ShardingDDLCoordinator::interrupt(Status status) {
                 "Sharding DDL Coordinator received an interrupt",
                 "coordinatorId"_attr = _coorMetadata.getId(),
                 "reason"_attr = redact(status));
-    _interruptImpl(status);
     // Resolve any unresolved promises to avoid hanging.
     stdx::lock_guard<Latch> lg(_mutex);
     if (!_constructionCompletionPromise.getFuture().isReady()) {
@@ -101,6 +115,10 @@ SemiFuture<void> ShardingDDLCoordinator::run(std::shared_ptr<executor::ScopedTas
                 _scopedLocks.emplace(collDistLock.moveToAnotherThread());
             }
 
+            for (auto& lock : _acquireAdditionalLocks(opCtx)) {
+                _scopedLocks.emplace(lock.moveToAnotherThread());
+            }
+
             stdx::lock_guard<Latch> lg(_mutex);
             if (!_constructionCompletionPromise.getFuture().isReady()) {
                 _constructionCompletionPromise.emplaceValue();
@@ -123,15 +141,40 @@ SemiFuture<void> ShardingDDLCoordinator::run(std::shared_ptr<executor::ScopedTas
             auto opCtxHolder = cc().makeOperationContext();
             auto* opCtx = opCtxHolder.get();
 
+            const auto completionStatus = [&] {
+                if (!status.isOK() &&
+                    (status.isA<ErrorCategory::NotPrimaryError>() ||
+                     status.isA<ErrorCategory::ShutdownError>())) {
+                    // Do not remove the coordinator document
+                    // if we had a stepdown related error.
+                    return status;
+                }
+
+                try {
+                    _removeDocument(opCtx);
+                    return status;
+                } catch (DBException& ex) {
+                    static constexpr auto& errMsg =
+                        "Failed to remove sharding DDL coordinator document";
+                    LOGV2_WARNING(5565605,
+                                  errMsg,
+                                  "coordinatorId"_attr = _coorMetadata.getId(),
+                                  "error"_attr = redact(ex));
+                    return ex.toStatus(errMsg);
+                }
+            }();
+
             while (!_scopedLocks.empty()) {
                 _scopedLocks.top().assignNewOpCtx(opCtx);
                 _scopedLocks.pop();
             }
+
             stdx::lock_guard<Latch> lg(_mutex);
             if (!_completionPromise.getFuture().isReady()) {
-                _completionPromise.setFrom(status);
+                _completionPromise.setFrom(completionStatus);
             }
-            return status;
+
+            return completionStatus;
         })
         .semi();
 }

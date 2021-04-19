@@ -90,7 +90,7 @@ protected:
                                           {DonorShardEntry(ShardId("shard0000"), {})},
                                           {RecipientShardEntry(ShardId("shard0001"), {})});
         doc.setCommonReshardingMetadata(meta);
-        emplaceFetchTimestampIfExists(doc, std::move(fetchTimestamp));
+        emplaceCloneTimestampIfExists(doc, std::move(fetchTimestamp));
         return doc;
     }
 
@@ -200,7 +200,7 @@ protected:
         reshardingFields.setDonorFields(TypeCollectionDonorFields(
             coordinatorDoc.getTempReshardingNss(),
             coordinatorDoc.getReshardingKey(),
-            resharding::extractShardIds(coordinatorDoc.getRecipientShards())));
+            extractShardIdsFromParticipantEntries(coordinatorDoc.getRecipientShards())));
 
         auto originalNssCatalogEntry = makeOriginalCollectionCatalogEntry(
             coordinatorDoc,
@@ -251,12 +251,12 @@ protected:
                       0);
         ASSERT(coordinatorDoc.getState() == expectedCoordinatorDoc.getState());
         ASSERT(coordinatorDoc.getActive());
-        if (expectedCoordinatorDoc.getFetchTimestamp()) {
-            ASSERT(coordinatorDoc.getFetchTimestamp());
-            ASSERT_EQUALS(coordinatorDoc.getFetchTimestamp().get(),
-                          expectedCoordinatorDoc.getFetchTimestamp().get());
+        if (expectedCoordinatorDoc.getCloneTimestamp()) {
+            ASSERT(coordinatorDoc.getCloneTimestamp());
+            ASSERT_EQUALS(coordinatorDoc.getCloneTimestamp().get(),
+                          expectedCoordinatorDoc.getCloneTimestamp().get());
         } else {
-            ASSERT(!coordinatorDoc.getFetchTimestamp());
+            ASSERT(!coordinatorDoc.getCloneTimestamp());
         }
 
         // Confirm the (non)existence of the CoordinatorDocument abortReason.
@@ -398,12 +398,12 @@ protected:
         ASSERT_EQUALS(onDiskReshardingFields.getRecipientFields()->getSourceNss(),
                       expectedReshardingFields.getRecipientFields()->getSourceNss());
 
-        if (expectedReshardingFields.getRecipientFields()->getFetchTimestamp()) {
-            ASSERT(onDiskReshardingFields.getRecipientFields()->getFetchTimestamp());
-            ASSERT_EQUALS(onDiskReshardingFields.getRecipientFields()->getFetchTimestamp().get(),
-                          expectedReshardingFields.getRecipientFields()->getFetchTimestamp().get());
+        if (expectedReshardingFields.getRecipientFields()->getCloneTimestamp()) {
+            ASSERT(onDiskReshardingFields.getRecipientFields()->getCloneTimestamp());
+            ASSERT_EQUALS(onDiskReshardingFields.getRecipientFields()->getCloneTimestamp().get(),
+                          expectedReshardingFields.getRecipientFields()->getCloneTimestamp().get());
         } else {
-            ASSERT(!onDiskReshardingFields.getRecipientFields()->getFetchTimestamp());
+            ASSERT(!onDiskReshardingFields.getRecipientFields()->getCloneTimestamp());
         }
 
         if (onDiskReshardingFields.getState() == CoordinatorStateEnum::kError) {
@@ -475,7 +475,7 @@ protected:
         TypeCollectionDonorFields donorField(
             expectedCoordinatorDoc.getTempReshardingNss(),
             expectedCoordinatorDoc.getReshardingKey(),
-            resharding::extractShardIds(expectedCoordinatorDoc.getRecipientShards()));
+            extractShardIdsFromParticipantEntries(expectedCoordinatorDoc.getRecipientShards()));
         expectedReshardingFields.setDonorFields(donorField);
         if (auto abortReason = expectedCoordinatorDoc.getAbortReason()) {
             AbortReason abortReasonStruct;
@@ -522,10 +522,11 @@ protected:
             TypeCollectionReshardingFields reshardingFields(
                 expectedCoordinatorDoc.getReshardingUUID());
             reshardingFields.setState(expectedCoordinatorDoc.getState());
-            reshardingFields.setDonorFields(TypeCollectionDonorFields(
-                expectedCoordinatorDoc.getTempReshardingNss(),
-                expectedCoordinatorDoc.getReshardingKey(),
-                resharding::extractShardIds(expectedCoordinatorDoc.getRecipientShards())));
+            reshardingFields.setDonorFields(
+                TypeCollectionDonorFields(expectedCoordinatorDoc.getTempReshardingNss(),
+                                          expectedCoordinatorDoc.getReshardingKey(),
+                                          extractShardIdsFromParticipantEntries(
+                                              expectedCoordinatorDoc.getRecipientShards())));
 
             auto originalNssCatalogEntry = makeOriginalCollectionCatalogEntry(
                 expectedCoordinatorDoc,
@@ -760,7 +761,7 @@ TEST_F(ReshardingCoordinatorPersistenceTest, StateTransitionWithFetchTimestampSu
     // Persist the updates on disk
     auto expectedCoordinatorDoc = coordinatorDoc;
     expectedCoordinatorDoc.setState(CoordinatorStateEnum::kCloning);
-    emplaceFetchTimestampIfExists(expectedCoordinatorDoc, Timestamp(1, 1));
+    emplaceCloneTimestampIfExists(expectedCoordinatorDoc, Timestamp(1, 1));
 
     writeStateTransitionUpdateExpectSuccess(operationContext(), expectedCoordinatorDoc);
     assertChunkVersionIncreasedAfterStateTransition(donorChunk, donorCollectionVersion);

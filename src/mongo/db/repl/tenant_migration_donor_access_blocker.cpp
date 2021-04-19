@@ -53,7 +53,8 @@ const Backoff kExponentialBackoff(Seconds(1), Milliseconds::max());
 
 TenantMigrationDonorAccessBlocker::TenantMigrationDonorAccessBlocker(
     ServiceContext* serviceContext, std::string tenantId, std::string recipientConnString)
-    : _serviceContext(serviceContext),
+    : TenantMigrationAccessBlocker(BlockerType::kDonor),
+      _serviceContext(serviceContext),
       _tenantId(std::move(tenantId)),
       _recipientConnString(std::move(recipientConnString)) {
     _asyncBlockingOperationsExecutor = TenantMigrationAccessBlockerExecutor::get(serviceContext)
@@ -95,7 +96,7 @@ Status TenantMigrationDonorAccessBlocker::waitUntilCommittedOrAborted(OperationC
         futures.push_back(std::move(deadlineReachedFuture));
     }
 
-    auto waitResult = whenAny(std::move(futures)).getNoThrow();
+    auto waitResult = whenAny(std::move(futures)).getNoThrow(opCtx);
     if (!waitResult.isOK()) {
         return waitResult.getStatus();
     }

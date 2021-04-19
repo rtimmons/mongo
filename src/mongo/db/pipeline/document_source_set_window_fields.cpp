@@ -53,7 +53,7 @@ REGISTER_DOCUMENT_SOURCE_CONDITIONALLY(
     document_source_set_window_fields::createFromBson,
     LiteParsedDocumentSource::AllowedWithApiStrict::kAlways,
     LiteParsedDocumentSource::AllowedWithClientType::kAny,
-    boost::none,
+    ServerGlobalParams::FeatureCompatibility::Version::kVersion50,
     ::mongo::feature_flags::gFeatureFlagWindowFunctions.isEnabledAndIgnoreFCV());
 
 REGISTER_DOCUMENT_SOURCE_CONDITIONALLY(
@@ -62,7 +62,7 @@ REGISTER_DOCUMENT_SOURCE_CONDITIONALLY(
     DocumentSourceInternalSetWindowFields::createFromBson,
     LiteParsedDocumentSource::AllowedWithApiStrict::kInternal,
     LiteParsedDocumentSource::AllowedWithClientType::kAny,
-    boost::none,
+    ServerGlobalParams::FeatureCompatibility::Version::kVersion50,
     ::mongo::feature_flags::gFeatureFlagWindowFunctions.isEnabledAndIgnoreFCV());
 
 list<intrusive_ptr<DocumentSource>> document_source_set_window_fields::createFromBson(
@@ -163,7 +163,7 @@ list<intrusive_ptr<DocumentSource>> document_source_set_window_fields::create(
         if (dynamic_cast<ExpressionConstant*>(partitionBy->get())) {
             // partitionBy optimizes to a constant expression, equivalent to a single partition.
         } else if (auto exprFieldPath = dynamic_cast<ExpressionFieldPath*>(partitionBy->get());
-                   exprFieldPath && exprFieldPath->isRootFieldPath()) {
+                   exprFieldPath && !exprFieldPath->isVariableReference()) {
             // ExpressionFieldPath has "CURRENT" as an explicit first component,
             // but for $sort we don't want that.
             simplePartitionBy = exprFieldPath->getFieldPath().tail();
@@ -273,7 +273,7 @@ boost::intrusive_ptr<DocumentSource> DocumentSourceInternalSetWindowFields::crea
 void DocumentSourceInternalSetWindowFields::initialize() {
     _maxMemory = internalDocumentSourceSetWindowFieldsMaxMemoryBytes.load();
     for (auto& wfs : _outputFields) {
-        _executableOutputs[wfs.fieldName] = WindowFunctionExec::create(&_iterator, wfs);
+        _executableOutputs[wfs.fieldName] = WindowFunctionExec::create(&_iterator, wfs, _sortBy);
     }
     _init = true;
 }

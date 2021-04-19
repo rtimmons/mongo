@@ -46,7 +46,6 @@
 #include "mongo/db/query/sbe_stage_builder_filter.h"
 #include "mongo/db/query/sbe_stage_builder_helpers.h"
 #include "mongo/db/query/util/make_data_structure.h"
-#include "mongo/db/record_id_helpers.h"
 #include "mongo/logv2/log.h"
 #include "mongo/util/str.h"
 
@@ -96,7 +95,7 @@ makeOplogTimestampSlotsIfNeeded(const CollectionPtr& collection,
         invariant(collection->ns().isOplog());
 
         auto tsSlot = slotIdGenerator->generate();
-        return {{repl::OpTime::kTimestampFieldName}, sbe::makeSV(tsSlot), tsSlot};
+        return {{repl::OpTime::kTimestampFieldName.toString()}, sbe::makeSV(tsSlot), tsSlot};
     }
     return {};
 };
@@ -162,17 +161,21 @@ std::pair<std::unique_ptr<sbe::PlanStage>, PlanStageSlots> generateOptimizedOplo
     auto&& [fields, slots, tsSlot] = makeOplogTimestampSlotsIfNeeded(
         collection, slotIdGenerator, shouldTrackLatestOplogTimestamp);
 
+    sbe::ScanCallbacks callbacks(
+        lockAcquisitionCallback, {}, makeOpenCallbackIfNeeded(collection, csn));
     auto stage = sbe::makeS<sbe::ScanStage>(collection->uuid(),
                                             resultSlot,
                                             recordIdSlot,
+                                            boost::none /* snapshotIdSlot */,
+                                            boost::none /* indexIdSlot */,
+                                            boost::none /* indexKeySlot */,
                                             std::move(fields),
                                             std::move(slots),
                                             seekRecordIdSlot,
                                             true /* forward */,
                                             yieldPolicy,
                                             csn->nodeId(),
-                                            lockAcquisitionCallback,
-                                            makeOpenCallbackIfNeeded(collection, csn));
+                                            std::move(callbacks));
 
     // Start the scan from the seekRecordId.
     if (seekRecordId) {
@@ -185,7 +188,7 @@ std::pair<std::unique_ptr<sbe::PlanStage>, PlanStageSlots> generateOptimizedOplo
                     sbe::makeS<sbe::CoScanStage>(csn->nodeId()), 1, boost::none, csn->nodeId()),
                 csn->nodeId(),
                 *seekRecordIdSlot,
-                makeConstant(sbe::value::TypeTags::RecordId, seekRecordId->asLong())),
+                makeConstant(sbe::value::TypeTags::RecordId, seekRecordId->getLong())),
             std::move(stage),
             sbe::makeSV(),
             sbe::makeSV(*seekRecordIdSlot),
@@ -240,8 +243,12 @@ std::pair<std::unique_ptr<sbe::PlanStage>, PlanStageSlots> generateOptimizedOplo
         // the expression does match, then it returns 'false', which causes the filter (and as a
         // result, the branch) to EOF immediately. Note that the resultSlot and recordIdSlot
         // arguments to the ScanStage are boost::none, as we do not need them.
+        sbe::ScanCallbacks branchCallbacks(lockAcquisitionCallback);
         auto minTsBranch = sbe::makeS<sbe::FilterStage<false, true>>(
             sbe::makeS<sbe::ScanStage>(collection->uuid(),
+                                       boost::none,
+                                       boost::none,
+                                       boost::none,
                                        boost::none,
                                        boost::none,
                                        std::move(fields),
@@ -250,7 +257,7 @@ std::pair<std::unique_ptr<sbe::PlanStage>, PlanStageSlots> generateOptimizedOplo
                                        true /* forward */,
                                        yieldPolicy,
                                        csn->nodeId(),
-                                       lockAcquisitionCallback),
+                                       branchCallbacks),
             sbe::makeE<sbe::EIf>(
                 makeBinaryOp(
                     sbe::EPrimBinary::logicOr,
@@ -260,8 +267,9 @@ std::pair<std::unique_ptr<sbe::PlanStage>, PlanStageSlots> generateOptimizedOplo
                                               csn->assertTsHasNotFallenOffOplog->asULL())),
                     makeBinaryOp(
                         sbe::EPrimBinary::logicAnd,
-                        makeBinaryOp(
-                            sbe::EPrimBinary::eq, makeVariable(opTypeSlot), makeConstant("n")),
+                        makeBinaryOp(sbe::EPrimBinary::eq,
+                                     makeVariable(opTypeSlot),
+                                     makeConstant("n")),
                         makeBinaryOp(sbe::EPrimBinary::logicAnd,
                                      makeFunction("isObject", makeVariable(oObjSlot)),
                                      makeBinaryOp(sbe::EPrimBinary::eq,
@@ -308,7 +316,7 @@ std::pair<std::unique_ptr<sbe::PlanStage>, PlanStageSlots> generateOptimizedOplo
             std::move(stage),
             makeBinaryOp(sbe::EPrimBinary::lessEq,
                          makeVariable(*tsSlot),
-                         makeConstant(sbe::value::TypeTags::Timestamp, csn->maxRecord->asLong())),
+                         makeConstant(sbe::value::TypeTags::Timestamp, csn->maxRecord->getLong())),
             csn->nodeId());
     }
 
@@ -369,6 +377,9 @@ std::pair<std::unique_ptr<sbe::PlanStage>, PlanStageSlots> generateOptimizedOplo
                 sbe::makeS<sbe::ScanStage>(collection->uuid(),
                                            resultSlot,
                                            recordIdSlot,
+                                           boost::none,
+                                           boost::none,
+                                           boost::none,
                                            std::move(fields),
                                            std::move(slots),
                                            seekRecordIdSlot,
@@ -435,17 +446,21 @@ std::pair<std::unique_ptr<sbe::PlanStage>, PlanStageSlots> generateGenericCollSc
     auto&& [fields, slots, tsSlot] = makeOplogTimestampSlotsIfNeeded(
         collection, slotIdGenerator, csn->shouldTrackLatestOplogTimestamp);
 
+    sbe::ScanCallbacks callbacks(
+        lockAcquisitionCallback, {}, makeOpenCallbackIfNeeded(collection, csn));
     auto stage = sbe::makeS<sbe::ScanStage>(collection->uuid(),
                                             resultSlot,
                                             recordIdSlot,
+                                            boost::none,
+                                            boost::none,
+                                            boost::none,
                                             std::move(fields),
                                             std::move(slots),
                                             seekRecordIdSlot,
                                             forward,
                                             yieldPolicy,
                                             csn->nodeId(),
-                                            lockAcquisitionCallback,
-                                            makeOpenCallbackIfNeeded(collection, csn));
+                                            std::move(callbacks));
 
     // Check if the scan should be started after the provided resume RecordId and construct a nested
     // loop join sub-tree to project out the resume RecordId as a seekRecordIdSlot and feed it to
@@ -459,7 +474,7 @@ std::pair<std::unique_ptr<sbe::PlanStage>, PlanStageSlots> generateGenericCollSc
                 sbe::makeS<sbe::CoScanStage>(csn->nodeId()), 1, boost::none, csn->nodeId()),
             csn->nodeId(),
             seekSlot,
-            makeConstant(sbe::value::TypeTags::RecordId, csn->resumeAfterRecordId->asLong()));
+            makeConstant(sbe::value::TypeTags::RecordId, csn->resumeAfterRecordId->getLong()));
 
         // Construct a 'seek' branch of the 'union'. If we're succeeded to reposition the cursor,
         // the branch will output  the 'seekSlot' to start the real scan from, otherwise it will
@@ -467,6 +482,9 @@ std::pair<std::unique_ptr<sbe::PlanStage>, PlanStageSlots> generateGenericCollSc
         auto seekBranch =
             sbe::makeS<sbe::LoopJoinStage>(std::move(projStage),
                                            sbe::makeS<sbe::ScanStage>(collection->uuid(),
+                                                                      boost::none,
+                                                                      boost::none,
+                                                                      boost::none,
                                                                       boost::none,
                                                                       boost::none,
                                                                       std::vector<std::string>{},

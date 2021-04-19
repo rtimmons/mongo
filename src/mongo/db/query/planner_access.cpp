@@ -209,6 +209,57 @@ bool isOplogTsLowerBoundPred(const mongo::MatchExpression* me) {
 
     return me->path() == repl::OpTime::kTimestampFieldName;
 }
+
+/**
+ * Helper function to add an RID range to collection scans.
+ * If the query solution tree contains a collection scan node with a suitable comparison
+ * predicate on '_id', we add a minRecord and maxRecord on the collection node.
+ */
+void handleRIDRangeScan(const MatchExpression* conjunct, CollectionScanNode* collScan) {
+    if (conjunct == nullptr) {
+        return;
+    }
+
+    auto* andMatchPtr = dynamic_cast<const AndMatchExpression*>(conjunct);
+    if (andMatchPtr != nullptr) {
+        for (size_t index = 0; index < andMatchPtr->numChildren(); index++) {
+            handleRIDRangeScan(andMatchPtr->getChild(index), collScan);
+        }
+        return;
+    }
+
+    if (conjunct->path() != "_id") {
+        return;
+    }
+
+    const bool hasMaxRecord = collScan->maxRecord.has_value();
+    const bool hasMinRecord = collScan->minRecord.has_value();
+
+    if (!hasMinRecord && !hasMaxRecord) {
+        if (auto eq = dynamic_cast<const EqualityMatchExpression*>(conjunct)) {
+            collScan->minRecord = record_id_helpers::keyForElem(eq->getData());
+            collScan->maxRecord = collScan->minRecord;
+            return;
+        }
+    }
+
+    if (!hasMaxRecord) {
+        if (auto ltConjunct = dynamic_cast<const LTMatchExpression*>(conjunct)) {
+            collScan->maxRecord = record_id_helpers::keyForElem(ltConjunct->getData());
+        } else if (auto lteConjunct = dynamic_cast<const LTEMatchExpression*>(conjunct)) {
+            collScan->maxRecord = record_id_helpers::keyForElem(lteConjunct->getData());
+        }
+    }
+
+    if (!hasMinRecord) {
+        if (auto gtConjunct = dynamic_cast<const GTMatchExpression*>(conjunct)) {
+            collScan->minRecord = record_id_helpers::keyForElem(gtConjunct->getData());
+        } else if (auto gteConjunct = dynamic_cast<const GTEMatchExpression*>(conjunct)) {
+            collScan->minRecord = record_id_helpers::keyForElem(gteConjunct->getData());
+        }
+    }
+}
+
 }  // namespace
 
 std::unique_ptr<QuerySolutionNode> QueryPlannerAccess::makeCollectionScan(
@@ -224,7 +275,7 @@ std::unique_ptr<QuerySolutionNode> QueryPlannerAccess::makeCollectionScan(
         params.options & QueryPlannerParams::OPLOG_SCAN_WAIT_FOR_VISIBLE;
 
     // If the hint is {$natural: +-1} this changes the direction of the collection scan.
-    const BSONObj& hint = query.getFindCommand().getHint();
+    const BSONObj& hint = query.getFindCommandRequest().getHint();
     if (!hint.isEmpty()) {
         BSONElement natural = hint[query_request_helper::kNaturalSortField];
         if (natural) {
@@ -235,27 +286,16 @@ std::unique_ptr<QuerySolutionNode> QueryPlannerAccess::makeCollectionScan(
     // If the client requested a resume token and we are scanning the oplog, prepare
     // the collection scan to return timestamp-based tokens. Otherwise, we should
     // return generic RecordId-based tokens.
-    if (query.getFindCommand().getRequestResumeToken()) {
+    if (query.getFindCommandRequest().getRequestResumeToken()) {
         csn->shouldTrackLatestOplogTimestamp = query.nss().isOplog();
         csn->requestResumeToken = !query.nss().isOplog();
     }
 
     // Extract and assign the RecordId from the 'resumeAfter' token, if present.
-    const BSONObj& resumeAfterObj = query.getFindCommand().getResumeAfter();
+    const BSONObj& resumeAfterObj = query.getFindCommandRequest().getResumeAfter();
     if (!resumeAfterObj.isEmpty()) {
         BSONElement recordIdElem = resumeAfterObj["$recordId"];
-        switch (recordIdElem.type()) {
-            case jstNULL:
-                csn->resumeAfterRecordId = RecordId();
-                break;
-            case jstOID:
-                csn->resumeAfterRecordId =
-                    RecordId(recordIdElem.OID().view().view(), OID::kOIDSize);
-                break;
-            case NumberLong:
-            default:
-                csn->resumeAfterRecordId = RecordId(recordIdElem.numberLong());
-        }
+        csn->resumeAfterRecordId = RecordId::deserializeToken(recordIdElem);
     }
 
     const bool assertMinTsHasNotFallenOffOplog =
@@ -300,6 +340,11 @@ std::unique_ptr<QuerySolutionNode> QueryPlannerAccess::makeCollectionScan(
                                  "which does not imply a minimum 'ts' value ",
                 csn->assertTsHasNotFallenOffOplog);
     }
+
+    if (params.allowRIDRange && !csn->resumeAfterRecordId) {
+        handleRIDRangeScan(csn->filter.get(), csn.get());
+    }
+
     return csn;
 }
 
@@ -1304,7 +1349,7 @@ std::unique_ptr<QuerySolutionNode> QueryPlannerAccess::buildIndexedAnd(
             for (size_t i = 0; i < andResult->children.size(); ++i) {
                 andResult->children[i]->computeProperties();
                 if (andResult->children[i]->providedSorts().contains(
-                        query.getFindCommand().getSort())) {
+                        query.getFindCommandRequest().getSort())) {
                     std::swap(andResult->children[i], andResult->children.back());
                     break;
                 }
@@ -1403,7 +1448,7 @@ std::unique_ptr<QuerySolutionNode> QueryPlannerAccess::buildIndexedOr(
             // If all ixscanNodes can provide the sort, shouldReverseScan is populated with which
             // scans to reverse.
             shouldReverseScan =
-                canProvideSortWithMergeSort(ixscanNodes, query.getFindCommand().getSort());
+                canProvideSortWithMergeSort(ixscanNodes, query.getFindCommandRequest().getSort());
         }
 
         if (!shouldReverseScan.empty()) {
@@ -1417,7 +1462,7 @@ std::unique_ptr<QuerySolutionNode> QueryPlannerAccess::buildIndexedOr(
             }
 
             auto msn = std::make_unique<MergeSortNode>();
-            msn->sort = query.getFindCommand().getSort();
+            msn->sort = query.getFindCommandRequest().getSort();
             msn->addChildren(std::move(ixscanNodes));
             orResult = std::move(msn);
         } else {

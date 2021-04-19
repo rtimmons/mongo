@@ -102,6 +102,7 @@ selector:
 
   # $indexStats
   - jstests/core/index_stats.js
+  - jstests/core/timeseries/timeseries_index_stats.js
 
   # $collStats
   - jstests/core/operation_latency_histogram.js
@@ -120,7 +121,6 @@ selector:
   - jstests/core/field_name_validation.js
   - jstests/core/insert_illegal_doc.js
   - jstests/core/push_sort.js
-  - jstests/core/rename4.js
   - jstests/core/update_arrayFilters.js
   - jstests/core/update_dbref.js
   - jstests/core/updatel.js
@@ -138,7 +138,6 @@ selector:
   - jstests/core/dbref2.js
   - jstests/core/ref3.js
   - jstests/core/update3.js
-  - jstests/core/rename3.js
 
   ##
   ## Error: Unable to acquire lock within a max lock request timeout of '0ms' milliseconds
@@ -244,8 +243,7 @@ selector:
   - requires_profiling
   # Retrying a query can change whether a plan cache entry is active.
   - inspects_whether_plan_cache_entry_is_active
-  # $out is not supported in transactions
-  - uses_$out
+  - does_not_support_transactions
   # Transaction-continuing commands cannot specify API parameters, so tests that use API parameters
   # cannot be run with transactions.
   - uses_api_parameters

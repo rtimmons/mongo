@@ -365,6 +365,8 @@ public:
      */
     void setMinimumVisibleSnapshot(Timestamp newMinimumVisibleSnapshot) final;
 
+    boost::optional<TimeseriesOptions> getTimeseriesOptions() const final;
+
     /**
      * Get a pointer to the collection's default collator. The pointer must not be used after this
      * Collection is destroyed.
@@ -480,9 +482,10 @@ private:
         const long long _cappedMaxDocs;
         long long _cappedMaxSize;
 
-        // Only one operation can do capped deletes at a time.
+        // Only one operation can do capped deletes at a time and protects the state below.
         mutable Mutex _cappedDeleterMutex =
             MONGO_MAKE_LATCH("CollectionImpl::SharedState::_cappedDeleterMutex");
+        RecordId _cappedFirstRecord;
     };
 
     NamespaceString _ns;
@@ -501,6 +504,9 @@ private:
 
     // Whether or not this collection is clustered on _id values.
     bool _clustered = false;
+
+    // If this is a time-series buckets collection, the metadata for this collection.
+    boost::optional<TimeseriesOptions> _timeseriesOptions;
 
     bool _recordPreImages = false;
 

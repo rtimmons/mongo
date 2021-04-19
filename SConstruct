@@ -276,9 +276,12 @@ experimental_optimizations = [
     'O3',
     'builtin-memcmp',
     'fnsi',
+    'nofp',
+    'nordyn',
     'sandybridge',
     'tbaa',
     'treevec',
+    'vishidden',
 ]
 experimental_optimization_choices = ['*']
 experimental_optimization_choices.extend("+" + opt for opt in experimental_optimizations)
@@ -464,6 +467,12 @@ add_option('cache',
 add_option('cache-dir',
     default='$BUILD_ROOT/scons/cache',
     help='Specify the directory to use for caching objects if --cache is in use',
+)
+
+add_option('cache-signature-mode',
+    choices=['none', 'validate'],
+    default="none",
+    help='Extra check to validate integrity of cache files after pulling from cache',
 )
 
 add_option("cxx-std",
@@ -811,9 +820,16 @@ env_vars.Add('CXXFLAGS',
     help='Sets flags for the C++ compiler',
     converter=variable_shlex_converter)
 
+default_destdir = '$BUILD_ROOT/install'
+if get_option('ninja') != 'disabled' and get_option('build-tools') == 'next':
+    # Workaround for SERVER-53952 where issues wih different
+    # ninja files building to the same install dir. Different
+    # ninja files need to build to different install dirs.
+    default_destdir = '$BUILD_DIR/install'
+
 env_vars.Add('DESTDIR',
     help='Where builds will install files',
-    default='$BUILD_ROOT/install')
+    default=default_destdir)
 
 env_vars.Add('DSYMUTIL',
     help='Path to the dsymutil utility',
@@ -1191,6 +1207,13 @@ if get_option('build-tools') == 'next':
 
 env = Environment(variables=env_vars, **envDict)
 del envDict
+
+if get_option('cache-signature-mode') == 'validate':
+    validate_cache_dir = Tool('validate_cache_dir')
+    if validate_cache_dir.exists(env):
+        validate_cache_dir(env)
+    else:
+        env.FatalError("Failed to enable validate_cache_dir tool.")
 
 # Only print the spinner if stdout is a tty
 if sys.stdout.isatty():
@@ -1642,13 +1665,6 @@ if link_model.startswith("dynamic"):
             SHCCFLAGS=[
                 '$MONGO_VISIBILITY_SHCCFLAGS_GENERATOR',
             ],
-            SHCXXFLAGS=[
-                # TODO: This has broader implications and seems not to
-                # work right now at least on macOS. We should
-                # investigate further in the future.
-                #
-                # '-fvisibility-inlines-hidden' if not env.TargetOSIs('windows') else [],
-            ],
         )
 
     def library(env, target, source, *args, **kwargs):
@@ -2046,39 +2062,51 @@ elif env.TargetOSIs('windows'):
     env['LINK_WHOLE_ARCHIVE_LIB_END'] = ''
     env['LIBDEPS_FLAG_SEPARATORS'] = {env['LINK_WHOLE_ARCHIVE_LIB_START']:{'suffix':':'}}
 
-def init_no_global_add_flags(env, start_flag, end_flag):
+if env.TargetOSIs('darwin') and link_model.startswith('dynamic'):
+
+    def init_no_global_libdeps_tag_expansion(source, target, env, for_signature):
+        """
+        This callable will be expanded by scons and modify the environment by
+        adjusting the prefix and postfix flags to account for linking options
+        related to the use of global static initializers for any given libdep.
+        """
+
+        if "init-no-global-side-effects" in env.get(libdeps.Constants.LibdepsTags, []):
+            # macos as-needed flag is used on the library directly when it is built
+            return env.get('LINK_AS_NEEDED_LIB_START', '')
+
+    env['LIBDEPS_TAG_EXPANSIONS'].append(init_no_global_libdeps_tag_expansion)
+
+def init_no_global_add_flags(target, start_flag, end_flag):
     """ Helper function for init_no_global_libdeps_tag_expand"""
-    env['LIBDEPS_PREFIX_FLAGS']=[start_flag]
-    env['LIBDEPS_POSTFIX_FLAGS']=[end_flag]
+
+    setattr(target[0].attributes, "libdeps_prefix_flags", [start_flag])
+    setattr(target[0].attributes, "libdeps_postfix_flags", [end_flag])
     if env.TargetOSIs('linux', 'freebsd', 'openbsd'):
-        env.AppendUnique(
-            LIBDEPS_SWITCH_FLAGS=[{
+        setattr(target[0].attributes, "libdeps_switch_flags", [{
                 'on':start_flag,
                 'off':end_flag
         }])
 
-def init_no_global_libdeps_tag_expand(source, target, env, for_signature):
+def init_no_global_libdeps_tag_emitter(target, source, env):
     """
-    This callable will be expanded by scons and modify the environment by
-    adjusting the prefix and postfix flags to account for linking options
-    related to the use of global static initializers for any given libdep.
+    This emitter will be attached the correct pre and post fix flags to
+    a given library to cause it to have certain flags before or after on the link
+    line.
     """
 
-    if link_model.startswith("dynamic"):
+    if link_model.startswith('dynamic'):
         start_flag = env.get('LINK_AS_NEEDED_LIB_START', '')
         end_flag = env.get('LINK_AS_NEEDED_LIB_END', '')
 
         # In the dynamic case, any library that is known to not have global static
         # initializers can supply the flag and be wrapped in --as-needed linking,
         # allowing the linker to be smart about linking libraries it may not need.
-        if "init-no-global-side-effects" in env.get(libdeps.Constants.LibdepsTags, []):
-            if env.TargetOSIs('darwin'):
-                # macos as-needed flag is used on the library directly when it is built
-                env.AppendUnique(SHLINKFLAGS=[start_flag])
-            else:
-                init_no_global_add_flags(env, start_flag, end_flag)
+        if ("init-no-global-side-effects" in env.get(libdeps.Constants.LibdepsTags, [])
+            and not env.TargetOSIs('darwin')):
+            init_no_global_add_flags(target, start_flag, end_flag)
         else:
-            init_no_global_add_flags(env, "", "")
+            init_no_global_add_flags(target, "", "")
 
     else:
         start_flag = env.get('LINK_WHOLE_ARCHIVE_LIB_START', '')
@@ -2089,12 +2117,16 @@ def init_no_global_libdeps_tag_expand(source, target, env, for_signature):
         # allowing the linker to bring in all those symbols which may not be directly needed
         # at link time.
         if "init-no-global-side-effects" not in env.get(libdeps.Constants.LibdepsTags, []):
-            init_no_global_add_flags(env, start_flag, end_flag)
+            init_no_global_add_flags(target, start_flag, end_flag)
         else:
-            init_no_global_add_flags(env, "", "")
-    return []
+            init_no_global_add_flags(target, "", "")
+    return target, source
 
-env['LIBDEPS_TAG_EXPANSIONS'].append(init_no_global_libdeps_tag_expand)
+for target_builder in ['SharedLibrary', 'SharedArchive', 'StaticLibrary']:
+    builder = env['BUILDERS'][target_builder]
+    base_emitter = builder.emitter
+    new_emitter = SCons.Builder.ListEmitter([base_emitter, init_no_global_libdeps_tag_emitter])
+    builder.emitter = new_emitter
 
 link_guard_rules = {
     "test" : ["dist"]
@@ -2471,16 +2503,60 @@ if env.TargetOSIs('posix'):
             )
 
     # -Winvalid-pch Warn if a precompiled header (see Precompiled Headers) is found in the search path but can't be used.
-    env.Append( CCFLAGS=["-fno-omit-frame-pointer",
-                         "-fasynchronous-unwind-tables",
+    env.Append( CCFLAGS=["-fasynchronous-unwind-tables",
                          "-ggdb" if not env.TargetOSIs('emscripten') else "-g",
                          "-Wall",
                          "-Wsign-compare",
                          "-Wno-unknown-pragmas",
                          "-Winvalid-pch"] )
 
+    # TODO: At least on x86, glibc as of 2.3.4 will consult the
+    # .eh_frame info via _Unwind_Backtrace to do backtracing without
+    # needing the frame pointer, despite what the backtrace man page
+    # actually says. We should see if we can drop the requirement that
+    # we use libunwind here.
+    can_nofp = (env.TargetOSIs('darwin') or use_libunwind)
+
+    # For debug builds with tcmalloc, we need the frame pointer so it can
+    # record the stack of allocations.
+    can_nofp &= not (debugBuild and (env['MONGO_ALLOCATOR'] == 'tcmalloc'))
+
+    # Only disable frame pointers if requested
+    can_nofp &= ("nofp" in selected_experimental_optimizations)
+
+    if not can_nofp:
+        env.Append(CCFLAGS=["-fno-omit-frame-pointer"])
+
     if not "tbaa" in selected_experimental_optimizations:
         env.Append(CCFLAGS=["-fno-strict-aliasing"])
+
+    # Enabling hidden visibility on non-darwin requires that we have
+    # libunwind in play, since glibc backtrace will not work
+    # correctly.
+    if "vishidden" in selected_experimental_optimizations and (env.TargetOSIs('darwin') or use_libunwind):
+        if link_model.startswith('dynamic'):
+            # In dynamic mode, we can't make the default visibility
+            # hidden because not all libraries have export tags. But
+            # we can at least make inlines hidden.
+            #
+            # TODO: Except on macOS, where we observe lots of crashes
+            # when we enable this. We should investigate further but
+            # it isn't relevant for the purpose of exploring these
+            # flags on linux, where they seem to work fine.
+            if not env.TargetOSIs('darwin'):
+                env.Append(CXXFLAGS=["-fvisibility-inlines-hidden"])
+        else:
+            # In static mode, we need an escape hatch for a few
+            # libraries that don't work correctly when built with
+            # hidden visiblity.
+            def conditional_visibility_generator(target, source, env, for_signature):
+                if 'DISALLOW_VISHIDDEN' in env:
+                    return
+                return "-fvisibility=hidden"
+            env.Append(
+                CCFLAGS_VISIBILITY_HIDDEN_GENERATOR=conditional_visibility_generator,
+                CCFLAGS='$CCFLAGS_VISIBILITY_HIDDEN_GENERATOR',
+            )
 
     # env.Append( " -Wconversion" ) TODO: this doesn't really work yet
     env.Append( CXXFLAGS=["-Woverloaded-virtual"] )
@@ -2499,14 +2575,47 @@ if env.TargetOSIs('posix'):
 
     # SERVER-9761: Ensure early detection of missing symbols in dependent libraries at program
     # startup.
-    if env.TargetOSIs('darwin'):
-        if env.TargetOSIs('macOS'):
-            env.Append( LINKFLAGS=["-Wl,-bind_at_load"] )
-    else:
-        env.Append( LINKFLAGS=["-Wl,-z,now"] )
-        env.Append( LINKFLAGS=["-rdynamic"] )
+    env.Append(
+        LINKFLAGS=[
+            "-Wl,-bind_at_load" if env.TargetOSIs('macOS') else "-Wl,-z,now",
+        ],
+    )
 
-    env.Append( LIBS=[] )
+    # We need to use rdynamic for backtraces with glibc unless we have libunwind.
+    nordyn = (env.TargetOSIs('darwin') or use_libunwind)
+
+    # And of course only do rdyn if the experimenter asked for it.
+    nordyn &= ("nordyn" in selected_experimental_optimizations)
+
+    if nordyn:
+        def export_symbol_generator(source, target, env, for_signature):
+            symbols = copy.copy(env.get('EXPORT_SYMBOLS', []))
+            for lib in libdeps.get_libdeps(source, target, env, for_signature):
+                if lib.env:
+                    symbols.extend(lib.env.get('EXPORT_SYMBOLS', []))
+            export_expansion = '${EXPORT_SYMBOL_FLAG}'
+            return [f'-Wl,{export_expansion}{symbol}' for symbol in symbols]
+        env['EXPORT_SYMBOL_GEN'] = export_symbol_generator
+
+        # For darwin, we need the leading underscore but for others we
+        # don't. Hacky but it works to jam that distinction into the
+        # flag itself, since it already differs on darwin.
+        if env.TargetOSIs('darwin'):
+            env['EXPORT_SYMBOL_FLAG'] = "-exported_symbol,_"
+        else:
+            env['EXPORT_SYMBOL_FLAG'] = "--export-dynamic-symbol,"
+
+        env.Append(
+            PROGLINKFLAGS=[
+                '$EXPORT_SYMBOL_GEN'
+            ],
+        )
+    elif not env.TargetOSIs('darwin'):
+        env.Append(
+            PROGLINKFLAGS=[
+                "-rdynamic",
+            ],
+        )
 
     #make scons colorgcc friendly
     for key in ('HOME', 'TERM'):
@@ -3112,9 +3221,9 @@ def doConfigure(myenv):
         To specify a target minimum for Darwin platforms, please explicitly add the appropriate options
         to CCFLAGS and LINKFLAGS on the command line:
 
-        macOS: scons CCFLAGS="-mmacosx-version-min=10.13" LINKFLAGS="-mmacosx-version-min=10.13" ..
+        macOS: scons CCFLAGS="-mmacosx-version-min=10.14" LINKFLAGS="-mmacosx-version-min=10.14" ..
 
-        Note that MongoDB requires macOS 10.13 or later.
+        Note that MongoDB requires macOS 10.14 or later.
         """
         myenv.ConfError(textwrap.dedent(message))
 

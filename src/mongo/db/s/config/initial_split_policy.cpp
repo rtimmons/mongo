@@ -46,7 +46,6 @@
 #include "mongo/s/catalog/type_shard.h"
 #include "mongo/s/grid.h"
 #include "mongo/s/shard_util.h"
-#include "mongo/s/sharded_collections_ddl_parameters_gen.h"
 #include "mongo/stdx/unordered_map.h"
 
 namespace mongo {
@@ -63,26 +62,60 @@ std::vector<ShardId> getAllShardIdsSorted(OperationContext* opCtx) {
     return shardIds;
 }
 
-/*
- * Creates a chunk based on the given arguments, appends it to 'chunks', and
- * increments the given chunk version
+/**
+ * Creates a chunk based on the given arguments, appends it to 'chunks' and increments the given
+ * chunk version
  */
-void appendChunk(const NamespaceString& nss,
-                 const boost::optional<CollectionUUID> collectionUUID,
+void appendChunk(const SplitPolicyParams& params,
                  const BSONObj& min,
                  const BSONObj& max,
                  ChunkVersion* version,
-                 const Timestamp& validAfter,
+                 const Timestamp& creationTimestamp,
                  const ShardId& shardId,
                  std::vector<ChunkType>* chunks) {
-    if (collectionUUID) {
-        chunks->emplace_back(*collectionUUID, ChunkRange(min, max), *version, shardId);
-    } else {
-        chunks->emplace_back(nss, ChunkRange(min, max), *version, shardId);
+    switch (params.configFormat) {
+        case ChunkEntryFormat::kNamespaceOnlyNoTimestamps:
+            chunks->emplace_back(params.nss,
+                                 ChunkRange(min, max),
+                                 ChunkVersion(version->majorVersion(),
+                                              version->minorVersion(),
+                                              version->epoch(),
+                                              boost::none),
+                                 shardId);
+            break;
+        case ChunkEntryFormat::kNamespaceAndUUIDNoTimestamps:
+            chunks->emplace_back(params.nss,
+                                 params.collectionUUID,
+                                 ChunkRange(min, max),
+                                 ChunkVersion(version->majorVersion(),
+                                              version->minorVersion(),
+                                              version->epoch(),
+                                              boost::none),
+                                 shardId);
+            break;
+        case ChunkEntryFormat::kNamespaceAndUUIDWithTimestamps:
+            chunks->emplace_back(params.nss,
+                                 params.collectionUUID,
+                                 ChunkRange(min, max),
+                                 ChunkVersion(version->majorVersion(),
+                                              version->minorVersion(),
+                                              version->epoch(),
+                                              creationTimestamp),
+                                 shardId);
+            break;
+        case ChunkEntryFormat::kUUIDOnlyWithTimestamps:
+            chunks->emplace_back(params.collectionUUID,
+                                 ChunkRange(min, max),
+                                 ChunkVersion(version->majorVersion(),
+                                              version->minorVersion(),
+                                              version->epoch(),
+                                              creationTimestamp),
+                                 shardId);
+            break;
     }
 
     auto& chunk = chunks->back();
-    chunk.setHistory({ChunkHistory(validAfter, shardId)});
+    chunk.setHistory({ChunkHistory(creationTimestamp, shardId)});
     version->incMinor();
 }
 
@@ -157,41 +190,6 @@ StringMap<std::vector<ShardId>> buildTagsToShardIdsMap(OperationContext* opCtx,
     return tagToShardIds;
 }
 
-InitialSplitPolicy::ShardCollectionConfig createChunks(const ShardKeyPattern& shardKeyPattern,
-                                                       SplitPolicyParams params,
-                                                       int numContiguousChunksPerShard,
-                                                       const std::vector<ShardId>& allShardIds,
-                                                       std::vector<BSONObj>& finalSplitPoints,
-                                                       const Timestamp& validAfter) {
-    boost::optional<Timestamp> timestamp;
-    if (feature_flags::gShardingFullDDLSupportTimestampedVersion.isEnabled(
-            serverGlobalParams.featureCompatibility)) {
-        timestamp = validAfter;
-    }
-
-    ChunkVersion version(1, 0, OID::gen(), timestamp);
-    const auto& keyPattern(shardKeyPattern.getKeyPattern());
-
-    std::vector<ChunkType> chunks;
-
-    for (size_t i = 0; i <= finalSplitPoints.size(); i++) {
-        const BSONObj min = (i == 0) ? keyPattern.globalMin() : finalSplitPoints[i - 1];
-        const BSONObj max =
-            (i < finalSplitPoints.size()) ? finalSplitPoints[i] : keyPattern.globalMax();
-
-        // It's possible there are no split points or fewer split points than total number of
-        // shards, and we need to be sure that at least one chunk is placed on the primary shard
-        const ShardId shardId = (i == 0 && finalSplitPoints.size() + 1 < allShardIds.size())
-            ? params.primaryShardId
-            : allShardIds[(i / numContiguousChunksPerShard) % allShardIds.size()];
-
-        appendChunk(
-            params.nss, params.collectionUUID, min, max, &version, validAfter, shardId, &chunks);
-    }
-
-    return {std::move(chunks), validAfter};
-}
-
 }  // namespace
 
 std::vector<BSONObj> InitialSplitPolicy::calculateHashedSplitPoints(
@@ -251,7 +249,7 @@ std::vector<BSONObj> InitialSplitPolicy::calculateHashedSplitPoints(
 }
 
 InitialSplitPolicy::ShardCollectionConfig InitialSplitPolicy::generateShardCollectionInitialChunks(
-    SplitPolicyParams params,
+    const SplitPolicyParams& params,
     const ShardKeyPattern& shardKeyPattern,
     const Timestamp& validAfter,
     const std::vector<BSONObj>& splitPoints,
@@ -272,12 +270,26 @@ InitialSplitPolicy::ShardCollectionConfig InitialSplitPolicy::generateShardColle
         finalSplitPoints.push_back(splitPoint);
     }
 
-    return createChunks(shardKeyPattern,
-                        params,
-                        numContiguousChunksPerShard,
-                        allShardIds,
-                        finalSplitPoints,
-                        validAfter);
+    ChunkVersion version(1, 0, OID::gen(), validAfter);
+    const auto& keyPattern(shardKeyPattern.getKeyPattern());
+
+    std::vector<ChunkType> chunks;
+
+    for (size_t i = 0; i <= finalSplitPoints.size(); i++) {
+        const BSONObj min = (i == 0) ? keyPattern.globalMin() : finalSplitPoints[i - 1];
+        const BSONObj max =
+            (i < finalSplitPoints.size()) ? finalSplitPoints[i] : keyPattern.globalMax();
+
+        // It's possible there are no split points or fewer split points than total number of
+        // shards, and we need to be sure that at least one chunk is placed on the primary shard
+        const ShardId shardId = (i == 0 && finalSplitPoints.size() + 1 < allShardIds.size())
+            ? params.primaryShardId
+            : allShardIds[(i / numContiguousChunksPerShard) % allShardIds.size()];
+
+        appendChunk(params, min, max, &version, validAfter, shardId, &chunks);
+    }
+
+    return {std::move(chunks)};
 }
 
 std::unique_ptr<InitialSplitPolicy> InitialSplitPolicy::calculateOptimizationStrategy(
@@ -315,6 +327,7 @@ std::unique_ptr<InitialSplitPolicy> InitialSplitPolicy::calculateOptimizationStr
     if (initialSplitPoints) {
         return std::make_unique<SplitPointsBasedSplitPolicy>(*initialSplitPoints);
     }
+
     if (tags.empty() && shardKeyPattern.hasHashedPrefix() && collectionIsEmpty) {
         return std::make_unique<SplitPointsBasedSplitPolicy>(
             shardKeyPattern, numShards, numInitialChunks);
@@ -330,38 +343,35 @@ std::unique_ptr<InitialSplitPolicy> InitialSplitPolicy::calculateOptimizationStr
     if (collectionIsEmpty) {
         return std::make_unique<SingleChunkOnPrimarySplitPolicy>();
     }
+
     return std::make_unique<UnoptimizedSplitPolicy>();
 }
 
 InitialSplitPolicy::ShardCollectionConfig SingleChunkOnPrimarySplitPolicy::createFirstChunks(
-    OperationContext* opCtx, const ShardKeyPattern& shardKeyPattern, SplitPolicyParams params) {
-    ShardCollectionConfig initialChunks;
-
+    OperationContext* opCtx,
+    const ShardKeyPattern& shardKeyPattern,
+    const SplitPolicyParams& params) {
     const auto currentTime = VectorClock::get(opCtx)->getTime();
-    const auto clusterTime = currentTime.clusterTime().asTimestamp();
+    const auto validAfter = currentTime.clusterTime().asTimestamp();
 
-    boost::optional<Timestamp> timestamp;
-    if (feature_flags::gShardingFullDDLSupportTimestampedVersion.isEnabled(
-            serverGlobalParams.featureCompatibility)) {
-        timestamp = clusterTime;
-    }
-
-    ChunkVersion version(1, 0, OID::gen(), timestamp);
+    ChunkVersion version(1, 0, OID::gen(), validAfter);
     const auto& keyPattern = shardKeyPattern.getKeyPattern();
-    appendChunk(params.nss,
-                params.collectionUUID,
+    std::vector<ChunkType> chunks;
+    appendChunk(params,
                 keyPattern.globalMin(),
                 keyPattern.globalMax(),
                 &version,
-                currentTime.clusterTime().asTimestamp(),
+                validAfter,
                 params.primaryShardId,
-                &initialChunks.chunks);
-    initialChunks.creationTime = clusterTime;
-    return initialChunks;
+                &chunks);
+
+    return {std::move(chunks)};
 }
 
 InitialSplitPolicy::ShardCollectionConfig UnoptimizedSplitPolicy::createFirstChunks(
-    OperationContext* opCtx, const ShardKeyPattern& shardKeyPattern, SplitPolicyParams params) {
+    OperationContext* opCtx,
+    const ShardKeyPattern& shardKeyPattern,
+    const SplitPolicyParams& params) {
     // Under this policy, chunks are only placed on the primary shard.
     std::vector<ShardId> shardIds{params.primaryShardId};
 
@@ -378,6 +388,7 @@ InitialSplitPolicy::ShardCollectionConfig UnoptimizedSplitPolicy::createFirstChu
                                                      shardKeyPattern.getKeyPattern().globalMax()),
                                           balancerConfig->getMaxChunkSizeBytes(),
                                           0));
+
     const auto currentTime = VectorClock::get(opCtx)->getTime();
     return generateShardCollectionInitialChunks(params,
                                                 shardKeyPattern,
@@ -389,18 +400,17 @@ InitialSplitPolicy::ShardCollectionConfig UnoptimizedSplitPolicy::createFirstChu
 }
 
 InitialSplitPolicy::ShardCollectionConfig SplitPointsBasedSplitPolicy::createFirstChunks(
-    OperationContext* opCtx, const ShardKeyPattern& shardKeyPattern, SplitPolicyParams params) {
+    OperationContext* opCtx,
+    const ShardKeyPattern& shardKeyPattern,
+    const SplitPolicyParams& params) {
 
     // On which shards are the generated chunks allowed to be placed.
     const auto shardIds = getAllShardIdsSorted(opCtx);
 
     const auto currentTime = VectorClock::get(opCtx)->getTime();
-    return generateShardCollectionInitialChunks(params,
-                                                shardKeyPattern,
-                                                currentTime.clusterTime().asTimestamp(),
-                                                _splitPoints,
-                                                shardIds,
-                                                _numContiguousChunksPerShard);
+    const auto validAfter = currentTime.clusterTime().asTimestamp();
+    return generateShardCollectionInitialChunks(
+        params, shardKeyPattern, validAfter, _splitPoints, shardIds, _numContiguousChunksPerShard);
 }
 
 AbstractTagsBasedSplitPolicy::AbstractTagsBasedSplitPolicy(OperationContext* opCtx,
@@ -421,7 +431,9 @@ AbstractTagsBasedSplitPolicy::SplitInfo SingleChunkPerTagSplitPolicy::buildSplit
 }
 
 InitialSplitPolicy::ShardCollectionConfig AbstractTagsBasedSplitPolicy::createFirstChunks(
-    OperationContext* opCtx, const ShardKeyPattern& shardKeyPattern, SplitPolicyParams params) {
+    OperationContext* opCtx,
+    const ShardKeyPattern& shardKeyPattern,
+    const SplitPolicyParams& params) {
     invariant(!_tags.empty());
 
     const auto shardIds = getAllShardIdsSorted(opCtx);
@@ -435,20 +447,13 @@ InitialSplitPolicy::ShardCollectionConfig AbstractTagsBasedSplitPolicy::createFi
         return shardIds[indx++ % shardIds.size()];
     };
 
-    boost::optional<Timestamp> timestamp;
-    if (feature_flags::gShardingFullDDLSupportTimestampedVersion.isEnabled(
-            serverGlobalParams.featureCompatibility)) {
-        timestamp = validAfter;
-    }
-
-    ChunkVersion version(1, 0, OID::gen(), timestamp);
+    ChunkVersion version(1, 0, OID::gen(), validAfter);
     auto lastChunkMax = keyPattern.globalMin();
     std::vector<ChunkType> chunks;
     for (const auto& tag : _tags) {
         // Create a chunk for the hole [lastChunkMax, tag.getMinKey)
         if (tag.getMinKey().woCompare(lastChunkMax) > 0) {
-            appendChunk(params.nss,
-                        params.collectionUUID,
+            appendChunk(params,
                         lastChunkMax,
                         tag.getMinKey(),
                         &version,
@@ -492,14 +497,7 @@ InitialSplitPolicy::ShardCollectionConfig AbstractTagsBasedSplitPolicy::createFi
                 const BSONObj max = (splitPointIdx == splitInfo.splitPoints.size())
                     ? tag.getMaxKey()
                     : splitInfo.splitPoints[splitPointIdx];
-                appendChunk(params.nss,
-                            params.collectionUUID,
-                            min,
-                            max,
-                            &version,
-                            validAfter,
-                            targetShard,
-                            &chunks);
+                appendChunk(params, min, max, &version, validAfter, targetShard, &chunks);
             }
         }
         lastChunkMax = tag.getMaxKey();
@@ -507,8 +505,7 @@ InitialSplitPolicy::ShardCollectionConfig AbstractTagsBasedSplitPolicy::createFi
 
     // Create a chunk for the hole [lastChunkMax, MaxKey]
     if (lastChunkMax.woCompare(keyPattern.globalMax()) < 0) {
-        appendChunk(params.nss,
-                    params.collectionUUID,
+        appendChunk(params,
                     lastChunkMax,
                     keyPattern.globalMax(),
                     &version,
@@ -517,7 +514,7 @@ InitialSplitPolicy::ShardCollectionConfig AbstractTagsBasedSplitPolicy::createFi
                     &chunks);
     }
 
-    return {std::move(chunks), validAfter};
+    return {std::move(chunks)};
 }
 
 AbstractTagsBasedSplitPolicy::SplitInfo PresplitHashedZonesSplitPolicy::buildSplitInfoForTag(
@@ -726,27 +723,22 @@ ReshardingSplitPolicy ReshardingSplitPolicy::make(OperationContext* opCtx,
                                                   boost::optional<std::vector<TagsType>> zones,
                                                   int samplesPerChunk) {
     uassert(4952603, "samplesPerChunk should be > 0", samplesPerChunk > 0);
-    return ReshardingSplitPolicy(reshardingTempNs,
-                                 numInitialChunks,
-                                 zones,
-                                 ReshardingSplitPolicy::_makePipelineDocumentSource(
-                                     opCtx, origNs, shardKey, numInitialChunks, samplesPerChunk));
+    return ReshardingSplitPolicy(
+        numInitialChunks,
+        zones,
+        _makePipelineDocumentSource(opCtx, origNs, shardKey, numInitialChunks, samplesPerChunk));
 }
 
-ReshardingSplitPolicy::ReshardingSplitPolicy(const NamespaceString& ns,
-                                             int numInitialChunks,
+ReshardingSplitPolicy::ReshardingSplitPolicy(int numInitialChunks,
                                              boost::optional<std::vector<TagsType>> zones,
                                              std::unique_ptr<SampleDocumentSource> samples)
-    : _ns(ns),
-      _numInitialChunks(numInitialChunks),
-      _zones(std::move(zones)),
-      _samples(std::move(samples)) {
+    : _numInitialChunks(numInitialChunks), _zones(std::move(zones)), _samples(std::move(samples)) {
     uassert(4952602, "numInitialChunks should be > 0", numInitialChunks > 0);
     uassert(4952604, "provided zones should not be empty", !_zones || _zones->size());
 }
 
 InitialSplitPolicy::ShardCollectionConfig ReshardingSplitPolicy::createFirstChunks(
-    OperationContext* opCtx, const ShardKeyPattern& shardKey, SplitPolicyParams params) {
+    OperationContext* opCtx, const ShardKeyPattern& shardKey, const SplitPolicyParams& params) {
 
     if (_zones) {
         for (auto& zone : *_zones) {
@@ -800,34 +792,19 @@ InitialSplitPolicy::ShardCollectionConfig ReshardingSplitPolicy::createFirstChun
     const auto currentTime = VectorClock::get(opCtx)->getTime();
     const auto validAfter = currentTime.clusterTime().asTimestamp();
 
-    boost::optional<Timestamp> timestamp;
-    boost::optional<CollectionUUID> collectionUUID;
-    if (feature_flags::gShardingFullDDLSupportTimestampedVersion.isEnabled(
-            serverGlobalParams.featureCompatibility)) {
-        timestamp = validAfter;
-        collectionUUID = params.collectionUUID;
-    }
-
-    ChunkVersion version(1, 0, OID::gen(), timestamp);
+    ChunkVersion version(1, 0, OID::gen(), validAfter);
 
     splitPoints.insert(keyPattern.globalMax());
     for (const auto& splitPoint : splitPoints) {
         auto bestShard = selectBestShard(
             chunkDistribution, zoneInfo, zoneToShardMap, {lastChunkMax, splitPoint});
-        appendChunk(_ns,
-                    collectionUUID,
-                    lastChunkMax,
-                    splitPoint,
-                    &version,
-                    validAfter,
-                    bestShard,
-                    &chunks);
+        appendChunk(params, lastChunkMax, splitPoint, &version, validAfter, bestShard, &chunks);
 
         lastChunkMax = splitPoint;
         chunkDistribution[bestShard]++;
     }
 
-    return {std::move(chunks), validAfter};
+    return {std::move(chunks)};
 }
 
 BSONObjSet ReshardingSplitPolicy::_extractSplitPointsFromZones(const ShardKeyPattern& shardKey) {

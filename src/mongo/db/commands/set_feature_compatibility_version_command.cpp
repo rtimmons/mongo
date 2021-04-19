@@ -58,7 +58,6 @@
 #include "mongo/db/views/view_catalog.h"
 #include "mongo/logv2/log.h"
 #include "mongo/rpc/get_status_from_command_result.h"
-#include "mongo/s/sharded_collections_ddl_parameters_gen.h"
 #include "mongo/stdx/unordered_set.h"
 #include "mongo/util/exit.h"
 #include "mongo/util/fail_point.h"
@@ -72,8 +71,14 @@ using FeatureCompatibility = ServerGlobalParams::FeatureCompatibility;
 
 MONGO_FAIL_POINT_DEFINE(failUpgrading);
 MONGO_FAIL_POINT_DEFINE(hangWhileUpgrading);
+MONGO_FAIL_POINT_DEFINE(hangAfterStartingFCVTransition);
 MONGO_FAIL_POINT_DEFINE(failDowngrading);
 MONGO_FAIL_POINT_DEFINE(hangWhileDowngrading);
+
+/**
+ * Ensures that only one instance of setFeatureCompatibilityVersion can run at a given time.
+ */
+Lock::ResourceMutex commandMutex("setFCVCommandMutex");
 
 /**
  * Deletes the persisted default read/write concern document.
@@ -81,7 +86,7 @@ MONGO_FAIL_POINT_DEFINE(hangWhileDowngrading);
 void deletePersistedDefaultRWConcernDocument(OperationContext* opCtx) {
     DBDirectClient client(opCtx);
     const auto commandResponse = client.runCommand([&] {
-        write_ops::Delete deleteOp(NamespaceString::kConfigSettingsNamespace);
+        write_ops::DeleteCommandRequest deleteOp(NamespaceString::kConfigSettingsNamespace);
         deleteOp.setDeletes({[&] {
             write_ops::DeleteOpEntry entry;
             entry.setQ(BSON("_id" << ReadWriteConcernDefaults::kPersistedDocumentId));
@@ -218,8 +223,7 @@ public:
         opCtx->setAlwaysInterruptAtStepDownOrUp();
 
         // Only allow one instance of setFeatureCompatibilityVersion to run at a time.
-        invariant(!opCtx->lockState()->isLocked());
-        Lock::ExclusiveLock lk(opCtx->lockState(), FeatureCompatibilityVersion::fcvLock);
+        Lock::ExclusiveLock setFCVCommandLock(opCtx->lockState(), commandMutex);
 
         auto request = SetFeatureCompatibilityVersion::parse(
             IDLParserErrorContext("setFeatureCompatibilityVersion"), cmdObj);
@@ -248,16 +252,47 @@ public:
         FeatureCompatibilityVersion::validateSetFeatureCompatibilityVersionRequest(
             actualVersion, requestedVersion, isFromConfigServer);
 
-        checkInitialSyncFinished(opCtx);
+        uassert(5563600,
+                "'phase' field is only valid to be specified on shards",
+                !request.getPhase() || serverGlobalParams.clusterRole == ClusterRole::ShardServer);
 
-        // Start transition to 'requestedVersion' by updating the local FCV document to a
-        // 'kUpgrading' or 'kDowngrading' state, respectively.
-        FeatureCompatibilityVersion::updateFeatureCompatibilityVersionDocument(
-            opCtx,
-            actualVersion,
-            requestedVersion,
-            isFromConfigServer,
-            true /* setTargetVersion */);
+        if (!request.getPhase() || request.getPhase() == SetFCVPhaseEnum::kStart) {
+            {
+                // Start transition to 'requestedVersion' by updating the local FCV document to a
+                // 'kUpgrading' or 'kDowngrading' state, respectively.
+                const auto fcvChangeRegion(
+                    FeatureCompatibilityVersion::enterFCVChangeRegion(opCtx));
+
+                checkInitialSyncFinished(opCtx);
+
+                FeatureCompatibilityVersion::updateFeatureCompatibilityVersionDocument(
+                    opCtx,
+                    actualVersion,
+                    requestedVersion,
+                    isFromConfigServer,
+                    true /* setTargetVersion */);
+            }
+
+            if (request.getPhase() == SetFCVPhaseEnum::kStart) {
+                invariant(serverGlobalParams.clusterRole == ClusterRole::ShardServer);
+                if (actualVersion > requestedVersion) {
+                    // Downgrading
+                    // TODO SERVER-55898: Release fcvChangeRegion and wait for DDLCoordinators to
+                    // drain
+                }
+                // If we are only running phase-1, then we are done
+                return true;
+            }
+        }
+
+        invariant(!request.getPhase() || request.getPhase() == SetFCVPhaseEnum::kComplete);
+
+        uassert(5563601,
+                "Cannot transition to fully upgraded or fully downgraded state if we are not in "
+                "kUpgrading or kDowngrading state",
+                serverGlobalParams.featureCompatibility.isUpgradingOrDowngrading());
+
+        hangAfterStartingFCVTransition.pauseWhileSet(opCtx);
 
         if (requestedVersion > actualVersion) {
             _runUpgrade(opCtx, request);
@@ -265,14 +300,18 @@ public:
             _runDowngrade(opCtx, request);
         }
 
-        // Complete transition by updating the local FCV document to the fully upgraded or
-        // downgraded requestedVersion.
-        FeatureCompatibilityVersion::updateFeatureCompatibilityVersionDocument(
-            opCtx,
-            serverGlobalParams.featureCompatibility.getVersion(),
-            requestedVersion,
-            isFromConfigServer,
-            false /* setTargetVersion */);
+        {
+            // Complete transition by updating the local FCV document to the fully upgraded or
+            // downgraded requestedVersion.
+            const auto fcvChangeRegion(FeatureCompatibilityVersion::enterFCVChangeRegion(opCtx));
+
+            FeatureCompatibilityVersion::updateFeatureCompatibilityVersionDocument(
+                opCtx,
+                serverGlobalParams.featureCompatibility.getVersion(),
+                requestedVersion,
+                isFromConfigServer,
+                false /* setTargetVersion */);
+        }
 
         return true;
     }
@@ -281,6 +320,15 @@ private:
     void _runUpgrade(OperationContext* opCtx, const SetFeatureCompatibilityVersion& request) {
         const auto requestedVersion = request.getCommandParameter();
 
+        if (serverGlobalParams.clusterRole == ClusterRole::ConfigServer) {
+            // Tell the shards to enter phase-1 of setFCV
+            auto requestPhase1 = request;
+            requestPhase1.setPhase(SetFCVPhaseEnum::kStart);
+            uassertStatusOK(
+                ShardingCatalogManager::get(opCtx)->setFeatureCompatibilityVersionOnShards(
+                    opCtx, CommandHelpers::appendMajorityWriteConcern(requestPhase1.toBSON({}))));
+        }
+
         auto replCoord = repl::ReplicationCoordinator::get(opCtx);
         const bool isReplSet =
             replCoord->getReplicationMode() == repl::ReplicationCoordinator::modeReplSet;
@@ -288,7 +336,7 @@ private:
         // If the 'useSecondaryDelaySecs' feature flag is enabled in the upgraded FCV, issue a
         // reconfig to change the 'slaveDelay' field to 'secondaryDelaySecs'.
         if (repl::feature_flags::gUseSecondaryDelaySecs.isEnabledAndIgnoreFCV() && isReplSet &&
-            requestedVersion == ServerGlobalParams::FeatureCompatibility::kLatest) {
+            requestedVersion >= repl::feature_flags::gUseSecondaryDelaySecs.getVersion()) {
             // Wait for the current config to be committed before starting a new reconfig.
             waitForCurrentConfigCommitment(opCtx);
 
@@ -331,24 +379,24 @@ private:
         }
 
         if (serverGlobalParams.clusterRole == ClusterRole::ConfigServer) {
-            // Upgrade metadata created before FCV 4.9.
-            //
             // TODO SERVER-53283: This block can removed once 5.0 becomes last-lts.
-            if (requestedVersion >= FeatureCompatibility::Version::kVersion49) {
-                try {
-                    ShardingCatalogManager::get(opCtx)->upgradeMetadataFor49(opCtx);
-                } catch (const DBException& e) {
-                    LOGV2(5276708,
-                          "Failed to upgrade sharding metadata: {error}",
-                          "error"_attr = e.toString());
-                    throw;
-                }
+            // TODO SERVER-53774: Replace kLatest by the version defined in the feature flag IDL
+            if (requestedVersion >= FeatureCompatibility::kLatest) {
+                ShardingCatalogManager::get(opCtx)->upgradeMetadataFor50Phase1(opCtx);
             }
 
-            // Upgrade shards after config finishes its upgrade.
+            // Tell the shards to enter phase-2 of setFCV (fully upgraded)
+            auto requestPhase2 = request;
+            requestPhase2.setPhase(SetFCVPhaseEnum::kComplete);
             uassertStatusOK(
                 ShardingCatalogManager::get(opCtx)->setFeatureCompatibilityVersionOnShards(
-                    opCtx, CommandHelpers::appendMajorityWriteConcern(request.toBSON({}))));
+                    opCtx, CommandHelpers::appendMajorityWriteConcern(requestPhase2.toBSON({}))));
+
+            // TODO SERVER-53283: This block can removed once 5.0 becomes last-lts.
+            // TODO SERVER-53774: Replace kLatest by the version defined in the feature flag IDL
+            if (requestedVersion >= FeatureCompatibility::kLatest) {
+                ShardingCatalogManager::get(opCtx)->upgradeMetadataFor50Phase2(opCtx);
+            }
         }
 
         hangWhileUpgrading.pauseWhileSet(opCtx);
@@ -387,6 +435,15 @@ private:
 
     void _runDowngrade(OperationContext* opCtx, const SetFeatureCompatibilityVersion& request) {
         const auto requestedVersion = request.getCommandParameter();
+
+        if (serverGlobalParams.clusterRole == ClusterRole::ConfigServer) {
+            // Tell the shards to enter phase-1 of setFCV
+            auto requestPhase1 = request;
+            requestPhase1.setPhase(SetFCVPhaseEnum::kStart);
+            uassertStatusOK(
+                ShardingCatalogManager::get(opCtx)->setFeatureCompatibilityVersionOnShards(
+                    opCtx, CommandHelpers::appendMajorityWriteConcern(requestPhase1.toBSON({}))));
+        }
 
         auto replCoord = repl::ReplicationCoordinator::get(opCtx);
         const bool isReplSet =
@@ -452,24 +509,24 @@ private:
                 !failDowngrading.shouldFail());
 
         if (serverGlobalParams.clusterRole == ClusterRole::ConfigServer) {
-            // Downgrade metadata created in FCV 4.9.
-            //
             // TODO SERVER-53283: This block can removed once 5.0 becomes last-lts.
-            if (requestedVersion < FeatureCompatibility::Version::kVersion49) {
-                try {
-                    ShardingCatalogManager::get(opCtx)->downgradeMetadataToPre49(opCtx);
-                } catch (const DBException& e) {
-                    LOGV2(5276709,
-                          "Failed to downgrade sharding metadata: {error}",
-                          "error"_attr = e.toString());
-                    throw;
-                }
+            // TODO SERVER-53774: Replace kLatest by the version defined in the feature flag IDL
+            if (requestedVersion < FeatureCompatibility::kLatest) {
+                ShardingCatalogManager::get(opCtx)->downgradeMetadataToPre50Phase1(opCtx);
             }
 
-            // Downgrade shards after config finishes its downgrade.
+            // Tell the shards to enter phase-2 of setFCV (fully downgraded)
+            auto requestPhase2 = request;
+            requestPhase2.setPhase(SetFCVPhaseEnum::kComplete);
             uassertStatusOK(
                 ShardingCatalogManager::get(opCtx)->setFeatureCompatibilityVersionOnShards(
-                    opCtx, CommandHelpers::appendMajorityWriteConcern(request.toBSON({}))));
+                    opCtx, CommandHelpers::appendMajorityWriteConcern(requestPhase2.toBSON({}))));
+
+            // TODO SERVER-53283: This block can removed once 5.0 becomes last-lts.
+            // TODO SERVER-53774: Replace kLatest by the version defined in the feature flag IDL
+            if (requestedVersion < FeatureCompatibility::kLatest) {
+                ShardingCatalogManager::get(opCtx)->downgradeMetadataToPre50Phase2(opCtx);
+            }
         }
 
         hangWhileDowngrading.pauseWhileSet(opCtx);

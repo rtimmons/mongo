@@ -41,8 +41,11 @@
 #include "mongo/db/client.h"
 #include "mongo/db/exec/js_function.h"
 #include "mongo/db/exec/sbe/values/bson.h"
+#include "mongo/db/exec/sbe/values/sort_spec.h"
 #include "mongo/db/exec/sbe/values/value.h"
 #include "mongo/db/exec/sbe/vm/datetime.h"
+#include "mongo/db/hasher.h"
+#include "mongo/db/index/btree_key_generator.h"
 #include "mongo/db/query/collation/collation_index_key.h"
 #include "mongo/db/query/datetime/date_time_support.h"
 #include "mongo/db/storage/key_string.h"
@@ -1273,7 +1276,7 @@ std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinDoubleDoubleSum
 }
 
 /**
- * A helper for the bultinDate method. The formal parameters yearOrWeekYear and monthOrWeek carry
+ * A helper for the builtinDate method. The formal parameters yearOrWeekYear and monthOrWeek carry
  * values depending on wether the date is a year-month-day or ISOWeekYear.
  */
 using DateFn = std::function<Date_t(
@@ -1719,6 +1722,14 @@ std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinCoerceToString(
     if (value::isString(operandTag)) {
         topStack(false, value::TypeTags::Nothing, 0);
         return {operandOwn, operandTag, operandVal};
+    }
+
+    if (operandTag == value::TypeTags::bsonSymbol) {
+        // Values of type StringBig and Values of type bsonSymbol have identical representations,
+        // so we can simply take ownership of the argument, change the type tag to StringBig, and
+        // return it.
+        topStack(false, value::TypeTags::Nothing, 0);
+        return {operandOwn, value::TypeTags::StringBig, operandVal};
     }
 
     switch (operandTag) {
@@ -2475,11 +2486,11 @@ std::tuple<bool, value::TypeTags, value::Value> genericPcreRegexSingleMatch(
     value::TypeTags typeTagInputStr,
     value::Value valueInputStr,
     bool isMatch) {
-    if (!value::isString(typeTagInputStr) || !value::isPcreRegex(typeTagPcreRegex)) {
+    if (!value::isStringOrSymbol(typeTagInputStr) || !value::isPcreRegex(typeTagPcreRegex)) {
         return {false, value::TypeTags::Nothing, 0};
     }
 
-    auto inputString = value::getStringView(typeTagInputStr, valueInputStr);
+    auto inputString = value::getStringOrSymbolView(typeTagInputStr, valueInputStr);
     auto pcreRegex = value::getPcreRegexView(valuePcreRegex);
 
     return pcreFirstMatch(pcreRegex, inputString, isMatch);
@@ -2496,9 +2507,8 @@ std::pair<value::TypeTags, value::Value> collComparisonKey(value::TypeTags tag,
 
     // For strings, call CollatorInterface::getComparisonKey() to obtain the comparison key.
     if (value::isString(tag)) {
-        auto compKey = collator->getComparisonKey(value::getStringView(tag, val));
-        auto keyData = compKey.getKeyData();
-        return value::makeNewString(keyData);
+        return value::makeNewString(
+            collator->getComparisonKey(value::getStringView(tag, val)).getKeyData());
     }
 
     // For collatable types other than strings (such as arrays and objects), we take the slow
@@ -2647,6 +2657,21 @@ std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinShardFilter(Ari
             value::TypeTags::Boolean,
             value::bitcastFrom<bool>(
                 value::getShardFiltererView(filterValue)->keyBelongsToMe(keyAsUnownedBson))};
+}
+
+std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinShardHash(ArityType arity) {
+    invariant(arity == 1);
+
+    auto [ownedShardKey, shardKeyTag, shardKeyValue] = getFromStack(0);
+
+    // Compute the shard key hash value by round-tripping it through BSONObj as it is currently the
+    // only way to do it if we do not want to duplicate the hash computation code.
+    // TODO SERVER-55622
+    BSONObjBuilder input;
+    bson::appendValueToBsonObj<BSONObjBuilder>(input, ""_sd, shardKeyTag, shardKeyValue);
+    auto hashVal =
+        BSONElementHasher::hash64(input.obj().firstElement(), BSONElementHasher::DEFAULT_HASH_SEED);
+    return {false, value::TypeTags::NumberInt64, value::bitcastFrom<decltype(hashVal)>(hashVal)};
 }
 
 std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinExtractSubArray(ArityType arity) {
@@ -2820,6 +2845,34 @@ std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinGetRegexFlags(A
     auto [strType, strValue] = value::makeNewString(regex.flags);
 
     return {true, strType, strValue};
+}
+
+std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinGenerateSortKey(ArityType arity) {
+    invariant(arity == 2);
+
+    auto [ssOwned, ssTag, ssVal] = getFromStack(0);
+    auto [objOwned, objTag, objVal] = getFromStack(1);
+    if (ssTag != value::TypeTags::sortSpec || !value::isObject(objTag)) {
+        return {false, value::TypeTags::Nothing, 0};
+    }
+
+    auto ss = value::getSortSpecView(ssVal);
+
+    auto obj = [objTag = objTag, objVal = objVal]() {
+        if (objTag == value::TypeTags::bsonObject) {
+            return BSONObj{value::bitcastTo<const char*>(objVal)};
+        } else if (objTag == value::TypeTags::Object) {
+            BSONObjBuilder objBuilder;
+            bson::convertToBsonObj(objBuilder, value::getObjectView(objVal));
+            return objBuilder.obj();
+        } else {
+            MONGO_UNREACHABLE_TASSERT(5037004);
+        }
+    }();
+
+    return {true,
+            value::TypeTags::ksValue,
+            value::bitcastFrom<KeyString::Value*>(new KeyString::Value(ss->generateSortKey(obj)))};
 }
 
 std::tuple<bool, value::TypeTags, value::Value> ByteCode::builtinReverseArray(ArityType arity) {
@@ -3089,6 +3142,8 @@ std::tuple<bool, value::TypeTags, value::Value> ByteCode::dispatchBuiltin(Builti
             return builtinRegexFindAll(arity);
         case Builtin::shardFilter:
             return builtinShardFilter(arity);
+        case Builtin::shardHash:
+            return builtinShardHash(arity);
         case Builtin::extractSubArray:
             return builtinExtractSubArray(arity);
         case Builtin::isArrayEmpty:
@@ -3105,6 +3160,8 @@ std::tuple<bool, value::TypeTags, value::Value> ByteCode::dispatchBuiltin(Builti
             return builtinGetRegexFlags(arity);
         case Builtin::ftsMatch:
             return builtinFtsMatch(arity);
+        case Builtin::generateSortKey:
+            return builtinGenerateSortKey(arity);
     }
 
     MONGO_UNREACHABLE;

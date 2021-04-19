@@ -65,6 +65,7 @@
 #include "mongo/db/concurrency/write_conflict_exception.h"
 #include "mongo/db/global_settings.h"
 #include "mongo/db/index/index_descriptor.h"
+#include "mongo/db/mongod_options_storage_gen.h"
 #include "mongo/db/repl/repl_settings.h"
 #include "mongo/db/repl/replication_coordinator.h"
 #include "mongo/db/server_options.h"
@@ -1470,6 +1471,8 @@ std::unique_ptr<RecordStore> WiredTigerKVEngine::getRecordStore(OperationContext
     params.engineName = _canonicalName;
     params.isCapped = options.capped;
     params.keyFormat = (options.clusteredIndex) ? KeyFormat::String : KeyFormat::Long;
+    // Record stores clustered by _id need to guarantee uniqueness by preventing overwrites.
+    params.overwrite = options.clusteredIndex ? false : true;
     params.isEphemeral = _ephemeral;
     params.cappedCallback = nullptr;
     params.sizeStorer = _sizeStorer.get();
@@ -1582,7 +1585,7 @@ std::unique_ptr<SortedDataInterface> WiredTigerKVEngine::getSortedDataInterface(
 
 std::unique_ptr<RecordStore> WiredTigerKVEngine::makeTemporaryRecordStore(OperationContext* opCtx,
                                                                           StringData ident) {
-    invariant(!_readOnly);
+    invariant(!_readOnly || !recoverToOplogTimestamp.empty());
 
     _ensureIdentPath(ident);
     WiredTigerSession wtSession(_conn);
@@ -1609,6 +1612,7 @@ std::unique_ptr<RecordStore> WiredTigerKVEngine::makeTemporaryRecordStore(Operat
     params.engineName = _canonicalName;
     params.isCapped = false;
     params.keyFormat = KeyFormat::Long;
+    params.overwrite = true;
     params.isEphemeral = _ephemeral;
     params.cappedCallback = nullptr;
     // Temporary collections do not need to persist size information to the size storer.

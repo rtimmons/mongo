@@ -24,6 +24,8 @@
 # delete this exception statement from your version. If you delete this
 # exception statement from all source files in the program, then also delete
 # it in the license file.
+#
+# pylint: disable=too-many-lines
 """Checks compatibility of old and new IDL files.
 
 In order to support user-selectable API versions for the server, server commands are now
@@ -40,13 +42,15 @@ import argparse
 import os
 import sys
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from enum import Enum
+from typing import Dict, List, Set, Optional, Tuple, Union
 
 from idl import parser, syntax, errors, common
 from idl.compiler import CompilerImportResolver
 from idl_compatibility_errors import IDLCompatibilityContext, IDLCompatibilityErrorCollection, dump_errors
 
 ALLOW_ANY_TYPE_LIST: List[str] = [
+    # This list if only used in unit-tests.
     "commandAllowedAnyTypes",
     "commandAllowedAnyTypes-param-anyTypeParam",
     "commandAllowedAnyTypes-reply-anyTypeField",
@@ -66,6 +70,12 @@ ALLOW_ANY_TYPE_LIST: List[str] = [
     "replyFieldCppTypeNotEqual-reply-cppTypeNotEqualReplyField",
     "commandCppTypeNotEqual",
     "commandParameterCppTypeNotEqual-param-cppTypeNotEqualParam",
+    "replyFieldSerializerNotEqual-reply-serializerNotEqualReplyField",
+    "commandSerializerNotEqual",
+    "commandParameterSerializerNotEqual-param-serializerNotEqualParam",
+    "replyFieldDeserializerNotEqual-reply-deserializerNotEqualReplyField",
+    "commandDeserializerNotEqual",
+    "commandParameterDeserializerNotEqual-param-deserializerNotEqualParam",
     "newlyAddedReplyFieldTypeBsonAnyAllowed-reply-newlyAddedBsonSerializationTypeAnyReplyField",
     "replyFieldTypeBsonAnyWithVariantUnstable-reply-bsonSerializationTypeWithVariantAnyUnstableReplyField",
     "newlyAddedParamBsonAnyAllowList-param-newlyAddedBsonAnyAllowListParam",
@@ -75,6 +85,12 @@ ALLOW_ANY_TYPE_LIST: List[str] = [
     "commandParameterCppTypeNotEqualUnstable-param-cppTypeNotEqualParam",
     "replyFieldCppTypeNotEqualUnstable-reply-cppTypeNotEqualReplyUnstableField",
     "commandCppTypeNotEqualUnstable",
+    "commandParameterSerializerNotEqualUnstable-param-serializerNotEqualParam",
+    "replyFieldSerializerNotEqualUnstable-reply-serializerNotEqualReplyUnstableField",
+    "commandSerializerNotEqualUnstable",
+    "commandParameterDeserializerNotEqualUnstable-param-deserializerNotEqualParam",
+    "replyFieldDeserializerNotEqualUnstable-reply-deserializerNotEqualReplyUnstableField",
+    "commandDeserializerNotEqualUnstable",
 
     # TODO (SERVER-54956): Decide what to do with commands: (create, createIndexes).
     'create-param-backwards',
@@ -90,8 +106,17 @@ ALLOW_ANY_TYPE_LIST: List[str] = [
     'saslContinue-param-payload',
     'saslContinue-reply-payload',
 
-    # TODO (SERVER-54925): Decide what to do with commands:
-    # (aggregate, find, update, delete, findAndModify, explain).
+    # These commands (aggregate, find, update, delete, findAndModify, explain) might contain some
+    # fields with type `any`. Currently, it's not possible to avoid the `any` type in those cases.
+    # Instead, here are the preventive measures in-place to catch unintentional breaking changes:
+    # 1- Added comments on top of custom serializers/deserializers (related to these fields) to
+    #    let the future developers know that their modifications to these methods might lead to
+    #    a breaking change in the API.
+    # 2- Added proper unit-tests to catch accidental changes to the custom serializers/deserializers
+    #    by over-fitting on the current implementation of these custom serializers/deserializers.
+    # 3- Added further checks to the current script (idl_check_compatibility.py) to check for
+    #    changing a custom serializer/deserializer and considering it as a potential breaking
+    #    change.
     'aggregate-param-pipeline',
     'aggregate-param-explain',
     'aggregate-param-allowDiskUse',
@@ -158,6 +183,14 @@ class FieldCompatibilityPair:
     new: FieldCompatibility
     cmd_name: str
     field_name: str
+
+
+class ArrayTypeCheckResult(Enum):
+    """Enumeration representing different return values of check_array_type."""
+
+    INVALID = 0
+    TRUE = 1
+    FALSE = 2
 
 
 def get_new_commands(
@@ -278,9 +311,20 @@ def check_reply_field_type_recursive(ctxt: IDLCompatibilityContext,
                 cmd_name, field_name, old_field_type.name, old_field.idl_file_path)
             return
 
+        # If cpp_type is changed, it's a potential breaking change.
         if old_field_type.cpp_type != new_field_type.cpp_type:
             ctxt.add_reply_field_cpp_type_not_equal_error(cmd_name, field_name, new_field_type.name,
                                                           new_field.idl_file_path)
+
+        # If serializer is changed, it's a potential breaking change.
+        if (not old_field.unstable) and old_field_type.serializer != new_field_type.serializer:
+            ctxt.add_reply_field_serializer_not_equal_error(
+                cmd_name, field_name, new_field_type.name, new_field.idl_file_path)
+
+        # If deserializer is changed, it's a potential breaking change.
+        if (not old_field.unstable) and old_field_type.deserializer != new_field_type.deserializer:
+            ctxt.add_reply_field_deserializer_not_equal_error(
+                cmd_name, field_name, new_field_type.name, new_field.idl_file_path)
 
     if isinstance(old_field_type, syntax.VariantType):
         # If the new type is not variant just check the single type.
@@ -336,9 +380,13 @@ def check_reply_field_type(ctxt: IDLCompatibilityContext, field_pair: FieldCompa
     # pylint: disable=too-many-branches
     old_field = field_pair.old
     new_field = field_pair.new
-    if check_array_type(ctxt, "reply_field", old_field.field_type, new_field.field_type,
-                        field_pair.cmd_name, 'type', old_field.idl_file_path,
-                        new_field.idl_file_path, old_field.unstable):
+    array_check = check_array_type(ctxt, "reply_field", old_field.field_type, new_field.field_type,
+                                   field_pair.cmd_name, 'type', old_field.idl_file_path,
+                                   new_field.idl_file_path, old_field.unstable)
+    if array_check == ArrayTypeCheckResult.INVALID:
+        return
+
+    if array_check == ArrayTypeCheckResult.TRUE:
         old_field.field_type = old_field.field_type.element_type
         new_field.field_type = new_field.field_type.element_type
 
@@ -381,21 +429,27 @@ def check_array_type(ctxt: IDLCompatibilityContext, symbol: str,
                      old_type: Optional[Union[syntax.Enum, syntax.Struct, syntax.Type]],
                      new_type: Optional[Union[syntax.Enum, syntax.Struct, syntax.Type]],
                      cmd_name: str, symbol_name: str, old_idl_file_path: str,
-                     new_idl_file_path: str, old_field_unstable: bool) -> bool:
-    """Check compatibility between old and new ArrayTypes."""
+                     new_idl_file_path: str, old_field_unstable: bool) -> ArrayTypeCheckResult:
+    """
+    Check compatibility between old and new ArrayTypes.
+
+    :returns:
+        -  ArrayTypeCheckResult.TRUE : when the old type and new type are of array type.
+        -  ArrayTypeCheckResult.FALSE : when the old type and new type aren't of array type.
+        -  ArrayTypeCheckResult.INVALID : when one of the types is not of array type while the other one is.
+    """
     # pylint: disable=too-many-arguments,too-many-branches
     old_is_array = isinstance(old_type, syntax.ArrayType)
     new_is_array = isinstance(new_type, syntax.ArrayType)
     if not old_is_array and not new_is_array:
-        return False
+        return ArrayTypeCheckResult.FALSE
 
     if (not old_is_array or not new_is_array) and not old_field_unstable:
         ctxt.add_type_not_array_error(symbol, cmd_name, symbol_name, new_type.name, old_type.name,
                                       new_idl_file_path if old_is_array else old_idl_file_path)
-        ctxt.errors.dump_errors()
-        sys.exit(1)
+        return ArrayTypeCheckResult.INVALID
 
-    return True
+    return ArrayTypeCheckResult.TRUE
 
 
 def check_reply_field(ctxt: IDLCompatibilityContext, old_field: syntax.Field,
@@ -521,8 +575,19 @@ def check_param_or_command_type_recursive(ctxt: IDLCompatibilityContext,
                 cmd_name, old_type.name, old_field.idl_file_path, param_name, is_command_parameter)
             return
 
+        # If cpp_type is changed, it's a potential breaking change.
         if old_type.cpp_type != new_type.cpp_type:
             ctxt.add_command_or_param_cpp_type_not_equal_error(
+                cmd_name, new_type.name, new_field.idl_file_path, param_name, is_command_parameter)
+
+        # If serializer is changed, it's a potential breaking change.
+        if (not old_field.unstable) and old_type.serializer != new_type.serializer:
+            ctxt.add_command_or_param_serializer_not_equal_error(
+                cmd_name, new_type.name, new_field.idl_file_path, param_name, is_command_parameter)
+
+        # If deserializer is changed, it's a potential breaking change.
+        if (not old_field.unstable) and old_type.deserializer != new_type.deserializer:
+            ctxt.add_command_or_param_deserializer_not_equal_error(
                 cmd_name, new_type.name, new_field.idl_file_path, param_name, is_command_parameter)
 
     if isinstance(old_type, syntax.VariantType):
@@ -582,10 +647,15 @@ def check_param_or_command_type(ctxt: IDLCompatibilityContext, field_pair: Field
     # pylint: disable=too-many-branches
     old_field = field_pair.old
     new_field = field_pair.new
-    if check_array_type(ctxt, "command_parameter" if is_command_parameter else "command_namespace",
-                        old_field.field_type, new_field.field_type, field_pair.cmd_name,
-                        field_pair.field_name if is_command_parameter else "type",
-                        old_field.idl_file_path, new_field.idl_file_path, old_field.unstable):
+    array_check = check_array_type(
+        ctxt, "command_parameter" if is_command_parameter else "command_namespace",
+        old_field.field_type, new_field.field_type, field_pair.cmd_name,
+        field_pair.field_name if is_command_parameter else "type", old_field.idl_file_path,
+        new_field.idl_file_path, old_field.unstable)
+    if array_check == ArrayTypeCheckResult.INVALID:
+        return
+
+    if array_check == ArrayTypeCheckResult.TRUE:
         old_field.field_type = old_field.field_type.element_type
         new_field.field_type = new_field.field_type.element_type
 
@@ -970,6 +1040,52 @@ def check_compatibility(old_idl_dir: str, new_idl_dir: str,
     return ctxt.errors
 
 
+def get_generic_arguments(gen_args_file_path: str) -> Tuple[Set[str], Set[str]]:
+    """Get arguments and reply fields from generic_argument.idl and check validity."""
+    arguments: Set[str] = set()
+    reply_fields: Set[str] = set()
+
+    with open(gen_args_file_path) as gen_args_file:
+        parsed_idl_file = parser.parse(gen_args_file, gen_args_file_path,
+                                       CompilerImportResolver([]))
+        if parsed_idl_file.errors:
+            parsed_idl_file.errors.dump_errors()
+            raise ValueError(f"Cannot parse {gen_args_file_path}")
+        for argument in parsed_idl_file.spec.symbols.get_generic_argument_list(
+                "generic_args_api_v1").fields:
+            arguments.add(argument.name)
+
+        for reply_field in parsed_idl_file.spec.symbols.get_generic_reply_field_list(
+                "generic_reply_fields_api_v1").fields:
+            reply_fields.add(reply_field.name)
+
+    return arguments, reply_fields
+
+
+def check_generic_arguments_compatibility(old_gen_args_file_path: str, new_gen_args_file_path: str
+                                          ) -> IDLCompatibilityErrorCollection:
+    """Check IDL compatibility between old and new generic_argument.idl files."""
+    # IDLCompatibilityContext takes in both 'old_idl_dir' and 'new_idl_dir',
+    # but for generic_argument.idl, the parent directories aren't helpful for logging purposes.
+    # Instead, we pass in "old generic_argument.idl" and "new generic_argument.idl"
+    # to make error messages clearer.
+    ctxt = IDLCompatibilityContext("old generic_argument.idl", "new generic_argument.idl",
+                                   IDLCompatibilityErrorCollection())
+
+    old_arguments, old_reply_fields = get_generic_arguments(old_gen_args_file_path)
+    new_arguments, new_reply_fields = get_generic_arguments(new_gen_args_file_path)
+
+    for old_argument in old_arguments:
+        if old_argument not in new_arguments:
+            ctxt.add_generic_argument_removed(old_argument, new_gen_args_file_path)
+
+    for old_reply_field in old_reply_fields:
+        if old_reply_field not in new_reply_fields:
+            ctxt.add_generic_argument_removed_reply_field(old_reply_field, new_gen_args_file_path)
+
+    return ctxt.errors
+
+
 def main():
     """Run the script."""
     arg_parser = argparse.ArgumentParser(description=__doc__)
@@ -990,6 +1106,13 @@ def main():
     new_basic_types_path = os.path.join(args.new_idl_dir, "mongo/idl/basic_types.idl")
     error_reply_coll = check_error_reply(old_basic_types_path, new_basic_types_path, args.include)
     if error_reply_coll.has_errors():
+        sys.exit(1)
+
+    old_generic_args_path = os.path.join(args.old_idl_dir, "mongo/idl/generic_argument.idl")
+    new_generic_args_path = os.path.join(args.new_idl_dir, "mongo/idl/generic_argument.idl")
+    error_gen_args_coll = check_generic_arguments_compatibility(old_generic_args_path,
+                                                                new_generic_args_path)
+    if error_gen_args_coll.has_errors():
         sys.exit(1)
 
 

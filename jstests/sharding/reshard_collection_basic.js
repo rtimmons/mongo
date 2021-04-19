@@ -6,6 +6,7 @@
 // ]
 //
 
+load("jstests/libs/fail_point_util.js");
 load("jstests/libs/uuid_util.js");
 load("jstests/sharding/libs/find_chunks_util.js");
 
@@ -34,9 +35,10 @@ let shardIdToShardMap = {};
 shardIdToShardMap[st.shard0.shardName] = st.shard0;
 shardIdToShardMap[st.shard1.shardName] = st.shard1;
 
-const DDLFeatureFlagParam = assert.commandWorked(
-    st.configRS.getPrimary().adminCommand({getParameter: 1, featureFlagShardingFullDDLSupport: 1}));
-const isDDLFeatureFlagEnabled = DDLFeatureFlagParam.featureFlagShardingFullDDLSupport.value;
+const DDLFeatureFlagParam = assert.commandWorked(st.configRS.getPrimary().adminCommand(
+    {getParameter: 1, featureFlagShardingFullDDLSupportTimestampedVersion: 1}));
+const isDDLFeatureFlagEnabled =
+    DDLFeatureFlagParam.featureFlagShardingFullDDLSupportTimestampedVersion.value;
 
 let getUUIDFromCollectionInfo = (dbName, collName, collInfo) => {
     if (collInfo) {
@@ -200,6 +202,8 @@ let assertReshardCollOk = (commandObj, expectedChunks) => {
 let presetReshardedChunks =
     [{recipientShardId: st.shard1.shardName, min: {newKey: MinKey}, max: {newKey: MaxKey}}];
 const existingZoneName = 'x1';
+
+configureFailPoint(st.configRS.getPrimary(), "reshardingCoordinatorCanEnterCriticalImplicitly");
 
 /**
  * Fail cases

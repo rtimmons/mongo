@@ -79,7 +79,8 @@ public:
         NamespaceString nss{dbname};
 
         // Create a trivial cannonical query for the 'sbe' command execution.
-        auto statusWithCQ = CanonicalQuery::canonicalize(opCtx, std::make_unique<FindCommand>(nss));
+        auto statusWithCQ =
+            CanonicalQuery::canonicalize(opCtx, std::make_unique<FindCommandRequest>(nss));
         std::unique_ptr<CanonicalQuery> cq = std::move(statusWithCQ.getValue());
 
         stage_builder::PlanStageData data{std::make_unique<sbe::RuntimeEnvironment>()};
@@ -140,6 +141,18 @@ public:
             pinnedCursor.getCursor()->cursorid(), nss.ns(), firstBatch.arr(), &result);
 
         return true;
+    }
+
+    // This is a test-only command so shouldn't be enabled in production, but we try to require
+    // auth on new test commands anyway, just in case someone enables them by mistake.
+    Status checkAuthForOperation(OperationContext* opCtx,
+                                 const std::string& dbname,
+                                 const BSONObj& cmdObj) const override {
+        auto authSession = AuthorizationSession::get(opCtx->getClient());
+        if (!authSession->isAuthorizedForAnyActionOnAnyResourceInDB(dbname)) {
+            return Status(ErrorCodes::Unauthorized, "Unauthorized");
+        }
+        return Status::OK();
     }
 };
 

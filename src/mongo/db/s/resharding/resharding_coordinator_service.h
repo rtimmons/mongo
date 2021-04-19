@@ -29,6 +29,7 @@
 
 #pragma once
 
+#include "mongo/db/cancelable_operation_context.h"
 #include "mongo/db/repl/primary_only_service.h"
 #include "mongo/db/s/resharding/coordinator_document_gen.h"
 #include "mongo/db/s/resharding/resharding_coordinator_observer.h"
@@ -41,7 +42,6 @@
 #include "mongo/util/future.h"
 
 namespace mongo {
-
 namespace resharding {
 
 struct ParticipantShardsAndChunks {
@@ -78,28 +78,74 @@ void writeStateTransitionAndCatalogUpdatesThenBumpShardVersions(
 void removeCoordinatorDocAndReshardingFields(OperationContext* opCtx,
                                              const ReshardingCoordinatorDocument& coordinatorDoc);
 
-/**
- * Extracts the ShardId from each Donor/RecipientShardEntry in participantShardEntries.
- */
-template <class T>
-std::vector<ShardId> extractShardIds(const std::vector<T>& participantShardEntries) {
-    std::vector<ShardId> shardIds(participantShardEntries.size());
-    std::transform(participantShardEntries.begin(),
-                   participantShardEntries.end(),
-                   shardIds.begin(),
-                   [](auto& shardEntry) { return shardEntry.getId(); });
-    return shardIds;
-}
-
 }  // namespace resharding
 
-class ServiceContext;
-class OperationContext;
+/**
+ * Construct to encapsulate cancellation tokens and related semantics on the ReshardingCoordinator.
+ */
+class CoordinatorCancellationTokenHolder {
+public:
+    CoordinatorCancellationTokenHolder(CancellationToken stepdownToken)
+        : _stepdownToken(stepdownToken),
+          _abortSource(CancellationSource(stepdownToken)),
+          _abortToken(_abortSource.token()) {}
 
-constexpr StringData kReshardingCoordinatorServiceName = "ReshardingCoordinatorService"_sd;
+    /**
+     * Returns whether the any token has been canceled.
+     */
+    bool isCanceled() {
+        return _stepdownToken.isCanceled() || _abortToken.isCanceled();
+    }
+
+    /**
+     * Returns whether the abort token has been canceled, indicating that the resharding operation
+     * was explicitly aborted by an external user.
+     */
+    bool isAborted() {
+        return !_stepdownToken.isCanceled() && _abortToken.isCanceled();
+    }
+
+    /**
+     * Returns whether the stepdownToken has been canceled, indicating that the shard's underlying
+     * replica set node is stepping down or shutting down.
+     */
+    bool isSteppingOrShuttingDown() {
+        return _stepdownToken.isCanceled();
+    }
+
+    /**
+     * Cancels the source created by this class, in order to indicate to holders of the abortToken
+     * that the resharding operation has been aborted.
+     */
+    void abort() {
+        _abortSource.cancel();
+    }
+
+    const CancellationToken& getStepdownToken() {
+        return _stepdownToken;
+    }
+
+    const CancellationToken& getAbortToken() {
+        return _abortToken;
+    }
+
+private:
+    // The token passed in by the PrimaryOnlyService runner that is canceled when this shard's
+    // underlying replica set node is stepping down or shutting down.
+    CancellationToken _stepdownToken;
+
+    // The source created by inheriting from the stepdown token.
+    CancellationSource _abortSource;
+
+    // The token to wait on in cases where a user wants to wait on either a resharding operation
+    // being aborted or the replica set node stepping/shutting down.
+    CancellationToken _abortToken;
+};
 
 class ReshardingCoordinatorService final : public repl::PrimaryOnlyService {
 public:
+    static constexpr StringData kServiceName = "ReshardingCoordinatorService"_sd;
+
     explicit ReshardingCoordinatorService(ServiceContext* serviceContext)
         : PrimaryOnlyService(serviceContext) {}
     ~ReshardingCoordinatorService() = default;
@@ -107,7 +153,7 @@ public:
     class ReshardingCoordinator;
 
     StringData getServiceName() const override {
-        return kReshardingCoordinatorServiceName;
+        return kServiceName;
     }
 
     NamespaceString getStateDocumentsNS() const override {
@@ -119,8 +165,7 @@ public:
         return ThreadPool::Limits();
     }
 
-    std::shared_ptr<PrimaryOnlyService::Instance> constructInstance(
-        BSONObj initialState) const override;
+    std::shared_ptr<PrimaryOnlyService::Instance> constructInstance(BSONObj initialState) override;
 
 private:
     ExecutorFuture<void> _rebuildService(std::shared_ptr<executor::ScopedTaskExecutor> executor,
@@ -130,13 +175,19 @@ private:
 class ReshardingCoordinatorService::ReshardingCoordinator final
     : public PrimaryOnlyService::TypedInstance<ReshardingCoordinator> {
 public:
-    explicit ReshardingCoordinator(const BSONObj& state);
+    explicit ReshardingCoordinator(const ReshardingCoordinatorService* coordinatorService,
+                                   const BSONObj& state);
     ~ReshardingCoordinator();
 
     SemiFuture<void> run(std::shared_ptr<executor::ScopedTaskExecutor> executor,
                          const CancellationToken& token) noexcept override;
 
-    void interrupt(Status status) override;
+    void interrupt(Status status) override {}
+
+    /**
+     * Attempts to cancel the underlying resharding operation using the abort token.
+     */
+    void abort();
 
     /**
      * Replace in-memory representation of the CoordinatorDoc
@@ -155,6 +206,19 @@ public:
         MongoProcessInterface::CurrentOpConnectionsMode,
         MongoProcessInterface::CurrentOpSessionsMode) noexcept override;
 
+    /**
+     * This coordinator will not enter the critical section until this member
+     * function is called at least once. There are two ways this is called:
+     *
+     * - Metrics-based heuristics will automatically call this at a strategic
+     *   time chosen to minimize the critical section's time window.
+     *
+     * - The "commitReshardCollection" command is an elaborate wrapper for this
+     *   function, providing a shortcut to make the critical section happen
+     *   sooner, even if it takes longer to complete.
+     */
+    void onOkayToEnterCritical();
+
     std::shared_ptr<ReshardingCoordinatorObserver> getObserver();
 
 private:
@@ -162,6 +226,25 @@ private:
         std::vector<ChunkType> initialChunks;
         std::vector<TagsType> newZones;
     };
+
+    /**
+     * Runs resharding up through preparing to persist the decision.
+     */
+    ExecutorFuture<ReshardingCoordinatorDocument> _runUntilReadyToPersistDecision(
+        const std::shared_ptr<executor::ScopedTaskExecutor>& executor) noexcept;
+
+    /**
+     * Runs resharding through persisting the decision until cleanup.
+     */
+    ExecutorFuture<void> _persistDecisionAndFinishReshardOperation(
+        const std::shared_ptr<executor::ScopedTaskExecutor>& executor,
+        const ReshardingCoordinatorDocument& updatedCoordinatorDoc) noexcept;
+
+    /**
+     * Runs cleanup logic that only applies to abort.
+     */
+    void _onAbort(const std::shared_ptr<executor::ScopedTaskExecutor>& executor,
+                  const Status& status);
 
     /**
      * Does the following writes:
@@ -210,7 +293,7 @@ private:
      * Waits on _reshardingCoordinatorObserver to notify that all recipients have entered
      * strict-consistency.
      */
-    SharedSemiFuture<ReshardingCoordinatorDocument> _awaitAllRecipientsInStrictConsistency(
+    ExecutorFuture<ReshardingCoordinatorDocument> _awaitAllRecipientsInStrictConsistency(
         const std::shared_ptr<executor::ScopedTaskExecutor>& executor);
 
     /**
@@ -226,13 +309,13 @@ private:
     /**
      * Waits on _reshardingCoordinatorObserver to notify that:
      * 1. All recipient shards have renamed the temporary collection to the original collection
-     *    namespace, and
+     *    namespace or have finished aborting, and
      * 2. All donor shards that were not also recipient shards have dropped the original
-     *    collection.
+     *    collection or have finished aborting.
      *
      * Transitions to 'kDone'.
      */
-    ExecutorFuture<void> _awaitAllParticipantShardsRenamedOrDroppedOriginalCollection(
+    ExecutorFuture<void> _awaitAllParticipantShardsDone(
         const std::shared_ptr<executor::ScopedTaskExecutor>& executor);
 
     /**
@@ -242,7 +325,7 @@ private:
     void _updateCoordinatorDocStateAndCatalogEntries(
         CoordinatorStateEnum nextState,
         ReshardingCoordinatorDocument coordinatorDoc,
-        boost::optional<Timestamp> fetchTimestamp = boost::none,
+        boost::optional<Timestamp> cloneTimestamp = boost::none,
         boost::optional<ReshardingApproxCopySize> approxCopySize = boost::none,
         boost::optional<Status> abortReason = boost::none);
 
@@ -271,6 +354,9 @@ private:
     // collection. The object looks like: {_id: 'reshardingUUID'}
     const InstanceID _id;
 
+    // The primary-only service instance corresponding to the coordinator instance. Not owned.
+    const ReshardingCoordinatorService* const _coordinatorService;
+
     // Observes writes that indicate state changes for this resharding operation and notifies
     // 'this' when all donors/recipients have entered some state so that 'this' can transition
     // states.
@@ -279,11 +365,34 @@ private:
     // The updated coordinator state document.
     ReshardingCoordinatorDocument _coordinatorDoc;
 
-    // Protects promises below.
-    mutable Mutex _mutex = MONGO_MAKE_LATCH("ReshardingCoordinatorService::_mutex");
+    // Holds the cancellation tokens relevant to the ReshardingCoordinator.
+    std::unique_ptr<CoordinatorCancellationTokenHolder> _ctHolder;
 
-    // Promise that is resolved when the chain of work kicked off by run() has completed.
+    // ThreadPool used by CancelableOperationContext.
+    // CancelableOperationContext must have a thread that is always available to it to mark its
+    // opCtx as killed when the cancelToken has been cancelled.
+    const std::shared_ptr<ThreadPool> _markKilledExecutor;
+    boost::optional<CancelableOperationContextFactory> _cancelableOpCtxFactory;
+
+    /**
+     * Must be locked while the `_canEnterCritical` or `_completionPromise`
+     * promises are fulfilled.
+     */
+    mutable Mutex _fulfillmentMutex =
+        MONGO_MAKE_LATCH("ReshardingCoordinatorService::_fulfillmentMutex");
+
+    /**
+     * Coordinator does not enter the critical section until this is fulfilled.
+     * Can be set by "commitReshardCollection" command or by metrics determining
+     * that it's okay to proceed.
+     */
+    SharedPromise<void> _canEnterCritical;
+
+    // Promise that is fulfilled when the chain of work kicked off by run() has completed.
     SharedPromise<void> _completionPromise;
+
+    // Callback handle for scheduled work to handle critical section timeout.
+    boost::optional<executor::TaskExecutor::CallbackHandle> _criticalSectionTimeoutCbHandle;
 };
 
 }  // namespace mongo

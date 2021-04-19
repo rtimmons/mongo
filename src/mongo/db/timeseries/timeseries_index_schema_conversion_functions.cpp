@@ -27,37 +27,22 @@
  *    it in the license file.
  */
 
+#define MONGO_LOGV2_DEFAULT_COMPONENT ::mongo::logv2::LogComponent::kStorage
+
 #include "mongo/platform/basic.h"
 
 #include "mongo/db/timeseries/timeseries_index_schema_conversion_functions.h"
 
-#include "mongo/db/catalog/database_holder.h"
 #include "mongo/db/timeseries/timeseries_field_names.h"
-#include "mongo/db/views/view_catalog.h"
+#include "mongo/db/timeseries/timeseries_gen.h"
+#include "mongo/logv2/log.h"
 #include "mongo/logv2/redaction.h"
 
 namespace mongo {
 
 namespace timeseries {
 
-boost::optional<TimeseriesOptions> getTimeseriesOptions(OperationContext* opCtx,
-                                                        const NamespaceString& nss) {
-    auto viewCatalog = DatabaseHolder::get(opCtx)->getViewCatalog(opCtx, nss.db());
-    if (!viewCatalog) {
-        return {};
-    }
-
-    auto view = viewCatalog->lookupWithoutValidatingDurableViews(opCtx, nss.ns());
-    if (!view) {
-        return {};
-    }
-
-    // Return a copy of the time-series options so that we do not refer to the internal state of
-    // 'viewCatalog' after it goes out of scope.
-    return view->timeseries();
-}
-
-StatusWith<BSONObj> convertTimeseriesIndexSpecToBucketsIndexSpec(
+StatusWith<BSONObj> createBucketsIndexSpecFromTimeseriesIndexSpec(
     const TimeseriesOptions& timeseriesOptions, const BSONObj& timeseriesIndexSpecBSON) {
     auto timeField = timeseriesOptions.getTimeField();
     auto metaField = timeseriesOptions.getMetaField();
@@ -127,8 +112,8 @@ StatusWith<BSONObj> convertTimeseriesIndexSpecToBucketsIndexSpec(
     return builder.obj();
 }
 
-BSONObj convertBucketsIndexSpecToTimeseriesIndexSpec(const TimeseriesOptions& timeseriesOptions,
-                                                     const BSONObj& bucketsIndexSpecBSON) {
+boost::optional<BSONObj> createTimeseriesIndexSpecFromBucketsIndexSpec(
+    const TimeseriesOptions& timeseriesOptions, const BSONObj& bucketsIndexSpecBSON) {
     auto timeField = timeseriesOptions.getTimeField();
     auto metaField = timeseriesOptions.getMetaField();
 
@@ -143,7 +128,7 @@ BSONObj convertBucketsIndexSpecToTimeseriesIndexSpec(const TimeseriesOptions& ti
         if (elem.fieldNameStringData() == controlMinTimeField) {
             if (!elem.isNumber()) {
                 // This index spec on the underlying buckets collection is not valid for
-                // time-series. Therefore, we will not convert the index spec..
+                // time-series. Therefore, we will not convert the index spec.
                 return {};
             }
 
@@ -181,6 +166,34 @@ BSONObj convertBucketsIndexSpecToTimeseriesIndexSpec(const TimeseriesOptions& ti
     }
 
     return builder.obj();
+}
+
+boost::optional<BSONObj> createTimeseriesIndexFromBucketsIndex(
+    const TimeseriesOptions& timeseriesOptions, const BSONObj& bucketsIndex) {
+    if (bucketsIndex.hasField(kKeyFieldName)) {
+        auto timeseriesKeyValue = createTimeseriesIndexSpecFromBucketsIndexSpec(
+            timeseriesOptions, bucketsIndex.getField(kKeyFieldName).Obj());
+        if (timeseriesKeyValue) {
+            // This creates a bsonobj copy with a modified kKeyFieldName field set to
+            // timeseriesKeyValue.
+            return bucketsIndex.addFields(BSON(kKeyFieldName << timeseriesKeyValue.get()),
+                                          StringDataSet{kKeyFieldName});
+        }
+    }
+    return boost::none;
+}
+
+std::list<BSONObj> createTimeseriesIndexesFromBucketsIndexes(
+    const TimeseriesOptions& timeseriesOptions, const std::list<BSONObj>& bucketsIndexes) {
+    std::list<BSONObj> indexSpecs;
+    for (const auto& bucketsIndex : bucketsIndexes) {
+        auto timeseriesIndex =
+            createTimeseriesIndexFromBucketsIndex(timeseriesOptions, bucketsIndex);
+        if (timeseriesIndex) {
+            indexSpecs.push_back(timeseriesIndex->getOwned());
+        }
+    }
+    return indexSpecs;
 }
 
 }  // namespace timeseries

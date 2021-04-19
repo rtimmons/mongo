@@ -36,7 +36,6 @@
 #include <utility>
 
 #include "mongo/bson/json.h"
-#include "mongo/db/cancelable_operation_context.h"
 #include "mongo/db/catalog/collection.h"
 #include "mongo/db/catalog_raii.h"
 #include "mongo/db/client.h"
@@ -216,7 +215,7 @@ std::unique_ptr<Pipeline, PipelineDeleter> ReshardingCollectionCloner::makePipel
 
 std::unique_ptr<Pipeline, PipelineDeleter> ReshardingCollectionCloner::_targetAggregationRequest(
     OperationContext* opCtx, const Pipeline& pipeline) {
-    AggregateCommand request(_sourceNss, pipeline.serializeToBson());
+    AggregateCommandRequest request(_sourceNss, pipeline.serializeToBson());
     request.setCollectionUUID(_sourceUUID);
 
     auto hint = collectionHasSimpleCollation(opCtx, _sourceNss)
@@ -309,9 +308,11 @@ bool ReshardingCollectionCloner::doOneBatch(OperationContext* opCtx, Pipeline& p
     return true;
 }
 
-SemiFuture<void> ReshardingCollectionCloner::run(std::shared_ptr<executor::TaskExecutor> executor,
-                                                 CancellationToken cancelToken,
-                                                 CancelableOperationContextFactory factory) {
+SemiFuture<void> ReshardingCollectionCloner::run(
+    std::shared_ptr<executor::TaskExecutor> executor,
+    std::shared_ptr<executor::TaskExecutor> cleanupExecutor,
+    CancellationToken cancelToken,
+    CancelableOperationContextFactory factory) {
     struct ChainContext {
         std::unique_ptr<Pipeline, PipelineDeleter> pipeline;
         bool moreToCome = true;
@@ -377,8 +378,13 @@ SemiFuture<void> ReshardingCollectionCloner::run(std::shared_ptr<executor::TaskE
             return true;
         })
         .on(executor, cancelToken)
+        .thenRunOn(cleanupExecutor)
         .onCompletion([this, chainCtx](Status status) {
             if (chainCtx->pipeline) {
+                auto client =
+                    cc().getServiceContext()->makeClient("ReshardingCollectionClonerCleanupClient");
+
+                AlternativeClientRegion acr(client);
                 auto opCtx = cc().makeOperationContext();
 
                 // Guarantee the pipeline is always cleaned up - even upon cancellation.

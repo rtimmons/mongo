@@ -27,6 +27,10 @@
  *    it in the license file.
  */
 
+#pragma once
+
+#include "mongo/base/string_data.h"
+
 namespace mongo {
 namespace timeseries {
 
@@ -34,12 +38,16 @@ namespace timeseries {
 static constexpr StringData kBucketIdFieldName = "_id"_sd;
 static constexpr StringData kBucketDataFieldName = "data"_sd;
 static constexpr StringData kBucketMetaFieldName = "meta"_sd;
+static constexpr StringData kBucketControlFieldName = "control"_sd;
 static constexpr StringData kControlMaxFieldNamePrefix = "control.max."_sd;
 static constexpr StringData kControlMinFieldNamePrefix = "control.min."_sd;
 
 // These are hard-coded field names in create collection for time-series collections.
 static constexpr StringData kTimeFieldName = "timeField"_sd;
 static constexpr StringData kMetaFieldName = "metaField"_sd;
+
+// These are hard-coded field names in index specs.
+static constexpr StringData kKeyFieldName = "key"_sd;
 
 }  // namespace timeseries
 }  // namespace mongo

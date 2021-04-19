@@ -36,7 +36,7 @@
 #include "mongo/base/checked_cast.h"
 #include "mongo/db/audit.h"
 #include "mongo/db/auth/authorization_session.h"
-#include "mongo/db/catalog/collection.h"
+#include "mongo/db/catalog/collection_operation_source.h"
 #include "mongo/db/catalog/collection_options.h"
 #include "mongo/db/catalog/database_holder.h"
 #include "mongo/db/catalog/document_validation.h"
@@ -243,7 +243,7 @@ void makeCollection(OperationContext* opCtx, const NamespaceString& ns) {
 bool handleError(OperationContext* opCtx,
                  const DBException& ex,
                  const NamespaceString& nss,
-                 const write_ops::WriteCommandBase& wholeOp,
+                 const write_ops::WriteCommandRequestBase& wholeOp,
                  bool isMultiUpdate,
                  WriteResult* out) {
     LastError::get(opCtx->getClient()).setLastError(ex.code(), ex.reason());
@@ -300,6 +300,10 @@ bool handleError(OperationContext* opCtx,
         // migration blocking, committing, or aborting.
         out->results.emplace_back(ex.toStatus());
         return false;
+    }
+
+    if (ex.code() == ErrorCodes::ShardCannotRefreshDueToLocksHeld) {
+        throw;
     }
 
     out->results.emplace_back(ex.toStatus());
@@ -376,7 +380,7 @@ Status checkIfTransactionOnCappedColl(OperationContext* opCtx, const CollectionP
  * Returns true if caller should try to insert more documents. Does nothing else if batch is empty.
  */
 bool insertBatchAndHandleErrors(OperationContext* opCtx,
-                                const write_ops::Insert& wholeOp,
+                                const write_ops::InsertCommandRequest& wholeOp,
                                 std::vector<InsertStatement>& batch,
                                 LastOpFixer* lastOpFixer,
                                 WriteResult* out,
@@ -440,7 +444,7 @@ bool insertBatchAndHandleErrors(OperationContext* opCtx,
             auto canContinue = handleError(opCtx,
                                            ex,
                                            wholeOp.getNamespace(),
-                                           wholeOp.getWriteCommandBase(),
+                                           wholeOp.getWriteCommandRequestBase(),
                                            false /* multiUpdate */,
                                            out);
             invariant(!canContinue);
@@ -512,7 +516,7 @@ bool insertBatchAndHandleErrors(OperationContext* opCtx,
             bool canContinue = handleError(opCtx,
                                            ex,
                                            wholeOp.getNamespace(),
-                                           wholeOp.getWriteCommandBase(),
+                                           wholeOp.getWriteCommandRequestBase(),
                                            false /* multiUpdate */,
                                            out);
 
@@ -542,8 +546,8 @@ SingleWriteResult makeWriteResultForInsertOrDeleteRetry() {
 }  // namespace
 
 WriteResult performInserts(OperationContext* opCtx,
-                           const write_ops::Insert& wholeOp,
-                           const InsertType& type) {
+                           const write_ops::InsertCommandRequest& wholeOp,
+                           const OperationSource& source) {
     // Insert performs its own retries, so we should only be within a WriteUnitOfWork when run in a
     // transaction.
     auto txnParticipant = TransactionParticipant::get(opCtx);
@@ -579,7 +583,7 @@ WriteResult performInserts(OperationContext* opCtx,
     }
 
     DisableDocumentSchemaValidationIfTrue docSchemaValidationDisabler(
-        opCtx, wholeOp.getWriteCommandBase().getBypassDocumentValidation());
+        opCtx, wholeOp.getWriteCommandRequestBase().getBypassDocumentValidation());
     LastOpFixer lastOpFixer(opCtx, wholeOp.getNamespace());
 
     WriteResult out;
@@ -615,7 +619,7 @@ WriteResult performInserts(OperationContext* opCtx,
 
             // A time-series insert can combine multiple writes into a single operation, and thus
             // can have multiple statement ids associated with it if it is retryable.
-            batch.emplace_back(type == InsertType::kTimeseries && wholeOp.getStmtIds()
+            batch.emplace_back(source == OperationSource::kTimeseries && wholeOp.getStmtIds()
                                    ? *wholeOp.getStmtIds()
                                    : std::vector<StmtId>{stmtId},
                                toInsert);
@@ -627,7 +631,7 @@ WriteResult performInserts(OperationContext* opCtx,
         }
 
         bool canContinue = insertBatchAndHandleErrors(
-            opCtx, wholeOp, batch, &lastOpFixer, &out, type == InsertType::kFromMigrate);
+            opCtx, wholeOp, batch, &lastOpFixer, &out, source == OperationSource::kFromMigrate);
         batch.clear();  // We won't need the current batch any more.
         bytesInBatch = 0;
 
@@ -649,7 +653,7 @@ WriteResult performInserts(OperationContext* opCtx,
                 canContinue = handleError(opCtx,
                                           ex,
                                           wholeOp.getNamespace(),
-                                          wholeOp.getWriteCommandBase(),
+                                          wholeOp.getWriteCommandRequestBase(),
                                           false /* multiUpdate */,
                                           &out);
             }
@@ -772,7 +776,8 @@ static SingleWriteResult performSingleUpdateOpWithDupKeyRetry(
     const std::vector<StmtId>& stmtIds,
     const write_ops::UpdateOpEntry& op,
     LegacyRuntimeConstants runtimeConstants,
-    const boost::optional<BSONObj>& letParams) {
+    const boost::optional<BSONObj>& letParams,
+    OperationSource source) {
     globalOpCounters.gotUpdate();
     ServerWriteConcernMetrics::get(opCtx)->recordWriteConcernForUpdate(opCtx->getWriteConcern());
     auto& curOp = *CurOp::get(opCtx);
@@ -799,6 +804,7 @@ static SingleWriteResult performSingleUpdateOpWithDupKeyRetry(
     request.setYieldPolicy(opCtx->inMultiDocumentTransaction()
                                ? PlanYieldPolicy::YieldPolicy::INTERRUPT_ONLY
                                : PlanYieldPolicy::YieldPolicy::YIELD_AUTO);
+    request.setSource(source);
 
     size_t numAttempts = 0;
     while (true) {
@@ -833,8 +839,8 @@ static SingleWriteResult performSingleUpdateOpWithDupKeyRetry(
 }
 
 WriteResult performUpdates(OperationContext* opCtx,
-                           const write_ops::Update& wholeOp,
-                           const UpdateType& type) {
+                           const write_ops::UpdateCommandRequest& wholeOp,
+                           const OperationSource& source) {
     // Update performs its own retries, so we should not be in a WriteUnitOfWork unless run in a
     // transaction.
     auto txnParticipant = TransactionParticipant::get(opCtx);
@@ -843,7 +849,7 @@ WriteResult performUpdates(OperationContext* opCtx,
     uassertStatusOK(userAllowedWriteNS(opCtx, wholeOp.getNamespace()));
 
     DisableDocumentSchemaValidationIfTrue docSchemaValidationDisabler(
-        opCtx, wholeOp.getWriteCommandBase().getBypassDocumentValidation());
+        opCtx, wholeOp.getWriteCommandRequestBase().getBypassDocumentValidation());
     LastOpFixer lastOpFixer(opCtx, wholeOp.getNamespace());
 
     bool containsRetry = false;
@@ -886,7 +892,7 @@ WriteResult performUpdates(OperationContext* opCtx,
 
             // A time-series insert can combine multiple writes into a single operation, and thus
             // can have multiple statement ids associated with it if it is retryable.
-            auto stmtIds = type == UpdateType::kTimeseries && wholeOp.getStmtIds()
+            auto stmtIds = source == OperationSource::kTimeseries && wholeOp.getStmtIds()
                 ? *wholeOp.getStmtIds()
                 : std::vector<StmtId>{stmtId};
 
@@ -895,13 +901,14 @@ WriteResult performUpdates(OperationContext* opCtx,
                                                                           stmtIds,
                                                                           singleOp,
                                                                           runtimeConstants,
-                                                                          wholeOp.getLet()));
+                                                                          wholeOp.getLet(),
+                                                                          source));
             lastOpFixer.finishedOpSuccessfully();
         } catch (const DBException& ex) {
             const bool canContinue = handleError(opCtx,
                                                  ex,
                                                  wholeOp.getNamespace(),
-                                                 wholeOp.getWriteCommandBase(),
+                                                 wholeOp.getWriteCommandRequestBase(),
                                                  singleOp.getMulti(),
                                                  &out);
             if (!canContinue)
@@ -1003,7 +1010,8 @@ static SingleWriteResult performSingleDeleteOp(OperationContext* opCtx,
     return result;
 }
 
-WriteResult performDeletes(OperationContext* opCtx, const write_ops::Delete& wholeOp) {
+WriteResult performDeletes(OperationContext* opCtx,
+                           const write_ops::DeleteCommandRequest& wholeOp) {
     // Delete performs its own retries, so we should not be in a WriteUnitOfWork unless we are in a
     // transaction.
     auto txnParticipant = TransactionParticipant::get(opCtx);
@@ -1012,7 +1020,7 @@ WriteResult performDeletes(OperationContext* opCtx, const write_ops::Delete& who
     uassertStatusOK(userAllowedWriteNS(opCtx, wholeOp.getNamespace()));
 
     DisableDocumentSchemaValidationIfTrue docSchemaValidationDisabler(
-        opCtx, wholeOp.getWriteCommandBase().getBypassDocumentValidation());
+        opCtx, wholeOp.getWriteCommandRequestBase().getBypassDocumentValidation());
     LastOpFixer lastOpFixer(opCtx, wholeOp.getNamespace());
 
     bool containsRetry = false;
@@ -1072,7 +1080,7 @@ WriteResult performDeletes(OperationContext* opCtx, const write_ops::Delete& who
             const bool canContinue = handleError(opCtx,
                                                  ex,
                                                  wholeOp.getNamespace(),
-                                                 wholeOp.getWriteCommandBase(),
+                                                 wholeOp.getWriteCommandRequestBase(),
                                                  false /* multiUpdate */,
                                                  &out);
             if (!canContinue)

@@ -149,7 +149,6 @@ void applyCursorReadConcern(OperationContext* opCtx, repl::ReadConcernArgs rcArg
         switch (rcArgs.getMajorityReadMechanism()) {
             case repl::ReadConcernArgs::MajorityReadMechanism::kMajoritySnapshot: {
                 // Make sure we read from the majority snapshot.
-                opCtx->recoveryUnit()->abandonSnapshot();
                 opCtx->recoveryUnit()->setTimestampReadSource(
                     RecoveryUnit::ReadSource::kMajorityCommitted);
                 uassertStatusOK(opCtx->recoveryUnit()->majorityCommittedSnapshotAvailable());
@@ -158,7 +157,6 @@ void applyCursorReadConcern(OperationContext* opCtx, repl::ReadConcernArgs rcArg
             case repl::ReadConcernArgs::MajorityReadMechanism::kSpeculative: {
                 // Mark the operation as speculative and select the correct read source.
                 repl::SpeculativeMajorityReadInfo::get(opCtx).setIsSpeculativeRead();
-                opCtx->recoveryUnit()->abandonSnapshot();
                 opCtx->recoveryUnit()->setTimestampReadSource(RecoveryUnit::ReadSource::kNoOverlap);
                 break;
             }
@@ -170,7 +168,6 @@ void applyCursorReadConcern(OperationContext* opCtx, repl::ReadConcernArgs rcArg
         !opCtx->inMultiDocumentTransaction()) {
         auto atClusterTime = rcArgs.getArgsAtClusterTime();
         invariant(atClusterTime && *atClusterTime != LogicalTime::kUninitialized);
-        opCtx->recoveryUnit()->abandonSnapshot();
         opCtx->recoveryUnit()->setTimestampReadSource(RecoveryUnit::ReadSource::kProvided,
                                                       atClusterTime->asTimestamp());
     }
@@ -191,7 +188,7 @@ void applyCursorReadConcern(OperationContext* opCtx, repl::ReadConcernArgs rcArg
  */
 void setUpOperationDeadline(OperationContext* opCtx,
                             const ClientCursor& cursor,
-                            const GetMoreCommand& cmd,
+                            const GetMoreCommandRequest& cmd,
                             bool disableAwaitDataFailpointActive) {
 
     // We assume that cursors created through a DBDirectClient are always used from their
@@ -217,7 +214,7 @@ void setUpOperationDeadline(OperationContext* opCtx,
  */
 void setUpOperationContextStateForGetMore(OperationContext* opCtx,
                                           const ClientCursor& cursor,
-                                          const GetMoreCommand& cmd,
+                                          const GetMoreCommandRequest& cmd,
                                           bool disableAwaitDataFailpointActive) {
     applyCursorReadConcern(opCtx, cursor.getReadConcernArgs());
     opCtx->setWriteConcern(cursor.getWriteConcernOptions());
@@ -257,7 +254,8 @@ public:
     class Invocation final : public CommandInvocation {
     public:
         Invocation(Command* cmd, const OpMsgRequest& request)
-            : CommandInvocation(cmd), _cmd(GetMoreCommand::parse({"getMore"}, request.body)) {
+            : CommandInvocation(cmd),
+              _cmd(GetMoreCommandRequest::parse({"getMore"}, request.body)) {
             NamespaceString nss(_cmd.getDbName(), _cmd.getCollection());
             uassert(ErrorCodes::InvalidNamespace,
                     str::stream() << "Invalid namespace for getMore: " << nss.ns(),
@@ -306,7 +304,7 @@ public:
          */
         bool generateBatch(OperationContext* opCtx,
                            ClientCursor* cursor,
-                           const GetMoreCommand& cmd,
+                           const GetMoreCommandRequest& cmd,
                            const bool isTailable,
                            CursorResponseBuilder* nextBatch,
                            std::uint64_t* numResults,
@@ -397,6 +395,20 @@ public:
             NamespaceString nss(_cmd.getDbName(), _cmd.getCollection());
             int64_t cursorId = _cmd.getCommandParameter();
 
+            // Setup OperationContext state for this operation which will set the correct read
+            // source if needed. Do this before instantiating the AutoGetCollection* object so we
+            // don't attept to override the state that has been setup. Ensure the lsid and txnNumber
+            // of the getMore match that of the originating command.
+            validateLSID(opCtx, cursorId, cursorPin.getCursor());
+            validateTxnNumber(opCtx, cursorId, cursorPin.getCursor());
+
+            const bool disableAwaitDataFailpointActive =
+                MONGO_unlikely(disableAwaitDataForGetMoreCmd.shouldFail());
+
+            // Inherit properties like readConcern and maxTimeMS from our originating cursor.
+            setUpOperationContextStateForGetMore(
+                opCtx, *cursorPin.getCursor(), _cmd, disableAwaitDataFailpointActive);
+
             if (cursorPin->getExecutor()->lockPolicy() ==
                 PlanExecutor::LockPolicy::kLocksInternally) {
                 if (!nss.isCollectionlessCursorNamespace()) {
@@ -459,10 +471,6 @@ public:
                                         << cursorPin->nss().ns());
             }
 
-            // Ensure the lsid and txnNumber of the getMore match that of the originating command.
-            validateLSID(opCtx, cursorId, cursorPin.getCursor());
-            validateTxnNumber(opCtx, cursorId, cursorPin.getCursor());
-
             if (nss.isOplog() && MONGO_unlikely(rsStopGetMoreCmd.shouldFail())) {
                 uasserted(ErrorCodes::CommandFailed,
                           str::stream() << "getMore on " << nss.ns()
@@ -507,20 +515,13 @@ public:
                     nss);
             }
 
-            const bool disableAwaitDataFailpointActive =
-                MONGO_unlikely(disableAwaitDataForGetMoreCmd.shouldFail());
-
-            // Inherit properties like readConcern and maxTimeMS from our originating cursor.
-            setUpOperationContextStateForGetMore(
-                opCtx, *cursorPin.getCursor(), _cmd, disableAwaitDataFailpointActive);
-
             if (!cursorPin->isAwaitData()) {
                 opCtx->checkForInterrupt();  // May trigger maxTimeAlwaysTimeOut fail point.
             }
 
             PlanExecutor* exec = cursorPin->getExecutor();
             const auto* cq = exec->getCanonicalQuery();
-            if (cq && cq->getFindCommand().getReadOnce()) {
+            if (cq && cq->getFindCommandRequest().getReadOnce()) {
                 // The readOnce option causes any storage-layer cursors created during plan
                 // execution to assume read data will not be needed again and need not be cached.
                 opCtx->recoveryUnit()->setReadOnce(true);
@@ -626,11 +627,13 @@ public:
             postExecutionStats.totalDocsExamined -= preExecutionStats.totalDocsExamined;
             curOp->debug().setPlanSummaryMetrics(postExecutionStats);
 
-            // We do not report 'execStats' for aggregations, both in the original request and
-            // subsequent getMores. It would be useful to have this info for an aggregation, but
-            // the source PlanExecutor could be destroyed before we know if we need 'execStats' and
-            // we do not want to generate the stats eagerly for all operations due to cost.
-            if (dynamic_cast<PlanExecutorPipeline*>(cursorPin->getExecutor()) == nullptr &&
+            // We do not report 'execStats' for aggregation or other cursors with the
+            // 'kLocksInternally' policy, both in the original request and subsequent getMore. It
+            // would be useful to have this info for an aggregation, but the source PlanExecutor
+            // could be destroyed before we know if we need 'execStats' and we do not want to
+            // generate the stats eagerly for all operations due to cost.
+            if (cursorPin->getExecutor()->lockPolicy() !=
+                    PlanExecutor::LockPolicy::kLocksInternally &&
                 curOp->shouldDBProfile(opCtx)) {
                 auto&& explainer = exec->getPlanExplainer();
                 auto&& [stats, _] =
@@ -754,7 +757,7 @@ public:
             CursorGetMoreReply::parse({"CursorGetMoreReply"}, ret.removeField("ok"));
         }
 
-        const GetMoreCommand _cmd;
+        const GetMoreCommandRequest _cmd;
     };
 
     bool maintenanceOk() const override {

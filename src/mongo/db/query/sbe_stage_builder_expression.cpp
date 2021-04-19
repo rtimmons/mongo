@@ -271,6 +271,7 @@ void generateStringCaseConversionExpression(ExpressionVisitorContext* _context,
     uint32_t typeMask = (getBSONTypeMask(sbe::value::TypeTags::StringSmall) |
                          getBSONTypeMask(sbe::value::TypeTags::StringBig) |
                          getBSONTypeMask(sbe::value::TypeTags::bsonString) |
+                         getBSONTypeMask(sbe::value::TypeTags::bsonSymbol) |
                          getBSONTypeMask(sbe::value::TypeTags::NumberInt32) |
                          getBSONTypeMask(sbe::value::TypeTags::NumberInt64) |
                          getBSONTypeMask(sbe::value::TypeTags::NumberDouble) |
@@ -1172,7 +1173,7 @@ public:
             collatorSlot,
             _context->planNodeId);
 
-        // Create a branch stage to select between the branch that produces one null if any eleemnts
+        // Create a branch stage to select between the branch that produces one null if any elements
         // in the original input were null or missing, or otherwise select the branch that unwinds
         // and concatenates elements into the output array.
         auto [nullExpr, nullStage] = makeNullLimitCoscanTree();
@@ -1789,7 +1790,7 @@ public:
         }
 
         sbe::value::SlotId slotId;
-        if (expr->isRootFieldPath()) {
+        if (!expr->isVariableReference()) {
             slotId = _context->rootSlot;
         } else {
             auto it = _context->environment.find(expr->getVariableId());
@@ -2389,12 +2390,22 @@ public:
                                 _context->runtimeEnvironment);
         };
 
-        // Check that each argument exists, is not null, and is a string. Fails if the delimiter is
-        // an empty string. Returns [""] if the string input is an empty string, otherwise calls
-        // builtinSplit.
+        auto checkIsNullOrMissing = makeBinaryOp(sbe::EPrimBinary::logicOr,
+                                                 generateNullOrMissing(stringExpressionRef),
+                                                 generateNullOrMissing(delimiterRef));
+
+        // In order to maintain MQL semantics, first check both the string expression
+        // (first agument), and delimiter string (second argument) for null, undefined, or
+        // missing, and if either is nullish make the entire expression return null. Only
+        // then make further validity checks against the input. Fail if the delimiter is an empty
+        // string. Return [""] if the string expression is an empty string.
         auto totalSplitFunc = buildMultiBranchConditional(
-            CaseValuePair{generateNullOrMissing(delimiterRef),
+            CaseValuePair{std::move(checkIsNullOrMissing),
                           sbe::makeE<sbe::EConstant>(sbe::value::TypeTags::Null, 0)},
+            CaseValuePair{generateNonStringCheck(stringExpressionRef),
+                          sbe::makeE<sbe::EFail>(
+                              ErrorCodes::Error{5155402},
+                              str::stream() << "$split string expression must be a string")},
             CaseValuePair{
                 generateNonStringCheck(delimiterRef),
                 sbe::makeE<sbe::EFail>(ErrorCodes::Error{5155400},
@@ -2403,12 +2414,6 @@ public:
                           sbe::makeE<sbe::EFail>(
                               ErrorCodes::Error{5155401},
                               str::stream() << "$split delimiter must not be an empty string")},
-            CaseValuePair{generateNullOrMissing(stringExpressionRef),
-                          sbe::makeE<sbe::EConstant>(sbe::value::TypeTags::Null, 0)},
-            CaseValuePair{generateNonStringCheck(stringExpressionRef),
-                          sbe::makeE<sbe::EFail>(
-                              ErrorCodes::Error{5155402},
-                              str::stream() << "$split string expression must be a string")},
             sbe::makeE<sbe::EIf>(
                 generateIsEmptyString(stringExpressionRef),
                 sbe::makeE<sbe::EConstant>(arrayWithEmptyStringTag, arrayWithEmptyStringVal),

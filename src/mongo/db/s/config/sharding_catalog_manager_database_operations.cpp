@@ -40,6 +40,7 @@
 #include "mongo/db/ops/write_ops.h"
 #include "mongo/db/repl/repl_client_info.h"
 #include "mongo/db/s/dist_lock_manager.h"
+#include "mongo/db/s/sharding_ddl_50_upgrade_downgrade.h"
 #include "mongo/db/server_options.h"
 #include "mongo/db/vector_clock.h"
 #include "mongo/db/write_concern.h"
@@ -49,7 +50,6 @@
 #include "mongo/s/client/shard.h"
 #include "mongo/s/grid.h"
 #include "mongo/s/shard_util.h"
-#include "mongo/s/sharded_collections_ddl_parameters_gen.h"
 
 namespace mongo {
 namespace {
@@ -118,7 +118,7 @@ DatabaseType ShardingCatalogManager::createDatabase(OperationContext* opCtx,
     // expensive createDatabase flow.
     while (true) {
         auto response = client.findAndModify([&] {
-            write_ops::FindAndModifyCommand findAndModify(DatabaseType::ConfigNS);
+            write_ops::FindAndModifyCommandRequest findAndModify(DatabaseType::ConfigNS);
             findAndModify.setQuery([&] {
                 BSONObjBuilder queryFilterBuilder;
                 queryFilterBuilder.append(DatabaseType::name.name(), dbName);
@@ -199,9 +199,10 @@ DatabaseType ShardingCatalogManager::createDatabase(OperationContext* opCtx,
                 optPrimaryShard ? *optPrimaryShard
                                 : selectShardForNewDatabase(opCtx, shardRegistry)));
 
+            FixedFCVRegion fcvRegion(opCtx);
+
             boost::optional<Timestamp> clusterTime;
-            if (feature_flags::gShardingFullDDLSupportTimestampedVersion.isEnabled(
-                    serverGlobalParams.featureCompatibility)) {
+            if (DatabaseEntryFormat::get(fcvRegion) == DatabaseEntryFormat::kUUIDandTimestamp) {
                 const auto now = VectorClock::get(opCtx)->getTime();
                 clusterTime = now.clusterTime().asTimestamp();
             }

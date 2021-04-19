@@ -1187,7 +1187,9 @@ void ReplicationCoordinatorImpl::signalDrainComplete(OperationContext* opCtx,
                 return ReplSetConfig(std::move(config));
             };
             LOGV2(4508103, "Increment the config term via reconfig");
-            auto reconfigStatus = doReplSetReconfig(opCtx, getNewConfig, true /* force */);
+            // Since we are only bumping the config term, we can skip the config replication and
+            // quorum checks in reconfig.
+            auto reconfigStatus = doOptimizedReconfig(opCtx, getNewConfig);
             if (!reconfigStatus.isOK()) {
                 LOGV2(4508100,
                       "Automatic reconfig to increment the config term on stepup failed",
@@ -3318,9 +3320,21 @@ Status ReplicationCoordinatorImpl::processReplSetReconfig(OperationContext* opCt
     return doReplSetReconfig(opCtx, getNewConfig, args.force);
 }
 
+Status ReplicationCoordinatorImpl::doOptimizedReconfig(OperationContext* opCtx,
+                                                       GetNewConfigFn getNewConfig) {
+    return _doReplSetReconfig(opCtx, getNewConfig, false /* force */, true /* skipSafetyChecks*/);
+}
+
 Status ReplicationCoordinatorImpl::doReplSetReconfig(OperationContext* opCtx,
                                                      GetNewConfigFn getNewConfig,
                                                      bool force) {
+    return _doReplSetReconfig(opCtx, getNewConfig, force, false /* skipSafetyChecks*/);
+}
+
+Status ReplicationCoordinatorImpl::_doReplSetReconfig(OperationContext* opCtx,
+                                                      GetNewConfigFn getNewConfig,
+                                                      bool force,
+                                                      bool skipSafetyChecks) {
     stdx::unique_lock<Latch> lk(_mutex);
 
     while (_rsConfigState == kConfigPreStart || _rsConfigState == kConfigStartingUp) {
@@ -3351,7 +3365,7 @@ Status ReplicationCoordinatorImpl::doReplSetReconfig(OperationContext* opCtx,
 
     invariant(_rsConfig.isInitialized());
 
-    if (!force && !_readWriteAbility->canAcceptNonLocalWrites(lk)) {
+    if (!force && !_readWriteAbility->canAcceptNonLocalWrites(lk) && !skipSafetyChecks) {
         return Status(
             ErrorCodes::NotWritablePrimary,
             str::stream()
@@ -3360,7 +3374,7 @@ Status ReplicationCoordinatorImpl::doReplSetReconfig(OperationContext* opCtx,
     }
     auto topCoordTerm = _topCoord->getTerm();
 
-    if (!force) {
+    if (!force && !skipSafetyChecks) {
         // For safety of reconfig, since we must commit a config in our own term before executing a
         // reconfig, so we should never have a config in an older term. If the current config was
         // installed via a force reconfig, we aren't concerned about this safety guarantee.
@@ -3372,7 +3386,7 @@ Status ReplicationCoordinatorImpl::doReplSetReconfig(OperationContext* opCtx,
     // Construct a fake OpTime that can be accepted but isn't used.
     OpTime fakeOpTime(Timestamp(1, 1), topCoordTerm);
 
-    if (!force) {
+    if (!force && !skipSafetyChecks) {
         if (!_doneWaitingForReplication_inlock(fakeOpTime, configWriteConcern)) {
             return Status(ErrorCodes::CurrentConfigNotCommittedYet,
                           str::stream()
@@ -3420,7 +3434,7 @@ Status ReplicationCoordinatorImpl::doReplSetReconfig(OperationContext* opCtx,
     // So, acquire FCV mutex lock in shared mode to block writers from modifying the fcv document
     // to make sure fcv is not changed between getNewConfig() and storing the new config
     // document locally.
-    FixedFCVRegion fixedFcvRegion(opCtx);
+    boost::optional<FixedFCVRegion> fixedFcvRegion(opCtx);
 
     // Call the callback to get the new config given the old one.
     auto newConfigStatus = getNewConfig(oldConfig, topCoordTerm);
@@ -3433,10 +3447,24 @@ Status ReplicationCoordinatorImpl::doReplSetReconfig(OperationContext* opCtx,
     BSONObj newConfigObj = newConfig.toBSON();
     audit::logReplSetReconfig(opCtx->getClient(), &oldConfigObj, &newConfigObj);
 
-    bool isManualReconfig = opCtx->getClient()->hasRemote();
-    Status validateStatus = isManualReconfig
-        ? validateConfigForReconfig(oldConfig, newConfig, force)
-        : validateConfigForOplogReconfig(oldConfig, newConfig);
+    // Stepdown can interrupt the setFeatureCompatibilityVersion command after we've transitioned
+    // to the intermediary kUpgrading/kDowngrading state but before the reconfig to change the
+    // 'secondaryDelaySecs' field name. During a subsequent stepup's automatic reconfig, the config
+    // could have an incompatible field name based on the intermediate FCV, but since we must retry
+    // setFeatureCompatibilityVersion until we complete the upgrade/downgrade procedure, the
+    // reconfig to change the delay field name to the correct value will eventually succeed.
+    // Therefore, it is safe for us to skip the FCV compatibility check during the stepup reconfig
+    // to avoid crashing.
+    //
+    // (Generic FCV reference): feature flag support
+    // TODO (SERVER-53354): Remove this check once 5.0 becomes 'lastLTS'.
+    bool skipFCVCompatibilityCheck =
+        serverGlobalParams.featureCompatibility.isUpgradingOrDowngrading() && skipSafetyChecks;
+
+    bool allowSplitHorizonIP = !opCtx->getClient()->hasRemote();
+
+    Status validateStatus = validateConfigForReconfig(
+        oldConfig, newConfig, force, allowSplitHorizonIP, skipFCVCompatibilityCheck);
     if (!validateStatus.isOK()) {
         LOGV2_ERROR(21420,
                     "replSetReconfig got {error} while validating {newConfig}",
@@ -3477,7 +3505,7 @@ Status ReplicationCoordinatorImpl::doReplSetReconfig(OperationContext* opCtx,
     // 2) For fcv 4.7+, only if the current config doesn't contain the 'newlyAdded' field but the
     // new config got mutated to append 'newlyAdded' field.
     if (force || !needsFcvLock()) {
-        fixedFcvRegion.release();
+        fixedFcvRegion.reset();
     }
 
     if (MONGO_unlikely(ReconfigHangBeforeConfigValidationCheck.shouldFail())) {
@@ -3511,7 +3539,7 @@ Status ReplicationCoordinatorImpl::doReplSetReconfig(OperationContext* opCtx,
           "replSetReconfig config object parses ok",
           "numMembers"_attr = newConfig.getNumMembers());
 
-    if (!force && !MONGO_unlikely(omitConfigQuorumCheck.shouldFail())) {
+    if (!force && !skipSafetyChecks && !MONGO_unlikely(omitConfigQuorumCheck.shouldFail())) {
         LOGV2(4509600, "Executing quorum check for reconfig");
         status =
             checkQuorumForReconfig(_replExecutor.get(), newConfig, myIndex, _topCoord->getTerm());
@@ -3527,14 +3555,20 @@ Status ReplicationCoordinatorImpl::doReplSetReconfig(OperationContext* opCtx,
     LOGV2(51814, "Persisting new config to disk");
     {
         Lock::GlobalLock globalLock(opCtx, LockMode::MODE_IX);
-        if (!force && !_readWriteAbility->canAcceptNonLocalWrites(opCtx)) {
+        if (!force && !_readWriteAbility->canAcceptNonLocalWrites(opCtx) && !skipSafetyChecks) {
             return {ErrorCodes::NotWritablePrimary, "Stepped down when persisting new config"};
         }
 
         // Don't write no-op for internal and external force reconfig.
-        // For non-force reconfig, we are guaranteed the node is a writable primary.
+        // For non-force reconfigs with 'skipSafetyChecks' set to false, we are guaranteed that the
+        // node is a writable primary.
+        // When 'skipSafetyChecks' is true, it is possible the node is not yet a writable primary
+        // (eg. in the case where reconfig is called during stepup). In all other cases, we should
+        // still do the no-op write when possible.
         status = _externalState->storeLocalConfigDocument(
-            opCtx, newConfig.toBSON(), !force /* writeOplog */);
+            opCtx,
+            newConfig.toBSON(),
+            !force && _readWriteAbility->canAcceptNonLocalWrites(opCtx) /* writeOplog */);
         if (!status.isOK()) {
             LOGV2_ERROR(21422,
                         "replSetReconfig failed to store config document; {error}",

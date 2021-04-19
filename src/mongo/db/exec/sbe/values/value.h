@@ -70,10 +70,11 @@ using SpoolId = int64_t;
 using IndexKeysInclusionSet = std::bitset<Ordering::kMaxCompoundIndexKeys>;
 
 namespace value {
+class SortSpec;
 
-static constexpr std::int32_t kStringMaxDisplayLength = 160;
-static constexpr std::int32_t kBinDataMaxDisplayLength = 80;
-static constexpr std::int32_t kNewUUIDLength = 16;
+static constexpr size_t kStringMaxDisplayLength = 160;
+static constexpr size_t kBinDataMaxDisplayLength = 80;
+static constexpr size_t kNewUUIDLength = 16;
 
 /**
  * Type dispatch tags.
@@ -110,6 +111,7 @@ enum class TypeTags : uint8_t {
     bsonObject,
     bsonArray,
     bsonString,
+    bsonSymbol,
     bsonObjectId,
     bsonBinData,
     // The bson prefix signifies the fact that this type can only come from BSON (either from disk
@@ -117,6 +119,7 @@ enum class TypeTags : uint8_t {
     bsonUndefined,
     bsonRegex,
     bsonJavascript,
+    bsonDBPointer,
 
     // KeyString::Value
     ksValue,
@@ -138,6 +141,9 @@ enum class TypeTags : uint8_t {
 
     // Pointer to fts::FTSMatcher for full text search.
     ftsMatcher,
+
+    // Pointer to a SortSpec object.
+    sortSpec,
 };
 
 inline constexpr bool isNumber(TypeTags tag) noexcept {
@@ -174,12 +180,16 @@ inline constexpr bool isPcreRegex(TypeTags tag) noexcept {
     return tag == TypeTags::pcreRegex;
 }
 
-inline constexpr bool isCollatableType(TypeTags tag) noexcept {
-    return isString(tag) || isArray(tag) || isObject(tag);
-}
-
 inline constexpr bool isBsonRegex(TypeTags tag) noexcept {
     return tag == TypeTags::bsonRegex;
+}
+
+inline constexpr bool isStringOrSymbol(TypeTags tag) noexcept {
+    return isString(tag) || tag == TypeTags::bsonSymbol;
+}
+
+inline constexpr bool isCollatableType(TypeTags tag) noexcept {
+    return isString(tag) || isArray(tag) || isObject(tag);
 }
 
 BSONType tagToType(TypeTags tag) noexcept;
@@ -601,8 +611,6 @@ public:
         _compile();
     }
 
-    PcreRegex(StringData pattern) : PcreRegex(pattern, "") {}
-
     PcreRegex(const PcreRegex& other) : PcreRegex(other._pattern, other._options) {}
 
     PcreRegex& operator=(const PcreRegex& other) {
@@ -648,7 +656,7 @@ private:
     std::string _pattern;
     std::string _options;
 
-    pcre* _pcrePtr;
+    pcre* _pcrePtr = nullptr;
 };
 
 constexpr size_t kSmallStringMaxLength = 7;
@@ -715,6 +723,11 @@ inline size_t getStringLength(TypeTags tag, const Value& val) noexcept {
  * getStringView() should be preferred over getRawStringView() where possible.
  */
 inline StringData getStringView(TypeTags tag, const Value& val) noexcept {
+    return {getRawStringView(tag, val), getStringLength(tag, val)};
+}
+
+inline StringData getStringOrSymbolView(TypeTags tag, const Value& val) noexcept {
+    tag = (tag == TypeTags::bsonSymbol) ? TypeTags::StringBig : tag;
     return {getRawStringView(tag, val), getStringLength(tag, val)};
 }
 
@@ -817,6 +830,11 @@ inline std::pair<TypeTags, Value> makeNewString(StringData input) {
     }
 }
 
+inline std::pair<TypeTags, Value> makeNewBsonSymbol(StringData input) {
+    auto [_, strVal] = makeBigString(input);
+    return {TypeTags::bsonSymbol, strVal};
+}
+
 inline std::pair<TypeTags, Value> makeNewArray() {
     auto a = new Array;
     return {TypeTags::Array, reinterpret_cast<Value>(a)};
@@ -913,35 +931,25 @@ inline fts::FTSMatcher* getFtsMatcherView(Value val) noexcept {
     return reinterpret_cast<fts::FTSMatcher*>(val);
 }
 
+inline SortSpec* getSortSpecView(Value val) noexcept {
+    return reinterpret_cast<SortSpec*>(val);
+}
+
 /**
  * Pattern and flags of Regex are stored in BSON as two C strings written one after another.
  *
  *   <pattern> <NULL> <flags> <NULL>
  */
 struct BsonRegex {
-    BsonRegex(const char* rawValue) {
+    explicit BsonRegex(const char* rawValue) {
         pattern = rawValue;
-        // We add 1 to account NULL byte after pattern.
-        flags = pattern.rawData() + pattern.size() + 1;
-    }
-
-    BsonRegex(StringData pattern, StringData flags) : pattern(pattern), flags(flags) {
-        // Ensure that flags follow right after pattern in memory. Otherwise 'dataView()' may return
-        // invalid 'StringData' object.
-        invariant(pattern.rawData() + pattern.size() + 1 == flags.rawData());
+        // We add sizeof(char) to account NULL byte after pattern.
+        flags = pattern.rawData() + pattern.size() + sizeof(char);
     }
 
     size_t byteSize() const {
-        // We add 2 to account NULL bytes after each string.
-        return pattern.size() + flags.size() + 2;
-    }
-
-    const char* data() const {
-        return pattern.rawData();
-    }
-
-    StringData dataView() const {
-        return {data(), byteSize()};
+        // We add 2 * sizeof(char) to account NULL bytes after each string.
+        return pattern.size() + sizeof(char) + flags.size() + sizeof(char);
     }
 
     StringData pattern;
@@ -952,15 +960,50 @@ inline BsonRegex getBsonRegexView(Value val) noexcept {
     return BsonRegex(getRawPointerView(val));
 }
 
-std::pair<TypeTags, Value> makeCopyBsonRegex(const BsonRegex& regex);
-
 std::pair<TypeTags, Value> makeNewBsonRegex(StringData pattern, StringData flags);
+
+inline std::pair<TypeTags, Value> makeCopyBsonRegex(const BsonRegex& regex) {
+    return makeNewBsonRegex(regex.pattern, regex.flags);
+}
 
 inline StringData getBsonJavascriptView(Value val) noexcept {
     return getStringView(TypeTags::StringBig, val);
 }
 
 std::pair<TypeTags, Value> makeCopyBsonJavascript(StringData code);
+
+/**
+ * The BsonDBPointer class is used to represent the DBRef BSON type. DBRefs consist of a namespace
+ * string ('ns') and a document ID ('id'). The namespace string ('ns') can either just specify a
+ * collection name (ex. "c"), or it can specify both a database name and a collection name separated
+ * by a dot (ex. "db.c").
+ *
+ * In BSON, a DBRef is encoded as a bsonString ('ns') followed by an ObjectId ('id').
+ */
+struct BsonDBPointer {
+    explicit BsonDBPointer(const char* rawValue) {
+        uint32_t lenWithNull = ConstDataView(rawValue).read<LittleEndian<uint32_t>>();
+        ns = {rawValue + sizeof(uint32_t), lenWithNull - sizeof(char)};
+        id = reinterpret_cast<const uint8_t*>(rawValue) + 4 + lenWithNull;
+    }
+
+    size_t byteSize() const {
+        return sizeof(uint32_t) + ns.size() + sizeof(char) + sizeof(value::ObjectIdType);
+    }
+
+    StringData ns;
+    const uint8_t* id = nullptr;
+};
+
+inline BsonDBPointer getBsonDBPointerView(Value val) noexcept {
+    return BsonDBPointer(getRawPointerView(val));
+}
+
+std::pair<TypeTags, Value> makeNewBsonDBPointer(StringData ns, const uint8_t* id);
+
+inline std::pair<TypeTags, Value> makeCopyBsonDBPointer(const BsonDBPointer& dbptr) {
+    return makeNewBsonDBPointer(dbptr.ns, dbptr.id);
+}
 
 std::pair<TypeTags, Value> makeCopyKeyString(const KeyString::Value& inKey);
 
@@ -970,6 +1013,15 @@ std::pair<TypeTags, Value> makeCopyShardFilterer(const ShardFilterer&);
 
 std::pair<TypeTags, Value> makeCopyFtsMatcher(const fts::FTSMatcher&);
 
+std::pair<TypeTags, Value> makeCopySortSpec(const SortSpec&);
+
+/**
+ * Releases memory allocated for the value. If the value does not have any memory allocated for it,
+ * does nothing.
+ *
+ * NOTE: This function is intentionally marked as 'noexcept' and must not throw. It is used in the
+ *       destructors of several classes to implement RAII concept for values.
+ */
 void releaseValue(TypeTags tag, Value val) noexcept;
 
 inline std::pair<TypeTags, Value> copyValue(TypeTags tag, Value val) {
@@ -986,6 +1038,8 @@ inline std::pair<TypeTags, Value> copyValue(TypeTags tag, Value val) {
             return makeBigString(getStringView(tag, val));
         case TypeTags::bsonString:
             return makeBigString(getStringView(tag, val));
+        case TypeTags::bsonSymbol:
+            return makeNewBsonSymbol(getStringOrSymbolView(tag, val));
         case TypeTags::ObjectId: {
             return makeCopyObjectId(*getObjectIdView(val));
         }
@@ -1026,8 +1080,12 @@ inline std::pair<TypeTags, Value> copyValue(TypeTags tag, Value val) {
             return makeCopyBsonRegex(getBsonRegexView(val));
         case TypeTags::bsonJavascript:
             return makeCopyBsonJavascript(getBsonJavascriptView(val));
+        case TypeTags::bsonDBPointer:
+            return makeCopyBsonDBPointer(getBsonDBPointerView(val));
         case TypeTags::ftsMatcher:
             return makeCopyFtsMatcher(*getFtsMatcherView(val));
+        case TypeTags::sortSpec:
+            return makeCopySortSpec(*getSortSpecView(val));
         default:
             break;
     }
@@ -1240,7 +1298,6 @@ private:
 std::pair<TypeTags, Value> arrayToSet(TypeTags tag,
                                       Value val,
                                       CollatorInterface* collator = nullptr);
-
 }  // namespace value
 }  // namespace sbe
 }  // namespace mongo

@@ -420,12 +420,24 @@ error_codes:
     
     - {code: 338, name: ReshardCollectionInProgress}
 
+    - {code: 339, name: NoSuchReshardCollection}
+    - {code: 340, name: ReshardCollectionCommitted}
+    - {code: 341, name: ReshardCollectionAborted}
+    - {code: 342, name: ReshardingCriticalSectionTimeout}
+
+    # ShardCannotRefreshDueToLocksHeld will be retried by the shards. Note that it is not under the
+    # NeedRetargettingError, meaning MongoS will pass it through to the client, because there is no
+    # case where it would be possible for MongoS to retry where MongoD couldn't.
+    - {code: 343, name: ShardCannotRefreshDueToLocksHeld,
+                  extra: ShardCannotRefreshDueToLocksHeldInfo}
+
     # Error codes 4000-8999 are reserved.
 
     # Non-sequential error codes for compatibility only)
     - {code: 9001,name: SocketException,categories: [NetworkError,RetriableError]}
     - {code: 9996,name: OBSOLETE_RecvStaleConfig}
     - {code: 10003,name: CannotGrowDocumentInCappedNamespace}
+    - {code: 10058,name: LegacyNotPrimary}
     - {code: 10107,name: NotWritablePrimary,categories: [NotPrimaryError,RetriableError]}
     - {code: 10334,name: BSONObjectTooLarge}
     - {code: 11000,name: DuplicateKey,extra: DuplicateKeyErrorInfo}

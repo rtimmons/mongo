@@ -39,6 +39,7 @@
 #include "mongo/db/pipeline/document_path_support.h"
 #include "mongo/db/pipeline/document_source_change_stream_close_cursor.h"
 #include "mongo/db/pipeline/document_source_change_stream_transform.h"
+#include "mongo/db/pipeline/document_source_change_stream_unwind_transactions.h"
 #include "mongo/db/pipeline/document_source_check_invalidate.h"
 #include "mongo/db/pipeline/document_source_check_resume_token.h"
 #include "mongo/db/pipeline/document_source_limit.h"
@@ -437,8 +438,9 @@ list<intrusive_ptr<DocumentSource>> buildPipeline(const intrusive_ptr<Expression
             ResumeToken::makeHighWaterMarkToken(*startFrom).toDocument().toBson();
     }
 
-    // Obtain the current FCV and use it to create the DocumentSourceChangeStreamTransform stage.
+    // Obtain the current FCV and use it to create the unwind-transaction and transform stages.
     const auto fcv = serverGlobalParams.featureCompatibility.getVersion();
+    stages.push_back(DocumentSourceChangeStreamUnwindTransaction::create(expCtx));
     stages.push_back(
         DocumentSourceChangeStreamTransform::create(expCtx, fcv, elem.embeddedObject()));
 
@@ -516,7 +518,7 @@ list<intrusive_ptr<DocumentSource>> DocumentSourceChangeStream::createFromBson(
 BSONObj DocumentSourceChangeStream::replaceResumeTokenInCommand(BSONObj originalCmdObj,
                                                                 Document resumeToken) {
     Document originalCmd(originalCmdObj);
-    auto pipeline = originalCmd[AggregateCommand::kPipelineFieldName].getArray();
+    auto pipeline = originalCmd[AggregateCommandRequest::kPipelineFieldName].getArray();
     // A $changeStream must be the first element of the pipeline in order to be able
     // to replace (or add) a resume token.
     invariant(!pipeline[0][DocumentSourceChangeStream::kStageName].missing());
@@ -531,7 +533,7 @@ BSONObj DocumentSourceChangeStream::replaceResumeTokenInCommand(BSONObj original
     pipeline[0] =
         Value(Document{{DocumentSourceChangeStream::kStageName, changeStreamStage.freeze()}});
     MutableDocument newCmd(std::move(originalCmd));
-    newCmd[AggregateCommand::kPipelineFieldName] = Value(pipeline);
+    newCmd[AggregateCommandRequest::kPipelineFieldName] = Value(pipeline);
     return newCmd.freeze().toBson();
 }
 

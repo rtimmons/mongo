@@ -33,6 +33,7 @@
 #include <utility>
 
 #include "mongo/bson/timestamp.h"
+#include "mongo/db/cancelable_operation_context.h"
 #include "mongo/db/logical_session_id_gen.h"
 #include "mongo/db/pipeline/expression_context.h"
 #include "mongo/db/pipeline/pipeline.h"
@@ -71,10 +72,11 @@ public:
         std::shared_ptr<MongoProcessInterface> mongoProcessInterface,
         const boost::optional<LogicalSessionId>& startAfter);
 
-    ExecutorFuture<void> run(
-        ServiceContext* serviceContext,
+    SemiFuture<void> run(
         std::shared_ptr<executor::TaskExecutor> executor,
+        std::shared_ptr<executor::TaskExecutor> cleanupExecutor,
         CancellationToken cancelToken,
+        CancelableOperationContextFactory factory,
         std::shared_ptr<MongoProcessInterface> mongoProcessInterface_forTest = nullptr);
 
     void updateProgressDocument_forTest(OperationContext* opCtx, const LogicalSessionId& progress) {
@@ -86,8 +88,6 @@ private:
 
     std::unique_ptr<Pipeline, PipelineDeleter> _targetAggregationRequest(OperationContext* opCtx,
                                                                          const Pipeline& pipeline);
-
-    void _updateSessionRecord(OperationContext* opCtx);
 
     void _updateProgressDocument(OperationContext* opCtx, const LogicalSessionId& progress);
 
